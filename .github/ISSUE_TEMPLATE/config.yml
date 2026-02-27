@@ -1,5 +1,8 @@
 blank_issues_enabled: true
 contact_links:
   - name: Security Vulnerability
-    url: https://github.com/NuGit/DriveWipe/blob/main/docs/SECURITY.md
-    about: Please report security vulnerabilities privately. See our security policy.
+    url: https://github.com/KodyDennon/DriveWipe/security/advisories/new
+    about: Please report security vulnerabilities privately via GitHub Security Advisories.
+  - name: Ask a Question
+    url: https://github.com/KodyDennon/DriveWipe/discussions/categories/q-a
+    about: Ask questions and get help from the community in Discussions.
