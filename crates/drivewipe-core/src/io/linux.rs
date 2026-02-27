@@ -1,0 +1,123 @@
+//! Linux raw device I/O using `O_DIRECT | O_SYNC`.
+//!
+//! Opens block devices with direct I/O so that every write bypasses the kernel
+//! page cache and is committed synchronously to the storage medium.
+
+use std::fs::{File, OpenOptions};
+use std::io::{Seek, SeekFrom};
+use std::os::unix::fs::{FileExt, OpenOptionsExt};
+use std::os::unix::io::AsRawFd;
+use std::path::Path;
+
+use super::RawDeviceIo;
+use crate::error::{DriveWipeError, Result};
+
+/// Raw device I/O handle for Linux block devices.
+///
+/// The underlying file descriptor is opened with `O_RDWR | O_DIRECT | O_SYNC`
+/// so that:
+///
+/// - `O_DIRECT` bypasses the kernel page cache, ensuring data goes straight to
+///   the device's write-back buffer (or directly to platters/flash with
+///   `O_SYNC`).
+/// - `O_SYNC` forces the device to flush its internal write cache on every
+///   write, guaranteeing durability.
+///
+/// Callers must ensure that I/O buffers are aligned to the device's logical
+/// block size (typically 512 bytes) when using `O_DIRECT`.
+pub struct LinuxDeviceIo {
+    file: File,
+    capacity: u64,
+    block_size: u32,
+}
+
+impl LinuxDeviceIo {
+    /// Open a block device for direct, synchronous I/O.
+    ///
+    /// # Arguments
+    ///
+    /// * `path` - Path to the block device (e.g. `/dev/sda`, `/dev/nvme0n1`).
+    ///
+    /// # Errors
+    ///
+    /// Returns [`DriveWipeError::DeviceNotFound`] if the path does not exist,
+    /// or [`DriveWipeError::Io`] if the device cannot be opened (e.g.
+    /// insufficient privileges).
+    pub fn open(path: &Path) -> Result<Self> {
+        if !path.exists() {
+            return Err(DriveWipeError::DeviceNotFound(path.to_path_buf()));
+        }
+
+        let mut file = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .custom_flags(libc::O_DIRECT | libc::O_SYNC)
+            .open(path)
+            .map_err(|e| DriveWipeError::Io {
+                path: path.to_path_buf(),
+                source: e,
+            })?;
+
+        // Determine capacity by seeking to the end of the device.
+        let capacity = file
+            .seek(SeekFrom::End(0))
+            .map_err(|e| DriveWipeError::Io {
+                path: path.to_path_buf(),
+                source: e,
+            })?;
+
+        // Seek back to the beginning so the fd is in a known state.
+        file.seek(SeekFrom::Start(0))
+            .map_err(|e| DriveWipeError::Io {
+                path: path.to_path_buf(),
+                source: e,
+            })?;
+
+        // Query the device's logical block size via ioctl(BLKSSZGET).
+        // Falls back to 512 bytes if the ioctl fails.
+        let mut block_size: u32 = 512;
+        unsafe {
+            libc::ioctl(
+                file.as_raw_fd(),
+                libc::BLKSSZGET as libc::c_ulong,
+                &mut block_size,
+            );
+        }
+
+        Ok(Self {
+            file,
+            capacity,
+            block_size,
+        })
+    }
+}
+
+impl RawDeviceIo for LinuxDeviceIo {
+    fn write_at(&mut self, offset: u64, buf: &[u8]) -> Result<usize> {
+        // `FileExt::write_at` maps to `pwrite(2)` on Unix.
+        self.file
+            .write_at(buf, offset)
+            .map_err(|e| DriveWipeError::IoGeneric(e))
+    }
+
+    fn read_at(&mut self, offset: u64, buf: &mut [u8]) -> Result<usize> {
+        // `FileExt::read_at` maps to `pread(2)` on Unix.
+        self.file
+            .read_at(buf, offset)
+            .map_err(|e| DriveWipeError::IoGeneric(e))
+    }
+
+    fn capacity(&self) -> u64 {
+        self.capacity
+    }
+
+    fn block_size(&self) -> u32 {
+        self.block_size
+    }
+
+    fn sync(&mut self) -> Result<()> {
+        self.file
+            .sync_all()
+            .map_err(|e| DriveWipeError::IoGeneric(e))
+    }
+}

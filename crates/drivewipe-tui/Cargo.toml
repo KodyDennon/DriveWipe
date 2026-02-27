@@ -1,0 +1,30 @@
+[package]
+name = "drivewipe-tui"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "Terminal UI for DriveWipe"
+
+[[bin]]
+name = "drivewipe-tui"
+path = "src/main.rs"
+
+[features]
+default = ["pdf-report"]
+pdf-report = ["drivewipe-core/pdf-report"]
+
+[dependencies]
+drivewipe-core = { path = "../drivewipe-core" }
+ratatui.workspace = true
+crossterm.workspace = true
+crossbeam-channel.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+chrono.workspace = true
+uuid.workspace = true
+log.workspace = true
+env_logger.workspace = true
+ctrlc.workspace = true
+anyhow.workspace = true

@@ -1,0 +1,15 @@
+[package]
+name = "drivewipe-gui"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "Graphical UI for DriveWipe (Phase 2)"
+
+[[bin]]
+name = "drivewipe-gui"
+path = "src/main.rs"
+
+[dependencies]
+drivewipe-core = { path = "../drivewipe-core" }

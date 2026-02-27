@@ -1,0 +1,46 @@
+name: Feature Request
+description: Suggest a new feature for DriveWipe
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for suggesting a feature. Please provide as much context as possible.
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Feature Description
+      description: A clear description of the feature you'd like to see.
+    validations:
+      required: true
+
+  - type: textarea
+    id: use_case
+    attributes:
+      label: Use Case
+      description: Why do you need this feature? What problem does it solve?
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives Considered
+      description: Have you considered any workarounds or alternative approaches?
+
+  - type: dropdown
+    id: scope
+    attributes:
+      label: Scope
+      options:
+        - Core library (drivewipe-core)
+        - CLI (drivewipe)
+        - TUI (drivewipe-tui)
+        - GUI (drivewipe-gui)
+        - Documentation
+        - CI/Build
+        - Other
+    validations:
+      required: true
