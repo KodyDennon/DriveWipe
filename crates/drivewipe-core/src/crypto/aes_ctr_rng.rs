@@ -49,5 +49,14 @@ impl Drop for AesCtrRng {
     fn drop(&mut self) {
         self.key.zeroize();
         self.nonce.zeroize();
+        // Zero the cipher state (expanded AES key schedule) to prevent
+        // key material from lingering in memory after drop.
+        // SAFETY: We are zeroing our own field's memory, which is being
+        // dropped and will not be read again.
+        unsafe {
+            let ptr = &mut self.cipher as *mut _ as *mut u8;
+            let size = std::mem::size_of_val(&self.cipher);
+            std::ptr::write_bytes(ptr, 0, size);
+        }
     }
 }

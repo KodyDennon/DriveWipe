@@ -6,9 +6,10 @@ DriveWipe provides military/corporate-grade drive wiping with software overwrite
 
 ## Features
 
-- **17 wipe methods** — Zero/One/Random fill, DoD 5220.22-M (3 & 7 pass), Gutmann (35 pass), HMG IS5, RCMP TSSIT OPS-II, ATA Secure Erase, NVMe Format/Sanitize, TCG Opal crypto erase, and custom user-defined methods
-- **Three interfaces** — CLI for scripting, TUI for interactive use, GUI (Phase 2)
-- **Cross-platform** — macOS, Linux, Windows
+- **9 software wipe methods** — Zero/One/Random fill, DoD 5220.22-M (3 & 7 pass), Gutmann (35 pass), HMG IS5 Baseline & Enhanced, RCMP TSSIT OPS-II, plus custom user-defined methods
+- **8 firmware wipe methods** (stubs — not yet implemented) — ATA Secure Erase, NVMe Format/Sanitize, TCG Opal crypto erase
+- **Two interfaces** — CLI for scripting, TUI for interactive use (GUI planned for Phase 2)
+- **Cross-platform** — Linux (full support), macOS (full support), Windows (stubs — I/O and drive enumeration not yet implemented)
 - **Multi-drive parallel wipe** with live queue (add drives during active wipe)
 - **Full read-back verification** after wipe
 - **Resume capability** — auto-save state every 10 seconds, resume after interruption
@@ -86,14 +87,16 @@ sudo drivewipe-tui
 | `hmg-baseline` | HMG IS5 Baseline | 1 | Software |
 | `hmg-enhanced` | HMG IS5 Enhanced | 3 | Software |
 | `rcmp` | RCMP TSSIT OPS-II | 7 | Software |
-| `ata-erase` | ATA Secure Erase | firmware | Firmware |
-| `ata-erase-enhanced` | ATA Enhanced Secure Erase | firmware | Firmware |
-| `nvme-format-user` | NVMe Format (User Data Erase) | firmware | Firmware |
-| `nvme-format-crypto` | NVMe Format (Cryptographic Erase) | firmware | Firmware |
-| `nvme-sanitize-block` | NVMe Sanitize (Block Erase) | firmware | Firmware |
-| `nvme-sanitize-crypto` | NVMe Sanitize (Cryptographic Erase) | firmware | Firmware |
-| `nvme-sanitize-overwrite` | NVMe Sanitize (Overwrite) | firmware | Firmware |
-| `tcg-opal` | TCG Opal Crypto Erase | firmware | Firmware |
+| `ata-erase` | ATA Secure Erase | firmware | Firmware (stub) |
+| `ata-erase-enhanced` | ATA Enhanced Secure Erase | firmware | Firmware (stub) |
+| `nvme-format-user` | NVMe Format (User Data Erase) | firmware | Firmware (stub) |
+| `nvme-format-crypto` | NVMe Format (Cryptographic Erase) | firmware | Firmware (stub) |
+| `nvme-sanitize-block` | NVMe Sanitize (Block Erase) | firmware | Firmware (stub) |
+| `nvme-sanitize-crypto` | NVMe Sanitize (Cryptographic Erase) | firmware | Firmware (stub) |
+| `nvme-sanitize-overwrite` | NVMe Sanitize (Overwrite) | firmware | Firmware (stub) |
+| `tcg-opal` | TCG Opal Crypto Erase | firmware | Firmware (stub) |
+
+> **Note:** All 8 firmware methods are currently stubs that return `PlatformNotSupported`. They require platform-specific ioctl implementations (ATA passthrough, NVMe Admin Commands, TCG Opal SED commands) which are planned for a future release.
 
 ## Architecture
 
@@ -154,11 +157,21 @@ DriveWipe includes multiple safety mechanisms:
 6. **HPA/DCO detection** — Warns about hidden areas unreachable by software overwrite
 7. **Ctrl+C handling** — Graceful interruption with state save for resume
 
-## Platform Notes
+## Platform Support
 
-- **Linux** — Best platform support. Full ioctl access for ATA, NVMe, and TCG Opal.
-- **macOS** — ATA passthrough is limited. NVMe uses private IONVMeFamily API. Recommend Linux for firmware operations.
-- **Windows** — Requires Administrator. ATA via `IOCTL_ATA_PASS_THROUGH`, NVMe via `IOCTL_STORAGE_PROTOCOL_COMMAND`.
+| Feature | Linux | macOS | Windows |
+|---|---|---|---|
+| Drive enumeration | Full (sysfs) | Full (diskutil) | Stub |
+| Raw device I/O | Full (O_DIRECT) | Full (F_NOCACHE) | Stub |
+| Boot drive detection | Full (/proc/mounts) | Full (/sbin/mount) | Stub (always false) |
+| Software wipe methods | Full | Full | Blocked (needs I/O) |
+| Firmware wipe methods | Stub | Stub | Stub |
+| ATA security state | Not yet | Not yet | Not yet |
+| SMART health | Not yet | Not yet | Not yet |
+
+- **Linux** — Best platform support. Software wipe fully operational. Firmware methods require ATA/NVMe ioctl work.
+- **macOS** — Software wipe fully operational. ATA passthrough is limited. Recommend Linux for firmware operations.
+- **Windows** — Currently stubs only. Requires `CreateFileW` + `DeviceIoControl` implementation for I/O and `SetupDi`/WMI for enumeration.
 
 ## License
 

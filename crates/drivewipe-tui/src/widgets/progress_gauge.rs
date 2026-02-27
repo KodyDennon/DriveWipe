@@ -6,6 +6,7 @@ use drivewipe_core::types::{format_bytes, format_throughput, WipeOutcome};
 use crate::ui;
 
 /// Configuration for rendering a per-drive progress gauge.
+#[allow(dead_code)]
 pub struct DriveProgressGauge<'a> {
     pub device: &'a str,
     pub method: &'a str,
@@ -18,6 +19,7 @@ pub struct DriveProgressGauge<'a> {
     pub verifying: bool,
 }
 
+#[allow(dead_code)]
 impl<'a> DriveProgressGauge<'a> {
     /// Compute the progress fraction (0.0..=1.0).
     pub fn fraction(&self) -> f64 {
@@ -85,6 +87,7 @@ impl<'a> DriveProgressGauge<'a> {
 /// Render a compact single-line progress bar for a drive wipe.
 ///
 /// Format: `[DEVICE] [METHOD] Pass X/Y [======>   ] XX.X% [THROUGHPUT] ETA HH:MM:SS`
+#[allow(dead_code)]
 pub fn render_compact(
     frame: &mut Frame,
     area: Rect,

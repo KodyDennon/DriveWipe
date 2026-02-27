@@ -28,8 +28,11 @@ pub fn run(_config: &DriveWipeConfig, format: &str) -> Result<()> {
                 .context("Failed to serialise drive list")?;
             println!("{json}");
         }
-        "table" | _ => {
+        "table" => {
             display::print_drive_table(&drives);
+        }
+        other => {
+            anyhow::bail!("Unknown output format: {other}. Supported formats: table, json");
         }
     }
 

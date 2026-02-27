@@ -193,7 +193,9 @@ impl WipeSession {
                         bytes_written_this_pass,
                         total_bytes_written,
                     );
-                    let _ = wipe_state.save(&sessions_dir);
+                    if let Err(e) = wipe_state.save(&sessions_dir) {
+                        log::warn!("Failed to save wipe state on cancellation: {}", e);
+                    }
 
                     let _ = progress_tx.send(ProgressEvent::Interrupted {
                         session_id: session_id,
@@ -255,7 +257,9 @@ impl WipeSession {
                             bytes_written_this_pass,
                             total_bytes_written,
                         );
-                        let _ = wipe_state.save(&sessions_dir);
+                        if let Err(save_err) = wipe_state.save(&sessions_dir) {
+                            log::warn!("Failed to save wipe state on write error: {}", save_err);
+                        }
 
                         let msg =
                             format!("Write error at offset {bytes_written_this_pass}: {e}");
@@ -298,7 +302,9 @@ impl WipeSession {
                         bytes_written_this_pass,
                         total_bytes_written,
                     );
-                    let _ = wipe_state.save(&sessions_dir);
+                    if let Err(e) = wipe_state.save(&sessions_dir) {
+                        log::warn!("Failed to save periodic wipe state: {}", e);
+                    }
                     last_state_save = Instant::now();
                 }
             }
@@ -339,7 +345,9 @@ impl WipeSession {
 
             // Save state after each completed pass
             wipe_state.update_progress(pass_1idx, total_bytes, total_bytes_written);
-            let _ = wipe_state.save(&sessions_dir);
+            if let Err(e) = wipe_state.save(&sessions_dir) {
+                log::warn!("Failed to save wipe state after pass {}: {}", pass_1idx, e);
+            }
         }
 
         // Verification phase — delegate to Verifier trait implementations
@@ -476,7 +484,9 @@ impl WipeSession {
         });
 
         // Clean up state file on completion
-        let _ = wipe_state.cleanup(&sessions_dir);
+        if let Err(e) = wipe_state.cleanup(&sessions_dir) {
+            log::warn!("Failed to clean up state file: {}", e);
+        }
 
         Ok(WipeResult {
             session_id: session_id,

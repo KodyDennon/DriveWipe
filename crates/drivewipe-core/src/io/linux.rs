@@ -44,18 +44,42 @@ impl LinuxDeviceIo {
     /// or [`DriveWipeError::Io`] if the device cannot be opened (e.g.
     /// insufficient privileges).
     pub fn open(path: &Path) -> Result<Self> {
-        if !path.exists() {
-            return Err(DriveWipeError::DeviceNotFound(path.to_path_buf()));
+        // Validate the path is a block device (prevents arbitrary file overwrite).
+        use std::os::unix::fs::FileTypeExt;
+        match std::fs::metadata(path) {
+            Ok(metadata) => {
+                if !metadata.file_type().is_block_device() {
+                    return Err(DriveWipeError::DeviceError(format!(
+                        "{} is not a block device",
+                        path.display()
+                    )));
+                }
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                return Err(DriveWipeError::DeviceNotFound(path.to_path_buf()));
+            }
+            Err(e) => {
+                return Err(DriveWipeError::Io {
+                    path: path.to_path_buf(),
+                    source: e,
+                });
+            }
         }
 
+        // Open with O_NOFOLLOW to prevent symlink attacks (TOCTOU mitigation).
         let mut file = OpenOptions::new()
             .read(true)
             .write(true)
-            .custom_flags(libc::O_DIRECT | libc::O_SYNC)
+            .custom_flags(libc::O_DIRECT | libc::O_SYNC | libc::O_NOFOLLOW)
             .open(path)
-            .map_err(|e| DriveWipeError::Io {
-                path: path.to_path_buf(),
-                source: e,
+            .map_err(|e| match e.kind() {
+                std::io::ErrorKind::NotFound => {
+                    DriveWipeError::DeviceNotFound(path.to_path_buf())
+                }
+                _ => DriveWipeError::Io {
+                    path: path.to_path_buf(),
+                    source: e,
+                },
             })?;
 
         // Determine capacity by seeking to the end of the device.
@@ -76,12 +100,20 @@ impl LinuxDeviceIo {
         // Query the device's logical block size via ioctl(BLKSSZGET).
         // Falls back to 512 bytes if the ioctl fails.
         let mut block_size: u32 = 512;
-        unsafe {
+        let ret = unsafe {
             libc::ioctl(
                 file.as_raw_fd(),
                 libc::BLKSSZGET as libc::c_ulong,
                 &mut block_size,
+            )
+        };
+        if ret == -1 {
+            log::warn!(
+                "BLKSSZGET ioctl failed on {}: {}, using default 512-byte sectors",
+                path.display(),
+                std::io::Error::last_os_error()
             );
+            block_size = 512;
         }
 
         Ok(Self {

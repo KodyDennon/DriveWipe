@@ -58,8 +58,14 @@ impl WipeMethod for CustomWipeMethod {
                     .unwrap_or_else(|| vec![0x00]);
                 Box::new(RepeatingPattern(pattern))
             }
-            // Unknown pattern types default to zero-fill.
-            _ => Box::new(ZeroFill),
+            unknown => {
+                log::warn!(
+                    "Unknown pattern_type '{}' in custom method '{}', falling back to zero-fill",
+                    unknown,
+                    self.config.id,
+                );
+                Box::new(ZeroFill)
+            }
         }
     }
 

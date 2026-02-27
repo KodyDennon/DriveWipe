@@ -14,6 +14,7 @@ pub enum AppEvent {
     /// A periodic tick for UI refresh.
     Tick,
     /// Terminal resize event.
+    #[allow(dead_code)]
     Resize(u16, u16),
 }
 
@@ -88,11 +89,13 @@ impl EventHandler {
     }
 
     /// Try to receive an event without blocking.
+    #[allow(dead_code)]
     pub fn try_next(&self) -> Option<AppEvent> {
         self.rx.try_recv().ok()
     }
 
     /// Get the underlying receiver for use with `select!`.
+    #[allow(dead_code)]
     pub fn receiver(&self) -> &Receiver<AppEvent> {
         &self.rx
     }

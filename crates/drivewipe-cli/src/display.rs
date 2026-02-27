@@ -193,13 +193,25 @@ pub fn print_drive_info(drive: &DriveInfo) {
     );
 }
 
-/// Truncate a string to `max_len` characters, adding "..." if needed.
+/// Truncate a string to `max_len` display characters, adding "..." if needed.
+///
+/// Uses `char_indices` to avoid panicking on multi-byte UTF-8 boundaries.
 fn truncate(s: &str, max_len: usize) -> String {
-    if s.len() <= max_len {
+    if s.chars().count() <= max_len {
         s.to_string()
     } else if max_len > 3 {
-        format!("{}...", &s[..max_len - 3])
+        let end = s
+            .char_indices()
+            .nth(max_len - 3)
+            .map(|(i, _)| i)
+            .unwrap_or(s.len());
+        format!("{}...", &s[..end])
     } else {
-        s[..max_len].to_string()
+        let end = s
+            .char_indices()
+            .nth(max_len)
+            .map(|(i, _)| i)
+            .unwrap_or(s.len());
+        s[..end].to_string()
     }
 }

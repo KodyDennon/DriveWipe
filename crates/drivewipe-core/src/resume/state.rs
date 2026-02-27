@@ -61,6 +61,16 @@ impl WipeState {
             source: e,
         })?;
 
+        // Set restrictive permissions on the sessions directory (Unix only).
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let _ = std::fs::set_permissions(
+                sessions_dir,
+                std::fs::Permissions::from_mode(0o700),
+            );
+        }
+
         let path = Self::state_path(sessions_dir, self.session_id);
         let json = serde_json::to_string_pretty(self)?;
 
@@ -68,6 +78,16 @@ impl WipeState {
             path: path.clone(),
             source: e,
         })?;
+
+        // Set restrictive permissions on the state file (Unix only).
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let _ = std::fs::set_permissions(
+                &path,
+                std::fs::Permissions::from_mode(0o600),
+            );
+        }
 
         Ok(())
     }

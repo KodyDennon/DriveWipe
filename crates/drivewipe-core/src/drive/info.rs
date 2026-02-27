@@ -90,7 +90,8 @@ fn detect_boot_drive_macos(device_path: &str) -> bool {
     let base_dev = extract_base_device(device_path);
 
     // Use `mount` output to find what backs `/`.
-    let Ok(output) = std::process::Command::new("mount").output() else {
+    // Use absolute path to avoid PATH manipulation attacks.
+    let Ok(output) = std::process::Command::new("/sbin/mount").output() else {
         return false;
     };
 

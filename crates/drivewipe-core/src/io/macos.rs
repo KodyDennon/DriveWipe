@@ -41,17 +41,29 @@ impl MacosDeviceIo {
     /// [`DriveWipeError::Io`] if the device cannot be opened, or
     /// [`DriveWipeError::Ioctl`] if `F_NOCACHE` cannot be set.
     pub fn open(path: &Path) -> Result<Self> {
-        if !path.exists() {
-            return Err(DriveWipeError::DeviceNotFound(path.to_path_buf()));
+        // Validate the path is a disk device (prevents arbitrary file overwrite).
+        let path_str = path.to_string_lossy();
+        if !path_str.starts_with("/dev/rdisk") && !path_str.starts_with("/dev/disk") {
+            return Err(DriveWipeError::DeviceError(format!(
+                "{} is not a disk device (expected /dev/rdiskN or /dev/diskN)",
+                path.display()
+            )));
         }
 
+        // Open directly — handle NotFound in the error rather than a separate
+        // exists() check (eliminates TOCTOU race).
         let mut file = OpenOptions::new()
             .read(true)
             .write(true)
             .open(path)
-            .map_err(|e| DriveWipeError::Io {
-                path: path.to_path_buf(),
-                source: e,
+            .map_err(|e| match e.kind() {
+                std::io::ErrorKind::NotFound => {
+                    DriveWipeError::DeviceNotFound(path.to_path_buf())
+                }
+                _ => DriveWipeError::Io {
+                    path: path.to_path_buf(),
+                    source: e,
+                },
             })?;
 
         // Disable the unified buffer cache for this file descriptor.
@@ -85,8 +97,14 @@ impl MacosDeviceIo {
         // Falls back to 512 bytes if the ioctl fails.
         const DKIOCGETBLOCKSIZE: libc::c_ulong = 0x40046418;
         let mut block_size: u32 = 512;
-        unsafe {
-            libc::ioctl(fd, DKIOCGETBLOCKSIZE, &mut block_size);
+        let ret = unsafe { libc::ioctl(fd, DKIOCGETBLOCKSIZE, &mut block_size) };
+        if ret == -1 {
+            log::warn!(
+                "DKIOCGETBLOCKSIZE ioctl failed on {}: {}, using default 512-byte sectors",
+                path.display(),
+                std::io::Error::last_os_error()
+            );
+            block_size = 512;
         }
 
         Ok(Self {

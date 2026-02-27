@@ -25,6 +25,7 @@ use crate::ui;
 
 /// The currently active screen in the TUI.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[allow(dead_code)]
 pub enum AppScreen {
     DriveSelection,
     MethodSelect,
@@ -38,6 +39,7 @@ pub enum AppScreen {
 // ── Per-session wipe progress ───────────────────────────────────────────────
 
 /// Tracked progress for a single wipe session displayed in the dashboard.
+#[allow(dead_code)]
 pub struct WipeProgress {
     pub session_id: Uuid,
     pub device: String,
@@ -261,6 +263,7 @@ impl App {
     }
 
     /// Currently selected row in the drive table.
+    #[allow(dead_code)]
     pub fn selected_table_row(&self) -> Option<usize> {
         self.table_state.selected()
     }
@@ -875,6 +878,8 @@ impl App {
 
             let drive_info = self.drives[drive_idx].clone();
             let config = self.config.clone();
+            let auto_report_json = config.auto_report_json;
+            let sessions_dir = config.sessions_dir().clone();
             let cancel_token = self.cancel_token.clone();
 
             // Verify the method exists before spawning.
@@ -900,19 +905,49 @@ impl App {
             ));
 
             std::thread::spawn(move || {
-                // Create a fresh set of methods in this thread. WipeMethod is
-                // not Clone, so we create new boxed instances from the factory.
-                let all_methods = drivewipe_core::wipe::software::all_software_methods();
-                let boxed_method = match all_methods.into_iter().find(|m| m.id() == method) {
-                    Some(m) => m,
-                    None => {
-                        let _ = progress_tx.send(ProgressEvent::Error {
-                            session_id: Uuid::new_v4(),
-                            message: format!("Method not found for session: {method}"),
-                        });
-                        return;
-                    }
-                };
+                // Build a fresh registry that contains ALL methods (software +
+                // firmware). We then find our method by id and consume the
+                // registry to extract the owned Box<dyn WipeMethod>.
+                let registry = WipeMethodRegistry::new();
+                if registry.get(&method).is_none() {
+                    let _ = progress_tx.send(ProgressEvent::Error {
+                        session_id: Uuid::new_v4(),
+                        message: format!("Method not found for session: {method}"),
+                    });
+                    return;
+                }
+
+                // Re-create owned method instances. Try software first, then firmware.
+                let all_software = drivewipe_core::wipe::software::all_software_methods();
+                let boxed_method: Box<dyn drivewipe_core::wipe::WipeMethod> =
+                    match all_software.into_iter().find(|m| m.id() == method) {
+                        Some(m) => m,
+                        None => {
+                            // Firmware method — create fresh instances and wrap in adapter
+                            let fw_instances: Vec<Box<dyn drivewipe_core::wipe::firmware::FirmwareWipe>> = vec![
+                                Box::new(drivewipe_core::wipe::firmware::ata::AtaSecureErase),
+                                Box::new(drivewipe_core::wipe::firmware::ata::AtaEnhancedSecureErase),
+                                Box::new(drivewipe_core::wipe::firmware::nvme::NvmeFormatUserData),
+                                Box::new(drivewipe_core::wipe::firmware::nvme::NvmeFormatCrypto),
+                                Box::new(drivewipe_core::wipe::firmware::nvme::NvmeSanitizeBlock),
+                                Box::new(drivewipe_core::wipe::firmware::nvme::NvmeSanitizeCrypto),
+                                Box::new(drivewipe_core::wipe::firmware::nvme::NvmeSanitizeOverwrite),
+                                Box::new(drivewipe_core::wipe::crypto_erase::TcgOpalCryptoErase),
+                            ];
+                            match fw_instances.into_iter().find(|fw| fw.id() == method) {
+                                Some(fw) => {
+                                    Box::new(drivewipe_core::wipe::FirmwareMethodAdapter::new(fw))
+                                }
+                                None => {
+                                    let _ = progress_tx.send(ProgressEvent::Error {
+                                        session_id: Uuid::new_v4(),
+                                        message: format!("Method not found for session: {method}"),
+                                    });
+                                    return;
+                                }
+                            }
+                        }
+                    };
 
                 let session = WipeSession::new(drive_info.clone(), boxed_method, config);
 
@@ -952,20 +987,33 @@ impl App {
                     }
                 };
 
-                // Create a local cancellation token and link it to the global one.
-                let ct = CancellationToken::new();
-                let ct_clone = ct.clone_token();
-                let cancel_arc = cancel_token.clone();
-                std::thread::spawn(move || {
-                    while !cancel_arc.is_cancelled() {
-                        std::thread::sleep(Duration::from_millis(100));
-                    }
-                    ct_clone.cancel();
-                });
+                // Use the global cancellation token directly — no need for a
+                // watcher thread that polls and leaks.
 
-                match session.execute(&mut device, &progress_tx, &ct, None) {
-                    Ok(_result) => {
+                match session.execute(&mut device, &progress_tx, &cancel_token, None) {
+                    Ok(result) => {
                         // Completion event already sent by the session.
+                        // Auto-generate JSON report in the thread while we
+                        // have access to the WipeResult.
+                        if auto_report_json {
+                            let report_dir = sessions_dir;
+                            if let Err(e) = std::fs::create_dir_all(&report_dir) {
+                                log::warn!("Failed to create report directory: {e}");
+                            } else {
+                                let json_path = report_dir.join(format!("{}.json", result.session_id));
+                                let generator = drivewipe_core::report::json::JsonReportGenerator;
+                                match drivewipe_core::report::ReportGenerator::generate(&generator, &result) {
+                                    Ok(bytes) => {
+                                        if let Err(e) = std::fs::write(&json_path, &bytes) {
+                                            log::warn!("Failed to write JSON report: {e}");
+                                        }
+                                    }
+                                    Err(e) => {
+                                        log::warn!("Failed to generate JSON report: {e}");
+                                    }
+                                }
+                            }
+                        }
                     }
                     Err(e) => {
                         let _ = progress_tx.send(ProgressEvent::Error {

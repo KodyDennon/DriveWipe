@@ -200,7 +200,19 @@ pub fn start(
                 })
                 .collect();
 
-            handles.into_iter().map(|h| h.join().unwrap()).collect()
+            handles
+                .into_iter()
+                .map(|h| match h.join() {
+                    Ok(result) => result,
+                    Err(_) => {
+                        // Thread panicked — return a synthetic failure.
+                        // The index is lost when a panic occurs, so we use
+                        // a sentinel that the caller won't find; the outer
+                        // loop handles missing indices gracefully.
+                        (usize::MAX, Err(anyhow::anyhow!("Wipe thread panicked")))
+                    }
+                })
+                .collect()
         });
 
         // Update queue statuses.

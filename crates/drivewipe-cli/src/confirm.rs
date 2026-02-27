@@ -68,7 +68,7 @@ pub fn run_confirmation(drive: &DriveInfo, method_name: &str) -> Result<bool> {
         .interact_text()?;
 
     let response = response.trim();
-    if response != expected && response != "YES I UNDERSTAND" {
+    if response != expected {
         term.write_line(&format!(
             "\n  {} Input did not match. Aborting.",
             style("ABORTED:").yellow().bold()

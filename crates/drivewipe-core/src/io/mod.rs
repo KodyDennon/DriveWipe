@@ -76,7 +76,6 @@ pub struct AlignedBuffer {
 
 // SAFETY: The buffer is a plain byte array with no thread-affinity.
 unsafe impl Send for AlignedBuffer {}
-unsafe impl Sync for AlignedBuffer {}
 
 impl AlignedBuffer {
     /// Allocate a zeroed buffer of `size` bytes aligned to `alignment`.

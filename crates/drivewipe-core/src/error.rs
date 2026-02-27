@@ -25,6 +25,9 @@ pub enum DriveWipeError {
     #[error("Insufficient privileges: {message}")]
     InsufficientPrivileges { message: String },
 
+    #[error("Device error: {0}")]
+    DeviceError(String),
+
     #[error("Device busy: {0}")]
     DeviceBusy(PathBuf),
 

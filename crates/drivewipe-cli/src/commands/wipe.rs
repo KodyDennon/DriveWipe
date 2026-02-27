@@ -282,14 +282,8 @@ pub fn run(
 pub fn find_and_clone_method_by_id(
     method_id: &str,
 ) -> Option<Box<dyn drivewipe_core::wipe::WipeMethod>> {
-    let registry = WipeMethodRegistry::new();
-    if registry.get(method_id).is_none() {
-        return None;
-    }
-
-    Some(Box::new(MethodProxy {
-        id: method_id.to_string(),
-    }))
+    let proxy = MethodProxy::new(method_id.to_string())?;
+    Some(Box::new(proxy))
 }
 
 // ── Private helpers ─────────────────────────────────────────────────────────
@@ -297,12 +291,32 @@ pub fn find_and_clone_method_by_id(
 /// Thin proxy that delegates to a fresh `WipeMethodRegistry` lookup.
 ///
 /// This exists because `WipeMethodRegistry::get` returns a reference and we
-/// need an owned `Box<dyn WipeMethod>` for `WipeSession::new`.
+/// need an owned `Box<dyn WipeMethod>` for `WipeSession::new`.  The `name`
+/// and `description` fields are cached at construction time so that `name()`
+/// and `description()` can return `&str` without leaking memory.
 struct MethodProxy {
     id: String,
+    cached_name: String,
+    cached_description: String,
+    cached_pass_count: u32,
+    cached_includes_verification: bool,
+    cached_is_firmware: bool,
 }
 
 impl MethodProxy {
+    fn new(id: String) -> Option<Self> {
+        let registry = WipeMethodRegistry::new();
+        let method = registry.get(&id)?;
+        Some(Self {
+            cached_name: method.name().to_string(),
+            cached_description: method.description().to_string(),
+            cached_pass_count: method.pass_count(),
+            cached_includes_verification: method.includes_verification(),
+            cached_is_firmware: method.is_firmware(),
+            id,
+        })
+    }
+
     fn with_inner<R>(&self, f: impl FnOnce(&dyn drivewipe_core::wipe::WipeMethod) -> R) -> R {
         let registry = WipeMethodRegistry::new();
         let method = registry
@@ -318,20 +332,15 @@ impl drivewipe_core::wipe::WipeMethod for MethodProxy {
     }
 
     fn name(&self) -> &str {
-        // We need to return &str but the registry reference is temporary.
-        // Leak a string for the lifetime of the program -- acceptable for
-        // a CLI tool with a handful of method names.
-        let name = self.with_inner(|m| m.name().to_string());
-        Box::leak(name.into_boxed_str())
+        &self.cached_name
     }
 
     fn description(&self) -> &str {
-        let desc = self.with_inner(|m| m.description().to_string());
-        Box::leak(desc.into_boxed_str())
+        &self.cached_description
     }
 
     fn pass_count(&self) -> u32 {
-        self.with_inner(|m| m.pass_count())
+        self.cached_pass_count
     }
 
     fn pattern_for_pass(
@@ -342,11 +351,11 @@ impl drivewipe_core::wipe::WipeMethod for MethodProxy {
     }
 
     fn includes_verification(&self) -> bool {
-        self.with_inner(|m| m.includes_verification())
+        self.cached_includes_verification
     }
 
     fn is_firmware(&self) -> bool {
-        self.with_inner(|m| m.is_firmware())
+        self.cached_is_firmware
     }
 }
 

@@ -5,7 +5,7 @@
 If you discover a security vulnerability in DriveWipe, please report it responsibly:
 
 1. **Do not** open a public GitHub issue for security vulnerabilities
-2. Email the maintainers with details of the vulnerability
+2. Use [GitHub Security Advisories](https://github.com/NuGit/DriveWipe/security/advisories/new) to report privately, or email the maintainers directly
 3. Include steps to reproduce, if possible
 4. Allow reasonable time for a fix before public disclosure
 

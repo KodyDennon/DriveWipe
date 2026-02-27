@@ -137,19 +137,15 @@ enum QueueAction {
 fn main() {
     let cli = Cli::parse();
 
-    // Initialise logging. With --verbose we set RUST_LOG=debug; otherwise honour
+    // Initialise logging. With --verbose we use debug level; otherwise honour
     // the existing RUST_LOG value or default to "info".
-    //
-    // SAFETY: We call set_var before any other threads are spawned, so there
-    // is no data race on the environment.
-    unsafe {
-        if cli.verbose {
-            std::env::set_var("RUST_LOG", "debug");
-        } else if std::env::var("RUST_LOG").is_err() {
-            std::env::set_var("RUST_LOG", "info");
-        }
+    {
+        let default_level = if cli.verbose { "debug" } else { "info" };
+        env_logger::Builder::from_env(
+            env_logger::Env::default().default_filter_or(default_level),
+        )
+        .init();
     }
-    env_logger::init();
 
     if let Err(e) = run(cli) {
         let console = console::Term::stderr();
@@ -181,8 +177,18 @@ fn run(cli: Cli) -> Result<()> {
         DriveWipeConfig::load().context("Failed to load configuration")?
     };
 
-    // Privilege check -- warn but do not abort.
+    // Privilege check -- warn for read-only commands, hard-fail for destructive ones.
+    let needs_privilege = matches!(
+        &cli.command,
+        Commands::Wipe { .. } | Commands::Queue { .. } | Commands::Resume { .. }
+    );
     if let Err(e) = privilege::check_privileges() {
+        if needs_privilege {
+            anyhow::bail!(
+                "Elevated privileges are required for this operation. {}",
+                e
+            );
+        }
         log::warn!("{}", e);
         eprintln!(
             "{} {}",

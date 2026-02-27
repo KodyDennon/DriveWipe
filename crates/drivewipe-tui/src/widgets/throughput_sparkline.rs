@@ -62,11 +62,13 @@ pub fn draw(
 }
 
 /// A throughput history buffer that maintains the last N samples.
+#[allow(dead_code)]
 pub struct ThroughputHistory {
     samples: Vec<f64>,
     max_samples: usize,
 }
 
+#[allow(dead_code)]
 impl ThroughputHistory {
     /// Create a new history buffer with the given capacity.
     pub fn new(max_samples: usize) -> Self {

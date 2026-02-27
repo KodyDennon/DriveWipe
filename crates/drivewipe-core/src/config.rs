@@ -97,7 +97,7 @@ impl Default for DriveWipeConfig {
             default_method: "zero".to_string(),
             parallel_drives: 1,
             auto_verify: true,
-            auto_report_json: false,
+            auto_report_json: true,
             sessions_dir: default_sessions_dir(),
             log_level: "info".to_string(),
             custom_methods: Vec::new(),

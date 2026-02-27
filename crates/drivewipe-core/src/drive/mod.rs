@@ -54,4 +54,8 @@ pub fn create_enumerator() -> Box<dyn DriveEnumerator> {
     {
         Box::new(windows::WindowsDriveEnumerator)
     }
+    #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
+    {
+        compile_error!("DriveWipe does not support this platform. Supported: Linux, macOS, Windows.");
+    }
 }
