@@ -7,9 +7,9 @@ DriveWipe provides military/corporate-grade drive wiping with software overwrite
 ## Features
 
 - **9 software wipe methods** — Zero/One/Random fill, DoD 5220.22-M (3 & 7 pass), Gutmann (35 pass), HMG IS5 Baseline & Enhanced, RCMP TSSIT OPS-II, plus custom user-defined methods
-- **8 firmware wipe methods** (stubs — not yet implemented) — ATA Secure Erase, NVMe Format/Sanitize, TCG Opal crypto erase
+- **8 firmware wipe methods** — ATA Secure Erase (normal & enhanced), NVMe Format/Sanitize (5 modes), TCG Opal crypto erase
 - **Two interfaces** — CLI for scripting, TUI for interactive use (GUI planned for Phase 2)
-- **Cross-platform** — Linux (full support), macOS (full support), Windows (stubs — I/O and drive enumeration not yet implemented)
+- **Cross-platform** — Linux (full support), macOS (full support), Windows (full support)
 - **Multi-drive parallel wipe** with live queue (add drives during active wipe)
 - **Full read-back verification** after wipe
 - **Resume capability** — auto-save state every 10 seconds, resume after interruption
@@ -87,16 +87,14 @@ sudo drivewipe-tui
 | `hmg-baseline` | HMG IS5 Baseline | 1 | Software |
 | `hmg-enhanced` | HMG IS5 Enhanced | 3 | Software |
 | `rcmp` | RCMP TSSIT OPS-II | 7 | Software |
-| `ata-erase` | ATA Secure Erase | firmware | Firmware (stub) |
-| `ata-erase-enhanced` | ATA Enhanced Secure Erase | firmware | Firmware (stub) |
-| `nvme-format-user` | NVMe Format (User Data Erase) | firmware | Firmware (stub) |
-| `nvme-format-crypto` | NVMe Format (Cryptographic Erase) | firmware | Firmware (stub) |
-| `nvme-sanitize-block` | NVMe Sanitize (Block Erase) | firmware | Firmware (stub) |
-| `nvme-sanitize-crypto` | NVMe Sanitize (Cryptographic Erase) | firmware | Firmware (stub) |
-| `nvme-sanitize-overwrite` | NVMe Sanitize (Overwrite) | firmware | Firmware (stub) |
-| `tcg-opal` | TCG Opal Crypto Erase | firmware | Firmware (stub) |
-
-> **Note:** All 8 firmware methods are currently stubs that return `PlatformNotSupported`. They require platform-specific ioctl implementations (ATA passthrough, NVMe Admin Commands, TCG Opal SED commands) which are planned for a future release.
+| `ata-erase` | ATA Secure Erase | firmware | Firmware |
+| `ata-erase-enhanced` | ATA Enhanced Secure Erase | firmware | Firmware |
+| `nvme-format-user` | NVMe Format (User Data Erase) | firmware | Firmware |
+| `nvme-format-crypto` | NVMe Format (Cryptographic Erase) | firmware | Firmware |
+| `nvme-sanitize-block` | NVMe Sanitize (Block Erase) | firmware | Firmware |
+| `nvme-sanitize-crypto` | NVMe Sanitize (Cryptographic Erase) | firmware | Firmware |
+| `nvme-sanitize-overwrite` | NVMe Sanitize (Overwrite) | firmware | Firmware |
+| `tcg-opal` | TCG Opal Crypto Erase | firmware | Firmware |
 
 ## Architecture
 
@@ -161,17 +159,27 @@ DriveWipe includes multiple safety mechanisms:
 
 | Feature | Linux | macOS | Windows |
 |---|---|---|---|
-| Drive enumeration | Full (sysfs) | Full (diskutil) | Stub |
-| Raw device I/O | Full (O_DIRECT) | Full (F_NOCACHE) | Stub |
-| Boot drive detection | Full (/proc/mounts) | Full (/sbin/mount) | Stub (always false) |
-| Software wipe methods | Full | Full | Blocked (needs I/O) |
-| Firmware wipe methods | Stub | Stub | Stub |
+| Drive enumeration | Full (sysfs) | Full (diskutil) | Full (DeviceIoControl) |
+| Raw device I/O | Full (O_DIRECT) | Full (F_NOCACHE) | Full (FILE_FLAG_NO_BUFFERING) |
+| Boot drive detection | Full (/proc/mounts) | Full (/sbin/mount) | Full (IOCTL_VOLUME_GET_VOLUME_DISK_EXTENTS) |
+| Software wipe methods | Full | Full | Full |
+| ATA Secure Erase | Full (SG_IO + ATA_16 CDB) | Not supported | Full (IOCTL_ATA_PASS_THROUGH) |
+| NVMe Format/Sanitize | Full (NVME_IOCTL_ADMIN_CMD) | Via nvme-cli | Full (IOCTL_STORAGE_PROTOCOL_COMMAND) |
+| TCG Opal crypto erase | Full (sed-opal ioctls) | Not supported | Not yet (future) |
 | ATA security state | Not yet | Not yet | Not yet |
 | SMART health | Not yet | Not yet | Not yet |
 
-- **Linux** — Best platform support. Software wipe fully operational. Firmware methods require ATA/NVMe ioctl work.
-- **macOS** — Software wipe fully operational. ATA passthrough is limited. Recommend Linux for firmware operations.
-- **Windows** — Currently stubs only. Requires `CreateFileW` + `DeviceIoControl` implementation for I/O and `SetupDi`/WMI for enumeration.
+### Linux
+
+Best platform support. All software and firmware wipe methods fully operational. ATA Secure Erase uses SCSI ATA_16 CDB via the SG_IO ioctl. NVMe commands use the kernel's admin command ioctl. TCG Opal uses the kernel's `sed-opal` driver. Requires root privileges.
+
+### macOS
+
+Software wipe methods fully operational. ATA Secure Erase is not supported (macOS lacks a reliable ATA passthrough). NVMe commands require `nvme-cli` (install with `brew install nvme-cli`). TCG Opal is not supported (no kernel SED driver). Requires root privileges.
+
+### Windows
+
+Full support for software wipe methods, drive enumeration, and device I/O using `CreateFileW` with `FILE_FLAG_NO_BUFFERING | FILE_FLAG_WRITE_THROUGH`. ATA Secure Erase uses `IOCTL_ATA_PASS_THROUGH` with `ATA_PASS_THROUGH_EX`. NVMe commands use `IOCTL_STORAGE_PROTOCOL_COMMAND`. Requires Administrator privileges. Drive enumeration probes `\\.\PhysicalDrive0` through `\\.\PhysicalDrive31`.
 
 ## License
 

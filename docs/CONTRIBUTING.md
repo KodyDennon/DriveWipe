@@ -55,14 +55,24 @@ cargo fmt --all
 
 ## Architecture
 
-The project is a Cargo workspace with four crates:
+The project is a Cargo workspace with five crates:
 
 - **drivewipe-core**: Library with all business logic. No UI code.
 - **drivewipe-cli**: CLI binary consuming the core API.
 - **drivewipe-tui**: Terminal UI binary consuming the core API.
 - **drivewipe-gui**: GUI binary (Phase 2, not yet implemented).
+- **xtask**: Build automation tasks.
 
 When adding features, put the logic in `drivewipe-core` and the presentation in the appropriate UI crate.
+
+### Cross-Platform Development
+
+All platform-specific code uses `#[cfg(target_os = "...")]` gating. When adding platform-specific features:
+
+- Put Linux, macOS, and Windows implementations in separate `#[cfg]` blocks or modules
+- Ensure the code compiles cleanly on all platforms (even if a feature returns `PlatformNotSupported` on some)
+- Keep platform-specific constants inside `#[cfg]`-gated modules to avoid dead code warnings
+- Test with `cargo build` on your development platform; CI will verify all three platforms
 
 ## Safety
 

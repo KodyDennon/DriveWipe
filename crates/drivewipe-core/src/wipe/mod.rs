@@ -6,10 +6,16 @@ pub mod firmware;
 pub mod patterns;
 pub mod software;
 
+use crossbeam_channel::Sender;
+use uuid::Uuid;
+
 use patterns::PatternGenerator;
 
 use self::custom::CustomWipeMethod;
 use self::firmware::FirmwareWipe;
+use crate::error::Result;
+use crate::progress::ProgressEvent;
+use crate::types::DriveInfo;
 
 // ── WipeMethod trait ─────────────────────────────────────────────────────────
 
@@ -43,6 +49,20 @@ pub trait WipeMethod: Send + Sync {
     /// than performing software overwrites.
     fn is_firmware(&self) -> bool {
         false
+    }
+
+    /// Execute a firmware-level erase, if this method is firmware-backed.
+    ///
+    /// Software methods return `None` (the default). Firmware methods return
+    /// `Some(Ok(()))` on success or `Some(Err(...))` on failure, causing
+    /// [`WipeSession::execute()`] to skip the software write loop entirely.
+    fn execute_firmware(
+        &self,
+        _drive: &DriveInfo,
+        _session_id: Uuid,
+        _progress_tx: &Sender<ProgressEvent>,
+    ) -> Option<Result<()>> {
+        None
     }
 }
 
@@ -100,6 +120,15 @@ impl WipeMethod for FirmwareMethodAdapter {
 
     fn is_firmware(&self) -> bool {
         true
+    }
+
+    fn execute_firmware(
+        &self,
+        drive: &DriveInfo,
+        session_id: Uuid,
+        progress_tx: &Sender<ProgressEvent>,
+    ) -> Option<Result<()>> {
+        Some(self.inner.execute(drive, session_id, progress_tx))
     }
 }
 

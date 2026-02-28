@@ -40,9 +40,7 @@ pub fn detect_boot_drive(path: &Path) -> bool {
 
     #[cfg(target_os = "windows")]
     {
-        // TODO: Implement Windows boot drive detection.
-        let _ = &path_str;
-        false
+        detect_boot_drive_windows(&path_str)
     }
 
     #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
@@ -112,6 +110,121 @@ fn detect_boot_drive_macos(device_path: &str) -> bool {
     }
 
     false
+}
+
+/// Windows boot-drive detection.
+///
+/// Maps the `C:\` volume to a physical disk number via
+/// `IOCTL_VOLUME_GET_VOLUME_DISK_EXTENTS`, then checks whether the given
+/// device path corresponds to that disk number.
+#[cfg(target_os = "windows")]
+fn detect_boot_drive_windows(device_path: &str) -> bool {
+    // Extract the drive number from paths like "\\.\PhysicalDrive0"
+    let drive_num = extract_windows_drive_number(device_path);
+    let Some(drive_num) = drive_num else {
+        return false;
+    };
+
+    // Get the boot volume's disk number
+    let Some(boot_disk_num) = get_boot_volume_disk_number() else {
+        return false;
+    };
+
+    drive_num == boot_disk_num
+}
+
+/// Extract the physical drive number from a Windows device path.
+///
+/// E.g. `\\.\PhysicalDrive0` → `Some(0)`, `\\.\PhysicalDrive12` → `Some(12)`.
+#[cfg(target_os = "windows")]
+fn extract_windows_drive_number(path: &str) -> Option<u32> {
+    // Normalize separators
+    let normalized = path.replace('/', "\\");
+    let lower = normalized.to_lowercase();
+    let prefix = "\\\\.\\physicaldrive";
+    if lower.starts_with(prefix) {
+        lower[prefix.len()..].parse::<u32>().ok()
+    } else {
+        None
+    }
+}
+
+/// Query the physical disk number backing the `C:\` volume.
+#[cfg(target_os = "windows")]
+fn get_boot_volume_disk_number() -> Option<u32> {
+    use std::ffi::OsStr;
+    use std::mem;
+    use std::os::windows::ffi::OsStrExt;
+    use windows::Win32::Foundation::{CloseHandle, INVALID_HANDLE_VALUE};
+    use windows::Win32::Storage::FileSystem::{
+        CreateFileW, FILE_SHARE_READ, FILE_SHARE_WRITE, OPEN_EXISTING,
+    };
+    use windows::Win32::System::IO::DeviceIoControl;
+    use windows::Win32::System::Ioctl::IOCTL_VOLUME_GET_VOLUME_DISK_EXTENTS;
+    use windows::core::PCWSTR;
+
+    // VOLUME_DISK_EXTENTS is variable-length; we define the fixed header
+    // and one extent inline.
+    #[repr(C)]
+    #[allow(non_snake_case)]
+    struct DiskExtent {
+        DiskNumber: u32,
+        StartingOffset: i64,
+        ExtentLength: i64,
+    }
+
+    #[repr(C)]
+    #[allow(non_snake_case)]
+    struct VolumeDiskExtents {
+        NumberOfDiskExtents: u32,
+        Extents: [DiskExtent; 1],
+    }
+
+    let wide: Vec<u16> = OsStr::new("\\\\.\\C:")
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect();
+
+    let handle = unsafe {
+        CreateFileW(
+            PCWSTR(wide.as_ptr()),
+            0,
+            FILE_SHARE_READ | FILE_SHARE_WRITE,
+            None,
+            OPEN_EXISTING,
+            Default::default(),
+            None,
+        )
+    }
+    .ok()?;
+
+    if handle == INVALID_HANDLE_VALUE {
+        return None;
+    }
+
+    let mut extents: VolumeDiskExtents = unsafe { mem::zeroed() };
+    let mut bytes_returned: u32 = 0;
+
+    let ok = unsafe {
+        DeviceIoControl(
+            handle,
+            IOCTL_VOLUME_GET_VOLUME_DISK_EXTENTS,
+            None,
+            0,
+            Some(&mut extents as *mut _ as *mut _),
+            mem::size_of::<VolumeDiskExtents>() as u32,
+            Some(&mut bytes_returned),
+            None,
+        )
+    };
+
+    unsafe { let _ = CloseHandle(handle); }
+
+    if ok.is_ok() && extents.NumberOfDiskExtents > 0 {
+        Some(extents.Extents[0].DiskNumber)
+    } else {
+        None
+    }
 }
 
 /// Extract the base device name from a device path.
@@ -257,6 +370,24 @@ mod tests {
         assert_eq!(extract_base_device("/dev/nvme0n1p2"), "nvme0n1");
         assert_eq!(extract_base_device("/dev/nvme0n1"), "nvme0n1");
         assert_eq!(extract_base_device("sda1"), "sda");
+    }
+
+    #[test]
+    #[cfg(target_os = "windows")]
+    fn test_extract_windows_drive_number() {
+        assert_eq!(
+            super::extract_windows_drive_number(r"\\.\PhysicalDrive0"),
+            Some(0)
+        );
+        assert_eq!(
+            super::extract_windows_drive_number(r"\\.\PhysicalDrive12"),
+            Some(12)
+        );
+        assert_eq!(
+            super::extract_windows_drive_number(r"\\.\physicaldrive3"),
+            Some(3)
+        );
+        assert_eq!(super::extract_windows_drive_number("/dev/sda"), None);
     }
 
     #[test]

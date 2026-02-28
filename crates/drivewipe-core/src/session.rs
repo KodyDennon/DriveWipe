@@ -145,7 +145,7 @@ impl WipeSession {
 
         // Send SessionStarted event
         let _ = progress_tx.send(ProgressEvent::SessionStarted {
-            session_id: session_id,
+            session_id,
             device_path: self.drive_info.path.display().to_string(),
             device_serial: self.drive_info.serial.clone(),
             method_id: self.method.id().to_string(),
@@ -153,6 +153,82 @@ impl WipeSession {
             total_bytes,
             total_passes,
         });
+
+        // ── Firmware dispatch ──────────────────────────────────────────
+        // Firmware methods are atomic from the host's perspective: a single
+        // ioctl/admin-command triggers the drive controller's own erase
+        // routine. We skip the entire software write loop and return a
+        // firmware-specific WipeResult.
+        if self.method.is_firmware() {
+            let fw_start = Instant::now();
+            let _ = progress_tx.send(ProgressEvent::FirmwareEraseStarted {
+                session_id,
+                method_name: self.method.name().to_string(),
+            });
+
+            let fw_result = self.method.execute_firmware(
+                &self.drive_info,
+                session_id,
+                progress_tx,
+            );
+
+            if let Some(result) = fw_result {
+                let fw_duration = fw_start.elapsed().as_secs_f64();
+
+                let (outcome, errors) = match &result {
+                    Ok(()) => {
+                        let _ = progress_tx.send(ProgressEvent::FirmwareEraseCompleted {
+                            session_id,
+                            duration_secs: fw_duration,
+                        });
+                        let _ = progress_tx.send(ProgressEvent::Completed {
+                            session_id,
+                            outcome: WipeOutcome::Success,
+                            duration_secs: fw_duration,
+                        });
+                        (WipeOutcome::Success, vec![])
+                    }
+                    Err(e) => {
+                        let err_msg = e.to_string();
+                        let _ = progress_tx.send(ProgressEvent::Error {
+                            session_id,
+                            message: err_msg.clone(),
+                        });
+                        let _ = progress_tx.send(ProgressEvent::Completed {
+                            session_id,
+                            outcome: WipeOutcome::Failed,
+                            duration_secs: fw_duration,
+                        });
+                        (WipeOutcome::Failed, vec![err_msg])
+                    }
+                };
+
+                return Ok(WipeResult {
+                    session_id,
+                    device_path: self.drive_info.path.clone(),
+                    device_serial: self.drive_info.serial.clone(),
+                    device_model: self.drive_info.model.clone(),
+                    device_capacity: total_bytes,
+                    method_id: self.method.id().to_string(),
+                    method_name: self.method.name().to_string(),
+                    outcome,
+                    passes: vec![],
+                    total_bytes_written: 0,
+                    total_duration_secs: fw_duration,
+                    average_throughput_mbps: 0.0,
+                    verification_passed: None,
+                    started_at,
+                    completed_at: Utc::now(),
+                    hostname: hostname::get()
+                        .ok()
+                        .and_then(|h| h.into_string().ok())
+                        .unwrap_or_default(),
+                    operator: self.config.operator_name.clone(),
+                    warnings: vec![],
+                    errors,
+                });
+            }
+        }
 
         let mut pass_results: Vec<PassResult> = Vec::new();
         let mut warnings: Vec<String> = Vec::new();
