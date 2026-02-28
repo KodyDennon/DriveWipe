@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use crossbeam_channel::{Receiver, Sender, bounded, select, tick};
-use crossterm::event::{self, Event, KeyEvent};
+use crossterm::event::{self, Event, KeyEvent, KeyEventKind};
 
 use drivewipe_core::progress::ProgressEvent;
 
@@ -49,7 +49,7 @@ impl EventHandler {
                         if event::poll(Duration::from_millis(0)).unwrap_or(false) {
                             if let Ok(evt) = event::read() {
                                 match evt {
-                                    Event::Key(key) => {
+                                    Event::Key(key) if key.kind == KeyEventKind::Press => {
                                         if input_tx.send(AppEvent::Key(key)).is_err() {
                                             break;
                                         }
