@@ -231,6 +231,7 @@ fn get_boot_volume_disk_number() -> Option<u32> {
     }
 }
 
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 /// Extract the base device name from a device path.
 ///
 /// Strips the `/dev/` prefix and any trailing partition number or slice
@@ -367,6 +368,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(not(target_os = "windows"))]
     fn test_extract_base_device_linux() {
         assert_eq!(extract_base_device("/dev/sda1"), "sda");
         assert_eq!(extract_base_device("/dev/sda"), "sda");
@@ -394,6 +396,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(not(target_os = "windows"))]
     fn test_extract_base_device_macos() {
         assert_eq!(extract_base_device("/dev/rdisk2s1"), "disk2");
         assert_eq!(extract_base_device("/dev/disk2"), "disk2");
