@@ -647,7 +647,7 @@ dependencies = [
 
 [[package]]
 name = "drivewipe-cli"
-version = "0.1.0"
+version = "0.1.5"
 dependencies = [
  "anyhow",
  "assert_cmd",
@@ -671,7 +671,7 @@ dependencies = [
 
 [[package]]
 name = "drivewipe-core"
-version = "0.1.0"
+version = "0.1.5"
 dependencies = [
  "aes",
  "anyhow",
@@ -699,14 +699,14 @@ dependencies = [
 
 [[package]]
 name = "drivewipe-gui"
-version = "0.1.0"
+version = "0.1.5"
 dependencies = [
  "drivewipe-core",
 ]
 
 [[package]]
 name = "drivewipe-tui"
-version = "0.1.0"
+version = "0.1.5"
 dependencies = [
  "anyhow",
  "chrono",
@@ -3153,7 +3153,7 @@ dependencies = [
 
 [[package]]
 name = "xtask"
-version = "0.1.0"
+version = "0.1.5"
 dependencies = [
  "anyhow",
  "clap",
