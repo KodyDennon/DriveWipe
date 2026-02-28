@@ -141,12 +141,9 @@ fn extract_windows_drive_number(path: &str) -> Option<u32> {
     // Normalize separators
     let normalized = path.replace('/', "\\");
     let lower = normalized.to_lowercase();
-    let prefix = "\\\\.\\physicaldrive";
-    if lower.starts_with(prefix) {
-        lower[prefix.len()..].parse::<u32>().ok()
-    } else {
-        None
-    }
+    lower
+        .strip_prefix("\\\\.\\physicaldrive")
+        .and_then(|num_str| num_str.parse::<u32>().ok())
 }
 
 /// Query the physical disk number backing the `C:\` volume.
