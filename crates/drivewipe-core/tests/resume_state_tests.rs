@@ -134,11 +134,10 @@ fn cleanup_nonexistent_is_ok() {
 #[test]
 fn state_path_format() {
     let id = Uuid::parse_str("550e8400-e29b-41d4-a716-446655440000").unwrap();
-    let path = WipeState::state_path(&PathBuf::from("/tmp"), id);
-    assert_eq!(
-        path.to_string_lossy(),
-        "/tmp/550e8400-e29b-41d4-a716-446655440000.state"
-    );
+    let dir = PathBuf::from("/tmp");
+    let path = WipeState::state_path(&dir, id);
+    let expected = dir.join("550e8400-e29b-41d4-a716-446655440000.state");
+    assert_eq!(path, expected);
 }
 
 // ── Helper ─────────────────────────────────────────────────────────
