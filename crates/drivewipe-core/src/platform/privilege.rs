@@ -13,11 +13,10 @@ pub fn is_elevated() -> bool {
 #[cfg(windows)]
 pub fn is_elevated() -> bool {
     use std::mem;
-    use std::ptr;
 
     use windows::Win32::Foundation::{CloseHandle, HANDLE};
     use windows::Win32::Security::{
-        GetTokenInformation, TokenElevation, TOKEN_ELEVATION, TOKEN_QUERY,
+        GetTokenInformation, TOKEN_ELEVATION, TOKEN_QUERY, TokenElevation,
     };
     use windows::Win32::System::Threading::{GetCurrentProcess, OpenProcessToken};
 

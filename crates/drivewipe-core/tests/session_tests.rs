@@ -149,9 +149,7 @@ fn wipe_session_cancellation() {
     // The session should either return Cancelled or Interrupted.
     match result {
         Ok(r) => {
-            assert!(
-                r.outcome == WipeOutcome::Cancelled || r.outcome == WipeOutcome::Interrupted
-            );
+            assert!(r.outcome == WipeOutcome::Cancelled || r.outcome == WipeOutcome::Interrupted);
         }
         Err(e) => {
             let msg = format!("{e}");

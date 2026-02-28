@@ -82,9 +82,7 @@ fn list_incomplete(sessions_dir: &Path) -> Result<()> {
 
     println!();
     println!("  {} session(s) found.", states.len());
-    println!(
-        "  Resume with: drivewipe resume --session <SESSION_ID>"
-    );
+    println!("  Resume with: drivewipe resume --session <SESSION_ID>");
 
     Ok(())
 }
@@ -244,19 +242,16 @@ fn execute_resumed_session(
 
     // Open the device.
     #[cfg(target_os = "linux")]
-    let mut device_io =
-        drivewipe_core::io::linux::LinuxDeviceIo::open(device_path)
-            .with_context(|| format!("Failed to open device {}", device_path.display()))?;
+    let mut device_io = drivewipe_core::io::linux::LinuxDeviceIo::open(device_path)
+        .with_context(|| format!("Failed to open device {}", device_path.display()))?;
 
     #[cfg(target_os = "macos")]
-    let mut device_io =
-        drivewipe_core::io::macos::MacosDeviceIo::open(device_path)
-            .with_context(|| format!("Failed to open device {}", device_path.display()))?;
+    let mut device_io = drivewipe_core::io::macos::MacosDeviceIo::open(device_path)
+        .with_context(|| format!("Failed to open device {}", device_path.display()))?;
 
     #[cfg(target_os = "windows")]
-    let mut device_io =
-        drivewipe_core::io::windows::WindowsDeviceIo::open(device_path)
-            .with_context(|| format!("Failed to open device {}", device_path.display()))?;
+    let mut device_io = drivewipe_core::io::windows::WindowsDeviceIo::open(device_path)
+        .with_context(|| format!("Failed to open device {}", device_path.display()))?;
 
     // Build the session using the MethodProxy from wipe command.
     let mut session_config = config.clone();
@@ -269,10 +264,7 @@ fn execute_resumed_session(
     };
 
     // Progress display.
-    let progress_display = WipeProgressDisplay::new(
-        drive_info.capacity,
-        state.total_passes,
-    );
+    let progress_display = WipeProgressDisplay::new(drive_info.capacity, state.total_passes);
 
     let (progress_tx, progress_rx) = crossbeam_channel::unbounded::<ProgressEvent>();
 
@@ -286,12 +278,7 @@ fn execute_resumed_session(
     };
 
     // Execute.
-    let result = session.execute(
-        &mut device_io,
-        &progress_tx,
-        cancel_token,
-        Some(state),
-    );
+    let result = session.execute(&mut device_io, &progress_tx, cancel_token, Some(state));
 
     drop(progress_tx);
     let _ = display_handle.join();
@@ -305,16 +292,19 @@ fn execute_resumed_session(
         match wipe_result.outcome {
             WipeOutcome::Success => console::style("Success".to_string()).green().bold(),
             WipeOutcome::SuccessWithWarnings => {
-                console::style("Success (with warnings)".to_string()).yellow().bold()
+                console::style("Success (with warnings)".to_string())
+                    .yellow()
+                    .bold()
             }
-            _ => console::style(format!("{}", wipe_result.outcome)).red().bold(),
+            _ => console::style(format!("{}", wipe_result.outcome))
+                .red()
+                .bold(),
         }
     );
 
     // Save JSON report.
     let report_dir = config.sessions_dir();
-    std::fs::create_dir_all(report_dir)
-        .context("Failed to create report directory")?;
+    std::fs::create_dir_all(report_dir).context("Failed to create report directory")?;
 
     let json_path = report_dir.join(format!("{}.json", wipe_result.session_id));
     let generator = drivewipe_core::report::json::JsonReportGenerator;

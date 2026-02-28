@@ -1,8 +1,8 @@
 use std::path::PathBuf;
 
+use drivewipe_core::report::ReportGenerator;
 use drivewipe_core::report::data::WipeReport;
 use drivewipe_core::report::json::JsonReportGenerator;
-use drivewipe_core::report::ReportGenerator;
 use drivewipe_core::types::*;
 
 #[test]

@@ -10,8 +10,8 @@ use std::path::{Path, PathBuf};
 use crate::error::{DriveWipeError, Result};
 use crate::types::{AtaSecurityState, DriveInfo, DriveType, HiddenAreaInfo, Transport};
 
-use super::info::detect_boot_drive;
 use super::DriveEnumerator;
+use super::info::detect_boot_drive;
 
 /// Linux drive enumerator backed by sysfs.
 pub struct LinuxDriveEnumerator;

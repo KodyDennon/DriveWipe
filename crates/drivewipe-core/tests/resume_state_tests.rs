@@ -68,7 +68,8 @@ fn find_incomplete_empty_dir() {
 
 #[test]
 fn find_incomplete_nonexistent_dir() {
-    let results = WipeState::find_incomplete(&PathBuf::from("/tmp/nonexistent_drivewipe_test_dir")).unwrap();
+    let results =
+        WipeState::find_incomplete(&PathBuf::from("/tmp/nonexistent_drivewipe_test_dir")).unwrap();
     assert!(results.is_empty());
 }
 

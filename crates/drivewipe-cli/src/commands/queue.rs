@@ -69,8 +69,7 @@ fn save_queue(config: &DriveWipeConfig, queue: &WipeQueue) -> Result<()> {
     )
     .context("Failed to create sessions directory")?;
 
-    let json = serde_json::to_string_pretty(queue)
-        .context("Failed to serialise queue")?;
+    let json = serde_json::to_string_pretty(queue).context("Failed to serialise queue")?;
     std::fs::write(&path, json)
         .with_context(|| format!("Failed to write queue file: {}", path.display()))?;
     Ok(())
@@ -185,11 +184,7 @@ pub fn start(
                     let i = *idx;
                     s.spawn(move || {
                         let r = super::wipe::run(
-                            &cfg,
-                            &ct,
-                            &dev,
-                            &mth,
-                            true,  // force
+                            &cfg, &ct, &dev, &mth, true,  // force
                             true,  // yes_i_know
                             None,  // verify override
                             None,  // pdf report
@@ -284,7 +279,10 @@ pub fn status(config: &DriveWipeConfig) -> Result<()> {
             QueueEntryStatus::Cancelled => console::style(entry.status.to_string()).dim(),
         };
 
-        println!("  {:<20} {:<16} {}", entry.device, entry.method, status_style);
+        println!(
+            "  {:<20} {:<16} {}",
+            entry.device, entry.method, status_style
+        );
     }
 
     let pending = queue
@@ -304,8 +302,7 @@ pub fn cancel(config: &DriveWipeConfig) -> Result<()> {
 
     let mut cancelled = 0;
     for entry in &mut queue.entries {
-        if entry.status == QueueEntryStatus::Pending
-            || entry.status == QueueEntryStatus::InProgress
+        if entry.status == QueueEntryStatus::Pending || entry.status == QueueEntryStatus::InProgress
         {
             entry.status = QueueEntryStatus::Cancelled;
             cancelled += 1;

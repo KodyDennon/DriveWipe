@@ -50,7 +50,10 @@ fn different_seeds_produce_different_output() {
     rng1.fill_bytes(&mut buf1);
     rng2.fill_bytes(&mut buf2);
 
-    assert_ne!(buf1, buf2, "different seeds should produce different output");
+    assert_ne!(
+        buf1, buf2,
+        "different seeds should produce different output"
+    );
 }
 
 #[test]
@@ -64,7 +67,10 @@ fn large_fill() {
         seen[b as usize] = true;
     }
     let distinct = seen.iter().filter(|&&s| s).count();
-    assert!(distinct >= 200, "expected diverse byte distribution, got {distinct}");
+    assert!(
+        distinct >= 200,
+        "expected diverse byte distribution, got {distinct}"
+    );
 }
 
 #[test]

@@ -1,7 +1,7 @@
 use ratatui::prelude::*;
 use ratatui::widgets::{Block, Borders, Gauge, Paragraph, Wrap};
 
-use drivewipe_core::types::{format_bytes, format_throughput, WipeOutcome};
+use drivewipe_core::types::{WipeOutcome, format_bytes, format_throughput};
 
 use crate::app::App;
 use crate::ui::{self, log_viewer};
@@ -85,11 +85,7 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
         .sum();
 
     // Use the first active session's history for the sparkline.
-    if let Some(active) = app
-        .wipe_progress
-        .values()
-        .find(|p| p.outcome.is_none())
-    {
+    if let Some(active) = app.wipe_progress.values().find(|p| p.outcome.is_none()) {
         combined_history = active.throughput_history.clone();
     }
 
@@ -104,19 +100,12 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
     ui::status_bar(
         frame,
         status_area,
-        &[
-            ("PgUp/PgDn", "Scroll log"),
-            ("q", "Cancel & Quit"),
-        ],
+        &[("PgUp/PgDn", "Scroll log"), ("q", "Cancel & Quit")],
     );
 }
 
 /// Draw a single wipe progress entry: header line + gauge + ETA line.
-fn draw_wipe_entry(
-    frame: &mut Frame,
-    area: Rect,
-    progress: &crate::app::WipeProgress,
-) {
+fn draw_wipe_entry(frame: &mut Frame, area: Rect, progress: &crate::app::WipeProgress) {
     if area.height < 3 {
         return;
     }
@@ -160,10 +149,7 @@ fn draw_wipe_entry(
         ),
         Span::raw(" "),
         Span::styled(
-            format!(
-                "Pass {}/{}",
-                progress.current_pass, progress.total_passes
-            ),
+            format!("Pass {}/{}", progress.current_pass, progress.total_passes),
             Style::default().fg(Color::Gray),
         ),
         Span::raw("  "),
@@ -214,10 +200,7 @@ fn draw_wipe_entry(
 
     let eta_text = if progress.outcome.is_some() {
         let elapsed = progress.started_at.elapsed().as_secs();
-        format!(
-            "   Elapsed: {}",
-            ui::format_eta(elapsed as f64)
-        )
+        format!("   Elapsed: {}", ui::format_eta(elapsed as f64))
     } else {
         match progress.eta_secs() {
             Some(eta) => format!(
@@ -229,10 +212,7 @@ fn draw_wipe_entry(
         }
     };
 
-    let eta = Paragraph::new(Span::styled(
-        eta_text,
-        Style::default().fg(Color::DarkGray),
-    ));
+    let eta = Paragraph::new(Span::styled(eta_text, Style::default().fg(Color::DarkGray)));
     frame.render_widget(eta, entry_chunks[2]);
 }
 
@@ -300,10 +280,7 @@ pub fn draw_completed(frame: &mut Frame, app: &mut App) {
                 format!("{:<24}", progress.method),
                 Style::default().fg(Color::Yellow),
             ),
-            Span::styled(
-                format!("{:<20}", outcome_str),
-                Style::default().fg(color),
-            ),
+            Span::styled(format!("{:<20}", outcome_str), Style::default().fg(color)),
             Span::styled(avg_throughput, Style::default().fg(Color::Gray)),
         ]));
 

@@ -1,5 +1,5 @@
-use drivewipe_core::wipe::software::*;
 use drivewipe_core::wipe::WipeMethod;
+use drivewipe_core::wipe::software::*;
 
 #[test]
 fn zero_fill_method_metadata() {
@@ -122,7 +122,10 @@ fn rcmp_alternating_pattern() {
         let mut pat = m.pattern_for_pass(pass);
         let mut buf = vec![0xFF; 256];
         pat.fill(&mut buf);
-        assert!(buf.iter().all(|&b| b == 0x00), "pass {pass} should be zeros");
+        assert!(
+            buf.iter().all(|&b| b == 0x00),
+            "pass {pass} should be zeros"
+        );
     }
 
     // Odd passes (1, 3, 5) should produce ones.

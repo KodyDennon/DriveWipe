@@ -3,7 +3,7 @@ use uuid::Uuid;
 
 use super::Verifier;
 use crate::error::{DriveWipeError, Result};
-use crate::io::{RawDeviceIo, DEFAULT_BLOCK_SIZE};
+use crate::io::{DEFAULT_BLOCK_SIZE, RawDeviceIo};
 use crate::progress::ProgressEvent;
 
 /// Optimized verifier that checks whether the entire device is filled with zeros.

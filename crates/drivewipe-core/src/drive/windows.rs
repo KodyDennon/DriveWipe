@@ -34,8 +34,8 @@ mod imp {
     use windows::Win32::System::IO::DeviceIoControl;
     use windows::Win32::System::Ioctl::{
         DISK_GEOMETRY_EX, IOCTL_DISK_GET_DRIVE_GEOMETRY_EX, IOCTL_DISK_GET_LENGTH_INFO,
-        IOCTL_STORAGE_QUERY_PROPERTY, STORAGE_PROPERTY_QUERY, STORAGE_QUERY_TYPE,
-        STORAGE_PROPERTY_ID,
+        IOCTL_STORAGE_QUERY_PROPERTY, STORAGE_PROPERTY_ID, STORAGE_PROPERTY_QUERY,
+        STORAGE_QUERY_TYPE,
     };
     use windows::core::PCWSTR;
 
@@ -79,7 +79,10 @@ mod imp {
     }
 
     fn to_wide_null(s: &str) -> Vec<u16> {
-        OsStr::new(s).encode_wide().chain(std::iter::once(0)).collect()
+        OsStr::new(s)
+            .encode_wide()
+            .chain(std::iter::once(0))
+            .collect()
     }
 
     /// Try to open a physical drive. Returns None if it doesn't exist.
@@ -163,16 +166,18 @@ mod imp {
         }
 
         let result = query_drive_info(handle, path);
-        unsafe { let _ = CloseHandle(handle); }
+        unsafe {
+            let _ = CloseHandle(handle);
+        }
         result
     }
 
     fn query_drive_info(handle: HANDLE, path: &Path) -> Result<DriveInfo> {
         // Query STORAGE_DEVICE_DESCRIPTOR for model, serial, bus type, etc.
         let mut desc_buf = [0u8; 4096];
-        let mut query = STORAGE_PROPERTY_QUERY {
+        let query = STORAGE_PROPERTY_QUERY {
             PropertyId: STORAGE_PROPERTY_ID(0), // StorageDeviceProperty
-            QueryType: STORAGE_QUERY_TYPE(0),    // PropertyStandardQuery
+            QueryType: STORAGE_QUERY_TYPE(0),   // PropertyStandardQuery
             AdditionalParameters: [0],
         };
         let mut bytes_returned: u32 = 0;
@@ -229,11 +234,7 @@ mod imp {
                     None,
                 )
             };
-            if ok.is_ok() {
-                length_info as u64
-            } else {
-                0
-            }
+            if ok.is_ok() { length_info as u64 } else { 0 }
         };
 
         // Query sector size via IOCTL_DISK_GET_DRIVE_GEOMETRY_EX.
@@ -261,7 +262,7 @@ mod imp {
 
         // Detect SSD via seek penalty property.
         let is_ssd = {
-            let mut seek_query = STORAGE_PROPERTY_QUERY {
+            let seek_query = STORAGE_PROPERTY_QUERY {
                 PropertyId: STORAGE_PROPERTY_ID(7), // StorageDeviceSeekPenaltyProperty
                 QueryType: STORAGE_QUERY_TYPE(0),
                 AdditionalParameters: [0],
@@ -331,7 +332,9 @@ mod imp {
                         log::debug!("Skipping PhysicalDrive{}: {}", n, e);
                     }
                 }
-                unsafe { let _ = CloseHandle(handle); }
+                unsafe {
+                    let _ = CloseHandle(handle);
+                }
             }
         }
 

@@ -51,10 +51,7 @@ pub fn run(
 fn generate_pdf(report: &WipeReport, output: Option<&str>) -> Result<()> {
     use drivewipe_core::report::pdf::PdfReportGenerator;
 
-    let out_path = output.unwrap_or_else(|| {
-        // Default output path derived from session id.
-        "report.pdf"
-    });
+    let out_path = output.unwrap_or("report.pdf");
 
     let generator = PdfReportGenerator;
     let pdf_bytes = generator

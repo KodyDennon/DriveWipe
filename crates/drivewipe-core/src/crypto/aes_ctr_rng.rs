@@ -45,6 +45,12 @@ impl AesCtrRng {
     }
 }
 
+impl Default for AesCtrRng {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Drop for AesCtrRng {
     fn drop(&mut self) {
         self.key.zeroize();

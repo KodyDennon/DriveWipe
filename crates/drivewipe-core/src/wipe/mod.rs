@@ -23,7 +23,7 @@ use crate::types::DriveInfo;
 ///
 /// Each pass writes a specific pattern (zeros, ones, random bytes, or a
 /// repeating sequence) across the entire device surface. Software methods
-/// implement this trait directly; firmware methods set [`is_firmware`] to
+/// implement this trait directly; firmware methods set [`is_firmware`](WipeMethod::is_firmware) to
 /// `true` and delegate to the drive controller.
 pub trait WipeMethod: Send + Sync {
     /// Machine-readable identifier (e.g. `"dod-short"`, `"gutmann"`).
@@ -55,7 +55,7 @@ pub trait WipeMethod: Send + Sync {
     ///
     /// Software methods return `None` (the default). Firmware methods return
     /// `Some(Ok(()))` on success or `Some(Err(...))` on failure, causing
-    /// [`WipeSession::execute()`] to skip the software write loop entirely.
+    /// [`WipeSession::execute()`](crate::session::WipeSession::execute) to skip the software write loop entirely.
     fn execute_firmware(
         &self,
         _drive: &DriveInfo,
@@ -180,9 +180,8 @@ impl WipeMethodRegistry {
     /// configuration.
     pub fn register_custom_methods(&mut self, config: &crate::config::DriveWipeConfig) {
         for method_cfg in &config.custom_methods {
-            self.methods.push(Box::new(
-                CustomWipeMethod::from_config(method_cfg.clone()),
-            ));
+            self.methods
+                .push(Box::new(CustomWipeMethod::from_config(method_cfg.clone())));
         }
     }
 

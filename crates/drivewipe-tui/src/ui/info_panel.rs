@@ -45,9 +45,7 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
     let capacity_display = drive.capacity_display();
     let capacity_bytes = format!("{}", drive.capacity);
     let block_size = format!("{} bytes", drive.block_size);
-    let physical_block = drive
-        .physical_block_size
-        .map(|pbs| format!("{pbs} bytes"));
+    let physical_block = drive.physical_block_size.map(|pbs| format!("{pbs} bytes"));
     let drive_type = drive.drive_type.to_string();
     let transport = drive.transport.to_string();
     let is_boot = if drive.is_boot_drive { "Yes" } else { "No" };
@@ -66,7 +64,7 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
             drive
                 .hidden_areas
                 .hpa_size
-                .map(|s| format_bytes(s))
+                .map(format_bytes)
                 .unwrap_or_else(|| "unknown size".into())
         )
     } else {
@@ -78,7 +76,7 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
             drive
                 .hidden_areas
                 .dco_size
-                .map(|s| format_bytes(s))
+                .map(format_bytes)
                 .unwrap_or_else(|| "unknown size".into())
         )
     } else {

@@ -85,11 +85,14 @@ impl AlignedBuffer {
     /// Panics if `alignment` is zero, not a power of two, or if the
     /// allocation fails (out of memory).
     pub fn new(size: usize, alignment: usize) -> Self {
-        assert!(alignment > 0 && alignment.is_power_of_two(), "alignment must be a power of two");
+        assert!(
+            alignment > 0 && alignment.is_power_of_two(),
+            "alignment must be a power of two"
+        );
         // Ensure size is a multiple of alignment as required by Layout.
         let padded_size = (size + alignment - 1) & !(alignment - 1);
-        let layout = Layout::from_size_align(padded_size, alignment)
-            .expect("invalid layout parameters");
+        let layout =
+            Layout::from_size_align(padded_size, alignment).expect("invalid layout parameters");
         // SAFETY: layout has non-zero size (padded_size >= alignment > 0) and
         // valid alignment.  alloc_zeroed returns a zeroed block or null.
         let ptr = unsafe { std::alloc::alloc_zeroed(layout) };

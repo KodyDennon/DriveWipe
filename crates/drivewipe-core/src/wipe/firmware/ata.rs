@@ -164,8 +164,8 @@ fn ata_secure_erase_impl(
 
 #[cfg(target_os = "linux")]
 mod linux_ata {
-    use super::*;
     use super::ata_consts::*;
+    use super::*;
     use std::os::unix::io::RawFd;
 
     /// SG_IO ioctl number
@@ -175,6 +175,7 @@ mod linux_ata {
     const ATA_16: u8 = 0x85;
 
     /// ATA protocol values for ATA_16 CDB byte 1
+    #[allow(dead_code)]
     const ATA_PROTO_NON_DATA: u8 = 3 << 1;
     const ATA_PROTO_PIO_DATA_OUT: u8 = 5 << 1;
 
@@ -380,8 +381,8 @@ mod linux_ata {
 
 #[cfg(target_os = "windows")]
 mod windows_ata {
-    use super::*;
     use super::ata_consts::*;
+    use super::*;
     use std::ffi::OsStr;
     use std::mem;
     use std::os::windows::ffi::OsStrExt;
@@ -426,7 +427,10 @@ mod windows_ata {
     }
 
     fn to_wide_null(s: &str) -> Vec<u16> {
-        OsStr::new(s).encode_wide().chain(std::iter::once(0)).collect()
+        OsStr::new(s)
+            .encode_wide()
+            .chain(std::iter::once(0))
+            .collect()
     }
 
     fn build_password_block_win(enhanced: bool) -> [u8; ATA_PASSWORD_BLOCK_SIZE] {
@@ -449,7 +453,8 @@ mod windows_ata {
         let mut buf: AtaPassThroughExWithData = unsafe { mem::zeroed() };
 
         buf.header.Length = mem::size_of::<AtaPassThroughEx>() as u16;
-        buf.header.AtaFlags = ATA_FLAGS_DRDY_REQUIRED | if has_data { ATA_FLAGS_DATA_OUT } else { 0 };
+        buf.header.AtaFlags =
+            ATA_FLAGS_DRDY_REQUIRED | if has_data { ATA_FLAGS_DATA_OUT } else { 0 };
         buf.header.TimeOutValue = timeout_secs;
 
         if has_data {
@@ -461,7 +466,7 @@ mod windows_ata {
         }
 
         // CurrentTaskFile: [Features, SectorCount, SectorNumber, CylLow, CylHigh, DevHead, Command, Reserved]
-        buf.header.CurrentTaskFile[0] = 0;    // Features
+        buf.header.CurrentTaskFile[0] = 0; // Features
         buf.header.CurrentTaskFile[1] = if has_data { 1 } else { 0 }; // Sector count
         buf.header.CurrentTaskFile[6] = command;
 
@@ -485,10 +490,7 @@ mod windows_ata {
             )
         }
         .map_err(|e| DriveWipeError::FirmwareError {
-            reason: format!(
-                "ATA passthrough command {:#04x} failed: {}",
-                command, e
-            ),
+            reason: format!("ATA passthrough command {:#04x} failed: {}", command, e),
         })?;
 
         // Check the returned task file for errors (bit 0 of Status = error)
@@ -551,7 +553,12 @@ mod windows_ata {
 
             let erase_block = build_password_block_win(enhanced);
             let timeout_secs = ATA_ERASE_TIMEOUT_MS / 1000;
-            ata_passthrough(handle, ATA_CMD_SEC_ERASE_UNIT, Some(&erase_block), timeout_secs)?;
+            ata_passthrough(
+                handle,
+                ATA_CMD_SEC_ERASE_UNIT,
+                Some(&erase_block),
+                timeout_secs,
+            )?;
 
             // Step 3: SECURITY DISABLE PASSWORD
             let _ = progress_tx.send(ProgressEvent::FirmwareEraseProgress {
@@ -570,7 +577,9 @@ mod windows_ata {
             Ok(())
         })();
 
-        unsafe { let _ = CloseHandle(handle); }
+        unsafe {
+            let _ = CloseHandle(handle);
+        }
         result
     }
 }

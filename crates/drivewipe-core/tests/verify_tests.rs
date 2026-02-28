@@ -90,7 +90,10 @@ fn zero_verify_progress_events() {
     assert!(events.len() >= 3);
 
     // First event should be VerificationStarted.
-    assert!(matches!(events[0], ProgressEvent::VerificationStarted { .. }));
+    assert!(matches!(
+        events[0],
+        ProgressEvent::VerificationStarted { .. }
+    ));
 
     // Last event should be VerificationCompleted.
     assert!(matches!(

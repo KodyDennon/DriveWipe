@@ -1,7 +1,7 @@
 use ratatui::prelude::*;
 use ratatui::widgets::Gauge;
 
-use drivewipe_core::types::{format_bytes, format_throughput, WipeOutcome};
+use drivewipe_core::types::{WipeOutcome, format_bytes, format_throughput};
 
 use crate::ui;
 
@@ -57,7 +57,7 @@ impl<'a> DriveProgressGauge<'a> {
         let throughput = format_throughput(self.throughput_bps);
         let eta = self
             .eta_secs()
-            .map(|s| ui::format_eta(s))
+            .map(ui::format_eta)
             .unwrap_or_else(|| "--:--".to_string());
 
         format!(
@@ -75,10 +75,7 @@ impl<'a> DriveProgressGauge<'a> {
         let gauge = Gauge::default()
             .gauge_style(Style::default().fg(color).bg(Color::DarkGray))
             .ratio(fraction)
-            .label(Span::styled(
-                label,
-                Style::default().fg(Color::White),
-            ));
+            .label(Span::styled(label, Style::default().fg(Color::White)));
 
         frame.render_widget(gauge, area);
     }
@@ -87,7 +84,7 @@ impl<'a> DriveProgressGauge<'a> {
 /// Render a compact single-line progress bar for a drive wipe.
 ///
 /// Format: `[DEVICE] [METHOD] Pass X/Y [======>   ] XX.X% [THROUGHPUT] ETA HH:MM:SS`
-#[allow(dead_code)]
+#[allow(dead_code, clippy::too_many_arguments)]
 pub fn render_compact(
     frame: &mut Frame,
     area: Rect,
@@ -107,17 +104,13 @@ pub fn render_compact(
     };
 
     let throughput = format_throughput(throughput_bps);
-    let label = format!(
-        " {device} | {method} | Pass {current_pass}/{total_passes} | {throughput} "
-    );
+    let label =
+        format!(" {device} | {method} | Pass {current_pass}/{total_passes} | {throughput} ");
 
     let gauge = Gauge::default()
         .gauge_style(Style::default().fg(color).bg(Color::DarkGray))
         .ratio(fraction.clamp(0.0, 1.0))
-        .label(Span::styled(
-            label,
-            Style::default().fg(Color::White),
-        ));
+        .label(Span::styled(label, Style::default().fg(Color::White)));
 
     frame.render_widget(gauge, area);
 }

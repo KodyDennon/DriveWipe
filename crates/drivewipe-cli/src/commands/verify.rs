@@ -11,9 +11,9 @@ use drivewipe_core::drive::create_enumerator;
 use drivewipe_core::progress::ProgressEvent;
 use drivewipe_core::session::CancellationToken;
 use drivewipe_core::types::format_bytes;
-use drivewipe_core::verify::zero_verify::ZeroVerifier;
-use drivewipe_core::verify::pattern_verify::PatternVerifier;
 use drivewipe_core::verify::Verifier;
+use drivewipe_core::verify::pattern_verify::PatternVerifier;
+use drivewipe_core::verify::zero_verify::ZeroVerifier;
 use drivewipe_core::wipe::patterns::OneFill;
 
 use crate::progress::WipeProgressDisplay;
@@ -44,19 +44,16 @@ pub fn run(
 
     // ── Open the device ─────────────────────────────────────────────────
     #[cfg(target_os = "linux")]
-    let mut device_io =
-        drivewipe_core::io::linux::LinuxDeviceIo::open(device_path)
-            .with_context(|| format!("Failed to open device {device}"))?;
+    let mut device_io = drivewipe_core::io::linux::LinuxDeviceIo::open(device_path)
+        .with_context(|| format!("Failed to open device {device}"))?;
 
     #[cfg(target_os = "macos")]
-    let mut device_io =
-        drivewipe_core::io::macos::MacosDeviceIo::open(device_path)
-            .with_context(|| format!("Failed to open device {device}"))?;
+    let mut device_io = drivewipe_core::io::macos::MacosDeviceIo::open(device_path)
+        .with_context(|| format!("Failed to open device {device}"))?;
 
     #[cfg(target_os = "windows")]
-    let mut device_io =
-        drivewipe_core::io::windows::WindowsDeviceIo::open(device_path)
-            .with_context(|| format!("Failed to open device {device}"))?;
+    let mut device_io = drivewipe_core::io::windows::WindowsDeviceIo::open(device_path)
+        .with_context(|| format!("Failed to open device {device}"))?;
 
     // ── Build the verifier ──────────────────────────────────────────────
     let verifier: Box<dyn Verifier> = match pattern {

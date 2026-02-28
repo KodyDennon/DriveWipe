@@ -54,21 +54,32 @@ fn main() -> Result<()> {
 fn bump_versions() -> Result<()> {
     println!("🔍 Analyzing git history and LOC for version bumps...");
 
-    let crates = vec!["drivewipe-core", "drivewipe-cli", "drivewipe-tui", "drivewipe-gui"];
+    let crates = vec![
+        "drivewipe-core",
+        "drivewipe-cli",
+        "drivewipe-tui",
+        "drivewipe-gui",
+    ];
     let mut bumps = HashMap::new();
 
     for &krate in &crates {
         let loc = get_loc_changes(krate)?;
         let commit_bump = get_commit_bump_level(krate)?;
-        
+
         let mut final_bump = commit_bump;
-        
+
         // LOC Overrides (Safety Triggers)
         if loc > MINOR_LOC_THRESHOLD && final_bump < BumpLevel::Minor {
-            println!("🚀 {} crossed {} LOC threshold. Promoting to Minor.", krate, MINOR_LOC_THRESHOLD);
+            println!(
+                "🚀 {} crossed {} LOC threshold. Promoting to Minor.",
+                krate, MINOR_LOC_THRESHOLD
+            );
             final_bump = BumpLevel::Minor;
         } else if loc > PATCH_LOC_THRESHOLD && final_bump < BumpLevel::Patch {
-            println!("📦 {} crossed {} LOC threshold. Promoting to Patch.", krate, PATCH_LOC_THRESHOLD);
+            println!(
+                "📦 {} crossed {} LOC threshold. Promoting to Patch.",
+                krate, PATCH_LOC_THRESHOLD
+            );
             final_bump = BumpLevel::Patch;
         }
 
@@ -123,19 +134,22 @@ fn get_commit_bump_level(krate: &str) -> Result<BumpLevel> {
 
     for line in stdout.lines() {
         let line = line.to_lowercase();
-        
+
         // Check for major manual triggers (Global or Scoped)
-        if line.contains("major-release") || line.contains("breaking change") {
-            if line.contains(&format!("({})", scope)) || !line.contains('(') {
-                return Ok(BumpLevel::Major);
-            }
+        if (line.contains("major-release") || line.contains("breaking change"))
+            && (line.contains(&format!("({})", scope)) || !line.contains('('))
+        {
+            return Ok(BumpLevel::Major);
         }
 
         // Check for scoped commits
         if line.contains(&format!("({})", scope)) {
             if line.starts_with("feat") {
                 max_level = max_level.max(BumpLevel::Minor);
-            } else if line.starts_with("fix") || line.starts_with("chore") || line.starts_with("refactor") {
+            } else if line.starts_with("fix")
+                || line.starts_with("chore")
+                || line.starts_with("refactor")
+            {
                 max_level = max_level.max(BumpLevel::Patch);
             }
         }
@@ -147,16 +161,24 @@ fn get_commit_bump_level(krate: &str) -> Result<BumpLevel> {
 fn apply_bump(krate: &str, level: BumpLevel) -> Result<()> {
     let path = format!("crates/{}/Cargo.toml", krate);
     let content = fs::read_to_string(&path)?;
-    let mut doc = content.parse::<DocumentMut>().context("Failed to parse Cargo.toml")?;
+    let mut doc = content
+        .parse::<DocumentMut>()
+        .context("Failed to parse Cargo.toml")?;
 
     let current_version = doc["package"]["version"]
         .as_str()
         .context("Missing version in Cargo.toml")?;
 
     let new_version = bump_semver(current_version, level)?;
-    
-    println!("🆙 Bumping {} from {} to {} ({})", krate, current_version, new_version, level.to_string());
-    
+
+    println!(
+        "🆙 Bumping {} from {} to {} ({})",
+        krate,
+        current_version,
+        new_version,
+        level.to_string()
+    );
+
     doc["package"]["version"] = value(new_version);
     fs::write(path, doc.to_string())?;
 

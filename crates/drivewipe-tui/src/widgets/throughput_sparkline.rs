@@ -7,12 +7,7 @@ use drivewipe_core::types::format_throughput;
 ///
 /// `history` contains the most recent throughput samples in bytes/sec.
 /// `current_bps` is the current throughput value for the title.
-pub fn draw(
-    frame: &mut Frame,
-    area: Rect,
-    history: &[f64],
-    current_bps: f64,
-) {
+pub fn draw(frame: &mut Frame, area: Rect, history: &[f64], current_bps: f64) {
     let title = if current_bps > 0.0 {
         format!(" Throughput: {} ", format_throughput(current_bps))
     } else {
@@ -32,11 +27,7 @@ pub fn draw(
 
     // Convert f64 throughput values to u64 for the Sparkline widget.
     // We scale relative to the max value in the history to get good resolution.
-    let max_val = history
-        .iter()
-        .copied()
-        .fold(0.0f64, f64::max)
-        .max(1.0);
+    let max_val = history.iter().copied().fold(0.0f64, f64::max).max(1.0);
 
     // Scale to 0..100 range for display.
     let data: Vec<u64> = history

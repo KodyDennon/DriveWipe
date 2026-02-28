@@ -671,10 +671,7 @@ impl App {
                 ..
             } => {
                 // Extract device name before mutable borrow.
-                let device_name = self
-                    .wipe_progress
-                    .get(&sid)
-                    .map(|p| p.device.clone());
+                let device_name = self.wipe_progress.get(&sid).map(|p| p.device.clone());
                 if let Some(p) = self.wipe_progress.get_mut(&sid) {
                     p.current_pass = pass_number;
                 }
@@ -703,10 +700,7 @@ impl App {
                 throughput_mbps,
                 ..
             } => {
-                let device_name = self
-                    .wipe_progress
-                    .get(&sid)
-                    .map(|p| p.device.clone());
+                let device_name = self.wipe_progress.get(&sid).map(|p| p.device.clone());
                 if let Some(device) = device_name {
                     self.log_push(format!(
                         "Pass {pass_number} completed on {device} ({duration_secs:.1}s, {throughput_mbps:.1} MiB/s)",
@@ -714,10 +708,7 @@ impl App {
                 }
             }
             ProgressEvent::VerificationStarted { .. } => {
-                let device_name = self
-                    .wipe_progress
-                    .get(&sid)
-                    .map(|p| p.device.clone());
+                let device_name = self.wipe_progress.get(&sid).map(|p| p.device.clone());
                 if let Some(p) = self.wipe_progress.get_mut(&sid) {
                     p.verifying = true;
                     p.verify_bytes = 0;
@@ -741,10 +732,7 @@ impl App {
                 duration_secs,
                 ..
             } => {
-                let device_name = self
-                    .wipe_progress
-                    .get(&sid)
-                    .map(|p| p.device.clone());
+                let device_name = self.wipe_progress.get(&sid).map(|p| p.device.clone());
                 if let Some(p) = self.wipe_progress.get_mut(&sid) {
                     p.verifying = false;
                 }
@@ -756,10 +744,7 @@ impl App {
                 }
             }
             ProgressEvent::FirmwareEraseStarted { method_name, .. } => {
-                let device_name = self
-                    .wipe_progress
-                    .get(&sid)
-                    .map(|p| p.device.clone());
+                let device_name = self.wipe_progress.get(&sid).map(|p| p.device.clone());
                 if let Some(p) = self.wipe_progress.get_mut(&sid) {
                     p.firmware_percent = Some(0.0);
                 }
@@ -775,10 +760,7 @@ impl App {
                 }
             }
             ProgressEvent::FirmwareEraseCompleted { duration_secs, .. } => {
-                let device_name = self
-                    .wipe_progress
-                    .get(&sid)
-                    .map(|p| p.device.clone());
+                let device_name = self.wipe_progress.get(&sid).map(|p| p.device.clone());
                 if let Some(p) = self.wipe_progress.get_mut(&sid) {
                     p.firmware_percent = None;
                 }
@@ -802,10 +784,7 @@ impl App {
                 bytes_written,
                 ..
             } => {
-                let device_name = self
-                    .wipe_progress
-                    .get(&sid)
-                    .map(|p| p.device.clone());
+                let device_name = self.wipe_progress.get(&sid).map(|p| p.device.clone());
                 if let Some(p) = self.wipe_progress.get_mut(&sid) {
                     p.outcome = Some(WipeOutcome::Interrupted);
                 }
@@ -821,10 +800,7 @@ impl App {
                 duration_secs,
                 ..
             } => {
-                let device_name = self
-                    .wipe_progress
-                    .get(&sid)
-                    .map(|p| p.device.clone());
+                let device_name = self.wipe_progress.get(&sid).map(|p| p.device.clone());
                 if let Some(p) = self.wipe_progress.get_mut(&sid) {
                     p.outcome = Some(outcome);
                 }
@@ -919,35 +895,39 @@ impl App {
 
                 // Re-create owned method instances. Try software first, then firmware.
                 let all_software = drivewipe_core::wipe::software::all_software_methods();
-                let boxed_method: Box<dyn drivewipe_core::wipe::WipeMethod> =
-                    match all_software.into_iter().find(|m| m.id() == method) {
-                        Some(m) => m,
-                        None => {
-                            // Firmware method — create fresh instances and wrap in adapter
-                            let fw_instances: Vec<Box<dyn drivewipe_core::wipe::firmware::FirmwareWipe>> = vec![
-                                Box::new(drivewipe_core::wipe::firmware::ata::AtaSecureErase),
-                                Box::new(drivewipe_core::wipe::firmware::ata::AtaEnhancedSecureErase),
-                                Box::new(drivewipe_core::wipe::firmware::nvme::NvmeFormatUserData),
-                                Box::new(drivewipe_core::wipe::firmware::nvme::NvmeFormatCrypto),
-                                Box::new(drivewipe_core::wipe::firmware::nvme::NvmeSanitizeBlock),
-                                Box::new(drivewipe_core::wipe::firmware::nvme::NvmeSanitizeCrypto),
-                                Box::new(drivewipe_core::wipe::firmware::nvme::NvmeSanitizeOverwrite),
-                                Box::new(drivewipe_core::wipe::crypto_erase::TcgOpalCryptoErase),
-                            ];
-                            match fw_instances.into_iter().find(|fw| fw.id() == method) {
-                                Some(fw) => {
-                                    Box::new(drivewipe_core::wipe::FirmwareMethodAdapter::new(fw))
-                                }
-                                None => {
-                                    let _ = progress_tx.send(ProgressEvent::Error {
-                                        session_id: Uuid::new_v4(),
-                                        message: format!("Method not found for session: {method}"),
-                                    });
-                                    return;
-                                }
+                let boxed_method: Box<dyn drivewipe_core::wipe::WipeMethod> = match all_software
+                    .into_iter()
+                    .find(|m| m.id() == method)
+                {
+                    Some(m) => m,
+                    None => {
+                        // Firmware method — create fresh instances and wrap in adapter
+                        let fw_instances: Vec<
+                            Box<dyn drivewipe_core::wipe::firmware::FirmwareWipe>,
+                        > = vec![
+                            Box::new(drivewipe_core::wipe::firmware::ata::AtaSecureErase),
+                            Box::new(drivewipe_core::wipe::firmware::ata::AtaEnhancedSecureErase),
+                            Box::new(drivewipe_core::wipe::firmware::nvme::NvmeFormatUserData),
+                            Box::new(drivewipe_core::wipe::firmware::nvme::NvmeFormatCrypto),
+                            Box::new(drivewipe_core::wipe::firmware::nvme::NvmeSanitizeBlock),
+                            Box::new(drivewipe_core::wipe::firmware::nvme::NvmeSanitizeCrypto),
+                            Box::new(drivewipe_core::wipe::firmware::nvme::NvmeSanitizeOverwrite),
+                            Box::new(drivewipe_core::wipe::crypto_erase::TcgOpalCryptoErase),
+                        ];
+                        match fw_instances.into_iter().find(|fw| fw.id() == method) {
+                            Some(fw) => {
+                                Box::new(drivewipe_core::wipe::FirmwareMethodAdapter::new(fw))
+                            }
+                            None => {
+                                let _ = progress_tx.send(ProgressEvent::Error {
+                                    session_id: Uuid::new_v4(),
+                                    message: format!("Method not found for session: {method}"),
+                                });
+                                return;
                             }
                         }
-                    };
+                    }
+                };
 
                 let session = WipeSession::new(drive_info.clone(), boxed_method, config);
 
@@ -973,10 +953,7 @@ impl App {
                     Err(e) => {
                         let _ = progress_tx.send(ProgressEvent::Error {
                             session_id: session.session_id,
-                            message: format!(
-                                "Failed to open {}: {e}",
-                                drive_info.path.display()
-                            ),
+                            message: format!("Failed to open {}: {e}", drive_info.path.display()),
                         });
                         let _ = progress_tx.send(ProgressEvent::Completed {
                             session_id: session.session_id,
@@ -1000,9 +977,12 @@ impl App {
                             if let Err(e) = std::fs::create_dir_all(&report_dir) {
                                 log::warn!("Failed to create report directory: {e}");
                             } else {
-                                let json_path = report_dir.join(format!("{}.json", result.session_id));
+                                let json_path =
+                                    report_dir.join(format!("{}.json", result.session_id));
                                 let generator = drivewipe_core::report::json::JsonReportGenerator;
-                                match drivewipe_core::report::ReportGenerator::generate(&generator, &result) {
+                                match drivewipe_core::report::ReportGenerator::generate(
+                                    &generator, &result,
+                                ) {
                                     Ok(bytes) => {
                                         if let Err(e) = std::fs::write(&json_path, &bytes) {
                                             log::warn!("Failed to write JSON report: {e}");

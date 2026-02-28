@@ -24,8 +24,8 @@ pub fn run(_config: &DriveWipeConfig, format: &str) -> Result<()> {
 
     match format {
         "json" => {
-            let json = serde_json::to_string_pretty(&drives)
-                .context("Failed to serialise drive list")?;
+            let json =
+                serde_json::to_string_pretty(&drives).context("Failed to serialise drive list")?;
             println!("{json}");
         }
         "table" => {

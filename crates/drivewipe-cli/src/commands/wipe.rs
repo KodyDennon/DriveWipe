@@ -140,19 +140,16 @@ pub fn run(
 
     // ── Open the device ─────────────────────────────────────────────────
     #[cfg(target_os = "linux")]
-    let mut device_io =
-        drivewipe_core::io::linux::LinuxDeviceIo::open(device_path)
-            .with_context(|| format!("Failed to open device {device}"))?;
+    let mut device_io = drivewipe_core::io::linux::LinuxDeviceIo::open(device_path)
+        .with_context(|| format!("Failed to open device {device}"))?;
 
     #[cfg(target_os = "macos")]
-    let mut device_io =
-        drivewipe_core::io::macos::MacosDeviceIo::open(device_path)
-            .with_context(|| format!("Failed to open device {device}"))?;
+    let mut device_io = drivewipe_core::io::macos::MacosDeviceIo::open(device_path)
+        .with_context(|| format!("Failed to open device {device}"))?;
 
     #[cfg(target_os = "windows")]
-    let mut device_io =
-        drivewipe_core::io::windows::WindowsDeviceIo::open(device_path)
-            .with_context(|| format!("Failed to open device {device}"))?;
+    let mut device_io = drivewipe_core::io::windows::WindowsDeviceIo::open(device_path)
+        .with_context(|| format!("Failed to open device {device}"))?;
 
     // ── Build the session ───────────────────────────────────────────────
     let mut session_config = config.clone();
@@ -167,12 +164,9 @@ pub fn run(
     };
 
     // ── Check for resumable state ───────────────────────────────────────
-    let resume_state = WipeState::find_for_device(
-        config.sessions_dir(),
-        &drive_info.serial,
-    )
-    .ok()
-    .flatten();
+    let resume_state = WipeState::find_for_device(config.sessions_dir(), &drive_info.serial)
+        .ok()
+        .flatten();
 
     if let Some(ref state) = resume_state {
         println!(
@@ -209,12 +203,7 @@ pub fn run(
         pass_count,
     );
 
-    let result = session.execute(
-        &mut device_io,
-        &progress_tx,
-        cancel_token,
-        resume_state,
-    );
+    let result = session.execute(&mut device_io, &progress_tx, cancel_token, resume_state);
 
     // Drop the sender so the display thread terminates.
     drop(progress_tx);
@@ -231,8 +220,7 @@ pub fn run(
     // ── JSON report (auto or always) ────────────────────────────────────
     if config.auto_report_json || wipe_result.outcome == WipeOutcome::Success {
         let report_dir = config.sessions_dir();
-        std::fs::create_dir_all(report_dir)
-            .context("Failed to create report directory")?;
+        std::fs::create_dir_all(report_dir).context("Failed to create report directory")?;
 
         let json_path = report_dir.join(format!("{}.json", wipe_result.session_id));
         let generator = JsonReportGenerator;
@@ -362,9 +350,9 @@ impl drivewipe_core::wipe::WipeMethod for MethodProxy {
 fn print_wipe_summary(result: &WipeResult) {
     let style = match result.outcome {
         WipeOutcome::Success => console::style(format!("{}", result.outcome)).green().bold(),
-        WipeOutcome::SuccessWithWarnings => {
-            console::style(format!("{}", result.outcome)).yellow().bold()
-        }
+        WipeOutcome::SuccessWithWarnings => console::style(format!("{}", result.outcome))
+            .yellow()
+            .bold(),
         _ => console::style(format!("{}", result.outcome)).red().bold(),
     };
 
@@ -374,13 +362,13 @@ fn print_wipe_summary(result: &WipeResult) {
     println!("  Model      : {}", result.device_model);
     println!("  Serial     : {}", result.device_serial);
     println!("  Capacity   : {}", format_bytes(result.device_capacity));
-    println!("  Method     : {} ({})", result.method_name, result.method_id);
+    println!(
+        "  Method     : {} ({})",
+        result.method_name, result.method_id
+    );
     println!("  Outcome    : {}", style);
     println!("  Passes     : {}", result.passes.len());
-    println!(
-        "  Duration   : {:.1}s",
-        result.total_duration_secs,
-    );
+    println!("  Duration   : {:.1}s", result.total_duration_secs,);
     println!(
         "  Throughput : {:.1} MiB/s (avg)",
         result.average_throughput_mbps,
@@ -395,10 +383,7 @@ fn print_wipe_summary(result: &WipeResult) {
             "  Verification: {}",
             console::style("PASSED").green().bold()
         ),
-        Some(false) => println!(
-            "  Verification: {}",
-            console::style("FAILED").red().bold()
-        ),
+        Some(false) => println!("  Verification: {}", console::style("FAILED").red().bold()),
         None => println!("  Verification: not performed"),
     }
 
@@ -406,11 +391,7 @@ fn print_wipe_summary(result: &WipeResult) {
         println!();
         println!("  Warnings:");
         for w in &result.warnings {
-            println!(
-                "    {} {}",
-                console::style("!").yellow().bold(),
-                w
-            );
+            println!("    {} {}", console::style("!").yellow().bold(), w);
         }
     }
 }

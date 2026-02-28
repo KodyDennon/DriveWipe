@@ -62,8 +62,7 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
     // Determine if selected drives are SSDs (for warning).
     let has_ssd = selected_indices.iter().any(|&i| {
         let dt = app.drives[i].drive_type;
-        dt == drivewipe_core::types::DriveType::Ssd
-            || dt == drivewipe_core::types::DriveType::Nvme
+        dt == drivewipe_core::types::DriveType::Ssd || dt == drivewipe_core::types::DriveType::Nvme
     });
 
     // Build the list of methods.
@@ -86,7 +85,11 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
                 ),
                 Span::raw(" "),
                 Span::styled(
-                    format!("{:>2} pass{}", m.pass_count(), if m.pass_count() == 1 { " " } else { "es" }),
+                    format!(
+                        "{:>2} pass{}",
+                        m.pass_count(),
+                        if m.pass_count() == 1 { " " } else { "es" }
+                    ),
                     Style::default().fg(Color::Yellow),
                 ),
             ];

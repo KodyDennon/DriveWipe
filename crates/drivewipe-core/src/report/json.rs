@@ -1,5 +1,5 @@
-use super::data::WipeReport;
 use super::ReportGenerator;
+use super::data::WipeReport;
 use crate::error::Result;
 use crate::types::WipeResult;
 

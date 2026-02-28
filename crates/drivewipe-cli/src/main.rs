@@ -141,19 +141,13 @@ fn main() {
     // the existing RUST_LOG value or default to "info".
     {
         let default_level = if cli.verbose { "debug" } else { "info" };
-        env_logger::Builder::from_env(
-            env_logger::Env::default().default_filter_or(default_level),
-        )
-        .init();
+        env_logger::Builder::from_env(env_logger::Env::default().default_filter_or(default_level))
+            .init();
     }
 
     if let Err(e) = run(cli) {
         let console = console::Term::stderr();
-        let _ = console.write_line(&format!(
-            "{} {}",
-            console::style("error:").red().bold(),
-            e
-        ));
+        let _ = console.write_line(&format!("{} {}", console::style("error:").red().bold(), e));
         // Print the full error chain with --verbose / RUST_LOG=debug.
         for cause in e.chain().skip(1) {
             let _ = console.write_line(&format!(
@@ -184,17 +178,10 @@ fn run(cli: Cli) -> Result<()> {
     );
     if let Err(e) = privilege::check_privileges() {
         if needs_privilege {
-            anyhow::bail!(
-                "Elevated privileges are required for this operation. {}",
-                e
-            );
+            anyhow::bail!("Elevated privileges are required for this operation. {}", e);
         }
         log::warn!("{}", e);
-        eprintln!(
-            "{} {}",
-            console::style("warning:").yellow().bold(),
-            e,
-        );
+        eprintln!("{} {}", console::style("warning:").yellow().bold(), e,);
     }
 
     // Global cancellation token shared with the Ctrl-C handler.
@@ -212,9 +199,7 @@ fn run(cli: Cli) -> Result<()> {
     }
 
     match cli.command {
-        Commands::List { format } => {
-            commands::list::run(&config, &format)
-        }
+        Commands::List { format } => commands::list::run(&config, &format),
         Commands::Wipe {
             device,
             method,
@@ -237,18 +222,14 @@ fn run(cli: Cli) -> Result<()> {
         Commands::Verify { device, pattern } => {
             commands::verify::run(&config, &cancel_token, &device, &pattern)
         }
-        Commands::Info { device } => {
-            commands::info::run(&config, &device)
-        }
+        Commands::Info { device } => commands::info::run(&config, &device),
         Commands::Report {
             input,
             format,
             output,
         } => commands::report::run(&config, &input, &format, output.as_deref()),
         Commands::Queue { action } => match action {
-            QueueAction::Add { device, method } => {
-                commands::queue::add(&config, &device, &method)
-            }
+            QueueAction::Add { device, method } => commands::queue::add(&config, &device, &method),
             QueueAction::Start { parallel } => {
                 commands::queue::start(&config, &cancel_token, parallel)
             }

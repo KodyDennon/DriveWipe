@@ -36,7 +36,7 @@ impl WipeProgressDisplay {
         // Overall progress bar.
         let overall_style = ProgressStyle::with_template(
             "{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] \
-             {bytes}/{total_bytes} ({bytes_per_sec}, ETA {eta})"
+             {bytes}/{total_bytes} ({bytes_per_sec}, ETA {eta})",
         )
         .unwrap()
         .progress_chars("=>-");
@@ -45,10 +45,7 @@ impl WipeProgressDisplay {
         overall_bar.set_style(overall_style);
 
         // Per-pass info bar (shows current pass status as a message).
-        let pass_style = ProgressStyle::with_template(
-            "  {prefix} {msg}"
-        )
-        .unwrap();
+        let pass_style = ProgressStyle::with_template("  {prefix} {msg}").unwrap();
 
         let pass_bar = multi.add(ProgressBar::new(0));
         pass_bar.set_style(pass_style);
@@ -127,10 +124,9 @@ impl WipeProgressDisplay {
                     "calculating...".to_string()
                 };
 
-                inner.pass_bar.set_message(format!(
-                    "{:.1}% @ {}",
-                    pct, throughput_str,
-                ));
+                inner
+                    .pass_bar
+                    .set_message(format!("{:.1}% @ {}", pct, throughput_str,));
             }
 
             ProgressEvent::PassCompleted {
@@ -148,7 +144,7 @@ impl WipeProgressDisplay {
             ProgressEvent::VerificationStarted { .. } => {
                 // Add a verification progress bar.
                 let verify_style = ProgressStyle::with_template(
-                    "  {prefix} [{bar:40.green/white}] {bytes}/{total_bytes} ({bytes_per_sec})"
+                    "  {prefix} [{bar:40.green/white}] {bytes}/{total_bytes} ({bytes_per_sec})",
                 )
                 .unwrap()
                 .progress_chars("=>-");
@@ -161,10 +157,7 @@ impl WipeProgressDisplay {
                 inner.pass_bar.set_message("verification started...");
             }
 
-            ProgressEvent::VerificationProgress {
-                bytes_verified,
-                ..
-            } => {
+            ProgressEvent::VerificationProgress { bytes_verified, .. } => {
                 if let Some(ref bar) = inner.verify_bar {
                     bar.set_position(*bytes_verified);
                 }
@@ -179,10 +172,9 @@ impl WipeProgressDisplay {
                     bar.finish_and_clear();
                 }
                 let status = if *passed { "PASSED" } else { "FAILED" };
-                inner.pass_bar.set_message(format!(
-                    "verification {status} ({:.1}s)",
-                    duration_secs,
-                ));
+                inner
+                    .pass_bar
+                    .set_message(format!("verification {status} ({:.1}s)", duration_secs,));
             }
 
             ProgressEvent::FirmwareEraseStarted { method_name, .. } => {
@@ -203,10 +195,9 @@ impl WipeProgressDisplay {
 
             ProgressEvent::FirmwareEraseCompleted { duration_secs, .. } => {
                 inner.overall_bar.set_position(inner.total_bytes);
-                inner.pass_bar.set_message(format!(
-                    "firmware erase completed in {:.1}s",
-                    duration_secs,
-                ));
+                inner
+                    .pass_bar
+                    .set_message(format!("firmware erase completed in {:.1}s", duration_secs,));
             }
 
             ProgressEvent::Warning { message, .. } => {
@@ -218,9 +209,7 @@ impl WipeProgressDisplay {
             }
 
             ProgressEvent::Interrupted { reason, .. } => {
-                inner
-                    .pass_bar
-                    .set_message(format!("INTERRUPTED: {reason}"));
+                inner.pass_bar.set_message(format!("INTERRUPTED: {reason}"));
             }
 
             ProgressEvent::Completed {
@@ -229,10 +218,9 @@ impl WipeProgressDisplay {
                 ..
             } => {
                 inner.overall_bar.finish();
-                inner.pass_bar.set_message(format!(
-                    "{outcome} -- total time: {:.1}s",
-                    duration_secs,
-                ));
+                inner
+                    .pass_bar
+                    .set_message(format!("{outcome} -- total time: {:.1}s", duration_secs,));
             }
         }
     }

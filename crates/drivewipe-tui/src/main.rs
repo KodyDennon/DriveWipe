@@ -3,7 +3,7 @@ use std::io;
 use crossterm::{
     event::{DisableMouseCapture, EnableMouseCapture},
     execute,
-    terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
+    terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
 use ratatui::prelude::*;
 
@@ -31,8 +31,8 @@ fn main() -> anyhow::Result<()> {
     let mut terminal = Terminal::new(backend)?;
 
     // Create app and run
-    let config = drivewipe_core::config::DriveWipeConfig::load()
-        .map_err(|e| anyhow::anyhow!("{e}"))?;
+    let config =
+        drivewipe_core::config::DriveWipeConfig::load().map_err(|e| anyhow::anyhow!("{e}"))?;
     let mut app = app::App::new(config)?;
     let result = app.run(&mut terminal);
 

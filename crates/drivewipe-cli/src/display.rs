@@ -1,8 +1,6 @@
 use console::style;
 
-use drivewipe_core::types::{
-    AtaSecurityState, DriveInfo, DriveType, Transport, format_bytes,
-};
+use drivewipe_core::types::{AtaSecurityState, DriveInfo, DriveType, Transport, format_bytes};
 
 /// Print a summary table of all detected drives.
 ///
@@ -31,7 +29,15 @@ pub fn print_drive_table(drives: &[DriveInfo]) {
         style("SUGGESTED METHOD").bold(),
     );
 
-    let total_width = col_dev + col_model + col_serial + col_cap + col_type + col_trans + col_boot + col_method + 7;
+    let total_width = col_dev
+        + col_model
+        + col_serial
+        + col_cap
+        + col_type
+        + col_trans
+        + col_boot
+        + col_method
+        + 7;
     println!("  {}", "-".repeat(total_width));
 
     // ── Rows ────────────────────────────────────────────────────────────
@@ -99,15 +105,32 @@ pub fn print_drive_info(drive: &DriveInfo) {
     println!();
 
     // ── Identity ────────────────────────────────────────────────────────
-    println!("  {:<20} {}", style("Device Path:").bold(), drive.path.display());
+    println!(
+        "  {:<20} {}",
+        style("Device Path:").bold(),
+        drive.path.display()
+    );
     println!("  {:<20} {}", style("Model:").bold(), drive.model);
     println!("  {:<20} {}", style("Serial:").bold(), drive.serial);
-    println!("  {:<20} {}", style("Firmware Rev:").bold(), drive.firmware_rev);
+    println!(
+        "  {:<20} {}",
+        style("Firmware Rev:").bold(),
+        drive.firmware_rev
+    );
     println!();
 
     // ── Capacity ────────────────────────────────────────────────────────
-    println!("  {:<20} {} ({} bytes)", style("Capacity:").bold(), format_bytes(drive.capacity), drive.capacity);
-    println!("  {:<20} {} bytes", style("Block Size:").bold(), drive.block_size);
+    println!(
+        "  {:<20} {} ({} bytes)",
+        style("Capacity:").bold(),
+        format_bytes(drive.capacity),
+        drive.capacity
+    );
+    println!(
+        "  {:<20} {} bytes",
+        style("Block Size:").bold(),
+        drive.block_size
+    );
     if let Some(pbs) = drive.physical_block_size {
         println!("  {:<20} {} bytes", style("Phys Block Size:").bold(), pbs);
     }
@@ -125,7 +148,9 @@ pub fn print_drive_info(drive: &DriveInfo) {
 
     // ── Boot / System ───────────────────────────────────────────────────
     let boot_display = if drive.is_boot_drive {
-        style("YES -- this is the boot/system drive".to_string()).red().bold()
+        style("YES -- this is the boot/system drive".to_string())
+            .red()
+            .bold()
     } else {
         style("No".to_string()).green()
     };
@@ -143,19 +168,47 @@ pub fn print_drive_info(drive: &DriveInfo) {
     println!();
 
     // ── Hidden Areas ────────────────────────────────────────────────────
-    println!("  {:<20} {}", style("HPA Enabled:").bold(), drive.hidden_areas.hpa_enabled);
+    println!(
+        "  {:<20} {}",
+        style("HPA Enabled:").bold(),
+        drive.hidden_areas.hpa_enabled
+    );
     if let Some(hpa_size) = drive.hidden_areas.hpa_size {
-        println!("  {:<20} {}", style("HPA Size:").bold(), format_bytes(hpa_size));
+        println!(
+            "  {:<20} {}",
+            style("HPA Size:").bold(),
+            format_bytes(hpa_size)
+        );
     }
-    println!("  {:<20} {}", style("DCO Enabled:").bold(), drive.hidden_areas.dco_enabled);
+    println!(
+        "  {:<20} {}",
+        style("DCO Enabled:").bold(),
+        drive.hidden_areas.dco_enabled
+    );
     if let Some(dco_size) = drive.hidden_areas.dco_size {
-        println!("  {:<20} {}", style("DCO Size:").bold(), format_bytes(dco_size));
+        println!(
+            "  {:<20} {}",
+            style("DCO Size:").bold(),
+            format_bytes(dco_size)
+        );
     }
     println!();
 
     // ── Features ────────────────────────────────────────────────────────
-    println!("  {:<20} {}", style("TRIM/UNMAP:").bold(), if drive.supports_trim { "Supported" } else { "Not supported" });
-    println!("  {:<20} {}", style("SED (SED):").bold(), if drive.is_sed { "Yes" } else { "No" });
+    println!(
+        "  {:<20} {}",
+        style("TRIM/UNMAP:").bold(),
+        if drive.supports_trim {
+            "Supported"
+        } else {
+            "Not supported"
+        }
+    );
+    println!(
+        "  {:<20} {}",
+        style("SED (SED):").bold(),
+        if drive.is_sed { "Yes" } else { "No" }
+    );
     println!();
 
     // ── SMART ───────────────────────────────────────────────────────────
@@ -169,11 +222,19 @@ pub fn print_drive_info(drive: &DriveInfo) {
 
     // ── Partitions ──────────────────────────────────────────────────────
     if let Some(ref pt) = drive.partition_table {
-        println!("  {:<20} {}", style("Partition Table:").bold(), pt.to_uppercase());
+        println!(
+            "  {:<20} {}",
+            style("Partition Table:").bold(),
+            pt.to_uppercase()
+        );
     } else {
-        println!("  {:<20} {}", style("Partition Table:").bold(), "None / Unknown");
+        println!("  {:<20} None / Unknown", style("Partition Table:").bold(),);
     }
-    println!("  {:<20} {}", style("Partition Count:").bold(), drive.partition_count);
+    println!(
+        "  {:<20} {}",
+        style("Partition Count:").bold(),
+        drive.partition_count
+    );
     println!();
 
     // ── Firmware erase support ──────────────────────────────────────────

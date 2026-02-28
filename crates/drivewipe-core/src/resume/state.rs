@@ -26,6 +26,7 @@ pub struct WipeState {
 }
 
 impl WipeState {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         session_id: Uuid,
         device_path: PathBuf,
@@ -65,10 +66,7 @@ impl WipeState {
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
-            let _ = std::fs::set_permissions(
-                sessions_dir,
-                std::fs::Permissions::from_mode(0o700),
-            );
+            let _ = std::fs::set_permissions(sessions_dir, std::fs::Permissions::from_mode(0o700));
         }
 
         let path = Self::state_path(sessions_dir, self.session_id);
@@ -83,10 +81,7 @@ impl WipeState {
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
-            let _ = std::fs::set_permissions(
-                &path,
-                std::fs::Permissions::from_mode(0o600),
-            );
+            let _ = std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600));
         }
 
         Ok(())
@@ -155,12 +150,7 @@ impl WipeState {
     }
 
     /// Update the state with new progress.
-    pub fn update_progress(
-        &mut self,
-        pass: u32,
-        bytes_written_this_pass: u64,
-        total_written: u64,
-    ) {
+    pub fn update_progress(&mut self, pass: u32, bytes_written_this_pass: u64, total_written: u64) {
         self.current_pass = pass;
         self.bytes_written_this_pass = bytes_written_this_pass;
         self.total_bytes_written = total_written;

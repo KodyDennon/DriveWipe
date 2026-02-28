@@ -12,24 +12,24 @@ use crate::error::{DriveWipeError, Result};
 #[cfg(target_os = "windows")]
 use std::ffi::OsStr;
 #[cfg(target_os = "windows")]
-use std::os::windows::ffi::OsStrExt;
-#[cfg(target_os = "windows")]
 use std::mem;
+#[cfg(target_os = "windows")]
+use std::os::windows::ffi::OsStrExt;
 #[cfg(target_os = "windows")]
 use windows::Win32::Foundation::{CloseHandle, HANDLE, INVALID_HANDLE_VALUE};
 #[cfg(target_os = "windows")]
 use windows::Win32::Storage::FileSystem::{
-    CreateFileW, FlushFileBuffers, ReadFile, WriteFile, FILE_FLAG_NO_BUFFERING,
-    FILE_FLAG_WRITE_THROUGH, FILE_SHARE_READ, FILE_SHARE_WRITE, OPEN_EXISTING,
+    CreateFileW, FILE_FLAG_NO_BUFFERING, FILE_FLAG_WRITE_THROUGH, FILE_SHARE_READ,
+    FILE_SHARE_WRITE, FlushFileBuffers, OPEN_EXISTING, ReadFile, WriteFile,
 };
+#[cfg(target_os = "windows")]
+use windows::Win32::System::IO::DeviceIoControl;
 #[cfg(target_os = "windows")]
 use windows::Win32::System::IO::OVERLAPPED;
 #[cfg(target_os = "windows")]
 use windows::Win32::System::Ioctl::{
     DISK_GEOMETRY_EX, IOCTL_DISK_GET_DRIVE_GEOMETRY_EX, IOCTL_DISK_GET_LENGTH_INFO,
 };
-#[cfg(target_os = "windows")]
-use windows::Win32::System::IO::DeviceIoControl;
 #[cfg(target_os = "windows")]
 use windows::core::PCWSTR;
 
@@ -53,9 +53,18 @@ pub struct WindowsDeviceIo {
     block_size: u32,
 }
 
+// SAFETY: Windows HANDLEs are process-wide resources that can be safely
+// used from any thread. The raw pointer (*mut c_void) is an opaque kernel
+// object handle, not a memory address.
+#[cfg(target_os = "windows")]
+unsafe impl Send for WindowsDeviceIo {}
+
 #[cfg(target_os = "windows")]
 fn to_wide_null(s: &str) -> Vec<u16> {
-    OsStr::new(s).encode_wide().chain(std::iter::once(0)).collect()
+    OsStr::new(s)
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect()
 }
 
 impl WindowsDeviceIo {
@@ -79,7 +88,7 @@ impl WindowsDeviceIo {
         let handle = unsafe {
             CreateFileW(
                 PCWSTR(wide_path.as_ptr()),
-                (0x80000000 | 0x40000000).into(), // GENERIC_READ | GENERIC_WRITE
+                (0x80000000u32 | 0x40000000u32).into(), // GENERIC_READ | GENERIC_WRITE
                 FILE_SHARE_READ | FILE_SHARE_WRITE,
                 None,
                 OPEN_EXISTING,
@@ -129,7 +138,9 @@ impl WindowsDeviceIo {
                 )
             };
             if ok.is_err() {
-                unsafe { let _ = CloseHandle(handle); }
+                unsafe {
+                    let _ = CloseHandle(handle);
+                }
                 return Err(DriveWipeError::DeviceError(format!(
                     "Failed to query disk length for {}",
                     path.display()
@@ -193,7 +204,9 @@ impl RawDeviceIo for WindowsDeviceIo {
                 Some(&mut overlapped),
             )
         }
-        .map_err(|e| DriveWipeError::IoGeneric(std::io::Error::from_raw_os_error(e.code().0 as i32)))?;
+        .map_err(|e| {
+            DriveWipeError::IoGeneric(std::io::Error::from_raw_os_error(e.code().0 as i32))
+        })?;
 
         Ok(bytes_written as usize)
     }
@@ -212,7 +225,9 @@ impl RawDeviceIo for WindowsDeviceIo {
                 Some(&mut overlapped),
             )
         }
-        .map_err(|e| DriveWipeError::IoGeneric(std::io::Error::from_raw_os_error(e.code().0 as i32)))?;
+        .map_err(|e| {
+            DriveWipeError::IoGeneric(std::io::Error::from_raw_os_error(e.code().0 as i32))
+        })?;
 
         Ok(bytes_read as usize)
     }
@@ -226,8 +241,9 @@ impl RawDeviceIo for WindowsDeviceIo {
     }
 
     fn sync(&mut self) -> Result<()> {
-        unsafe { FlushFileBuffers(self.handle) }
-            .map_err(|e| DriveWipeError::IoGeneric(std::io::Error::from_raw_os_error(e.code().0 as i32)))?;
+        unsafe { FlushFileBuffers(self.handle) }.map_err(|e| {
+            DriveWipeError::IoGeneric(std::io::Error::from_raw_os_error(e.code().0 as i32))
+        })?;
         Ok(())
     }
 }

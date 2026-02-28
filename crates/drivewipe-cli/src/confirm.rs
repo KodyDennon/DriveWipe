@@ -1,5 +1,5 @@
 use anyhow::Result;
-use console::{style, Term};
+use console::{Term, style};
 use dialoguer::Input;
 
 use drivewipe_core::types::{DriveInfo, format_bytes};
@@ -20,15 +20,21 @@ pub fn run_confirmation(drive: &DriveInfo, method_name: &str) -> Result<bool> {
     term.write_line("")?;
     term.write_line(&format!(
         "  {}",
-        style("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!").red().bold()
+        style("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
+            .red()
+            .bold()
     ))?;
     term.write_line(&format!(
         "  {}",
-        style("!!           DESTRUCTIVE OPERATION WARNING             !!").red().bold()
+        style("!!           DESTRUCTIVE OPERATION WARNING             !!")
+            .red()
+            .bold()
     ))?;
     term.write_line(&format!(
         "  {}",
-        style("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!").red().bold()
+        style("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
+            .red()
+            .bold()
     ))?;
     term.write_line("")?;
     term.write_line(&format!(
@@ -42,10 +48,7 @@ pub fn run_confirmation(drive: &DriveInfo, method_name: &str) -> Result<bool> {
     ))?;
     term.write_line(&format!("    Model    : {}", drive.model))?;
     term.write_line(&format!("    Serial   : {}", drive.serial))?;
-    term.write_line(&format!(
-        "    Capacity : {}",
-        format_bytes(drive.capacity),
-    ))?;
+    term.write_line(&format!("    Capacity : {}", format_bytes(drive.capacity),))?;
     term.write_line(&format!("    Type     : {}", drive.drive_type))?;
     term.write_line(&format!("    Method   : {}", method_name))?;
     term.write_line("")?;

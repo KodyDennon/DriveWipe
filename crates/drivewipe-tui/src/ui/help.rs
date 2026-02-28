@@ -29,10 +29,7 @@ pub fn draw(frame: &mut Frame, _app: &mut App) {
 
     let binding = |key: &str, desc: &str| -> Line {
         Line::from(vec![
-            Span::styled(
-                format!("    {key:<16}"),
-                Style::default().fg(Color::Green),
-            ),
+            Span::styled(format!("    {key:<16}"), Style::default().fg(Color::Green)),
             Span::styled(desc.to_string(), Style::default().fg(Color::White)),
         ])
     };

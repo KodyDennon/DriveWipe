@@ -44,7 +44,9 @@ pub enum DriveWipeError {
     #[error("Wipe interrupted: {reason}")]
     Interrupted { reason: String },
 
-    #[error("Verification failed at offset {offset:#x}: expected {expected:#04x}, got {actual:#04x}")]
+    #[error(
+        "Verification failed at offset {offset:#x}: expected {expected:#04x}, got {actual:#04x}"
+    )]
     VerificationFailed {
         offset: u64,
         expected: u8,

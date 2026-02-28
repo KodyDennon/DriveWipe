@@ -10,8 +10,8 @@ use std::process::Command;
 use crate::error::{DriveWipeError, Result};
 use crate::types::{AtaSecurityState, DriveInfo, DriveType, HiddenAreaInfo, Transport};
 
-use super::info::detect_boot_drive;
 use super::DriveEnumerator;
+use super::info::detect_boot_drive;
 
 /// macOS drive enumerator backed by the `diskutil` command-line tool.
 pub struct MacosDriveEnumerator;
@@ -61,7 +61,7 @@ fn list_whole_disks() -> Result<Vec<String>> {
     let output = Command::new("diskutil")
         .args(["list", "-plist"])
         .output()
-        .map_err(|e| DriveWipeError::IoGeneric(e))?;
+        .map_err(DriveWipeError::IoGeneric)?;
 
     if !output.status.success() {
         return Err(DriveWipeError::PlatformNotSupported(
@@ -84,7 +84,7 @@ fn build_drive_info_from_diskutil(disk_name: &str, dev_path: &Path) -> Result<Dr
     let output = Command::new("diskutil")
         .args(["info", "-plist", disk_name])
         .output()
-        .map_err(|e| DriveWipeError::IoGeneric(e))?;
+        .map_err(DriveWipeError::IoGeneric)?;
 
     if !output.status.success() {
         return Err(DriveWipeError::DeviceNotFound(dev_path.to_path_buf()));

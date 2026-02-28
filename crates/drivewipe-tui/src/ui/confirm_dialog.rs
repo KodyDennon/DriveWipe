@@ -72,7 +72,10 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
             lines.push(Line::from(vec![
                 Span::styled("  Method: ", Style::default().fg(Color::Gray)),
                 Span::styled(
-                    format!("{method_name} ({pass_count} pass{})", if pass_count == 1 { "" } else { "es" }),
+                    format!(
+                        "{method_name} ({pass_count} pass{})",
+                        if pass_count == 1 { "" } else { "es" }
+                    ),
                     Style::default().fg(Color::Yellow),
                 ),
             ]));
@@ -87,7 +90,10 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
 
         lines.push(Line::from(""));
         lines.push(Line::from(Span::styled(
-            format!("  Proceeding in {remaining} second{}...", if remaining == 1 { "" } else { "s" }),
+            format!(
+                "  Proceeding in {remaining} second{}...",
+                if remaining == 1 { "" } else { "s" }
+            ),
             Style::default().fg(Color::Red).bold(),
         )));
         lines.push(Line::from(""));
@@ -97,14 +103,8 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
         )));
     } else {
         lines.push(Line::from(vec![
-            Span::styled(
-                "  Type YES to confirm: ",
-                Style::default().fg(Color::White),
-            ),
-            Span::styled(
-                &app.confirm_input,
-                Style::default().fg(Color::Green).bold(),
-            ),
+            Span::styled("  Type YES to confirm: ", Style::default().fg(Color::White)),
+            Span::styled(&app.confirm_input, Style::default().fg(Color::Green).bold()),
             Span::styled("_", Style::default().fg(Color::White).slow_blink()),
         ]));
         lines.push(Line::from(""));

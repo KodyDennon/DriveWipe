@@ -1,6 +1,6 @@
 use super::ReportGenerator;
 use crate::error::{DriveWipeError, Result};
-use crate::types::{format_bytes, WipeResult};
+use crate::types::{WipeResult, format_bytes};
 
 use genpdf::elements::{Break, Paragraph};
 use genpdf::fonts;
@@ -11,9 +11,7 @@ pub struct PdfReportGenerator;
 
 impl PdfReportGenerator {
     /// Build the PDF document content from a WipeResult.
-    fn build_document(
-        result: &WipeResult,
-    ) -> std::result::Result<Document, genpdf::error::Error> {
+    fn build_document(result: &WipeResult) -> std::result::Result<Document, genpdf::error::Error> {
         // Try several common font locations, falling back through each.
         let font_family = fonts::from_files("./fonts", "LiberationSans", None)
             .or_else(|_| {
@@ -24,11 +22,7 @@ impl PdfReportGenerator {
                 )
             })
             .or_else(|_| {
-                fonts::from_files(
-                    "/usr/share/fonts/liberation-sans",
-                    "LiberationSans",
-                    None,
-                )
+                fonts::from_files("/usr/share/fonts/liberation-sans", "LiberationSans", None)
             })
             .or_else(|_| fonts::from_files(".", "LiberationSans", None))?;
 
@@ -62,12 +56,14 @@ impl PdfReportGenerator {
 
         // Device information section
         doc.push(
-            Paragraph::new("DEVICE INFORMATION")
-                .styled(Style::new().bold().with_font_size(14)),
+            Paragraph::new("DEVICE INFORMATION").styled(Style::new().bold().with_font_size(14)),
         );
         doc.push(Break::new(0.5));
         doc.push(Paragraph::new(format!("Model:    {}", result.device_model)));
-        doc.push(Paragraph::new(format!("Serial:   {}", result.device_serial)));
+        doc.push(Paragraph::new(format!(
+            "Serial:   {}",
+            result.device_serial
+        )));
         doc.push(Paragraph::new(format!(
             "Capacity: {}",
             format_bytes(result.device_capacity)
@@ -80,8 +76,7 @@ impl PdfReportGenerator {
 
         // Method section
         doc.push(
-            Paragraph::new("SANITIZATION METHOD")
-                .styled(Style::new().bold().with_font_size(14)),
+            Paragraph::new("SANITIZATION METHOD").styled(Style::new().bold().with_font_size(14)),
         );
         doc.push(Break::new(0.5));
         doc.push(Paragraph::new(format!(
@@ -92,10 +87,7 @@ impl PdfReportGenerator {
         doc.push(Break::new(1.0));
 
         // Pass details
-        doc.push(
-            Paragraph::new("PASS DETAILS")
-                .styled(Style::new().bold().with_font_size(14)),
-        );
+        doc.push(Paragraph::new("PASS DETAILS").styled(Style::new().bold().with_font_size(14)));
         doc.push(Break::new(0.5));
 
         for pass in &result.passes {
@@ -107,10 +99,7 @@ impl PdfReportGenerator {
         doc.push(Break::new(1.0));
 
         // Verification
-        doc.push(
-            Paragraph::new("VERIFICATION")
-                .styled(Style::new().bold().with_font_size(14)),
-        );
+        doc.push(Paragraph::new("VERIFICATION").styled(Style::new().bold().with_font_size(14)));
         doc.push(Break::new(0.5));
         let verification_text = match result.verification_passed {
             Some(true) => "PASSED",
@@ -121,10 +110,7 @@ impl PdfReportGenerator {
         doc.push(Break::new(1.0));
 
         // Outcome
-        doc.push(
-            Paragraph::new("RESULT")
-                .styled(Style::new().bold().with_font_size(14)),
-        );
+        doc.push(Paragraph::new("RESULT").styled(Style::new().bold().with_font_size(14)));
         doc.push(Break::new(0.5));
         doc.push(
             Paragraph::new(format!("Outcome: {}", result.outcome))
@@ -138,8 +124,7 @@ impl PdfReportGenerator {
 
         // System info
         doc.push(
-            Paragraph::new("SYSTEM INFORMATION")
-                .styled(Style::new().bold().with_font_size(14)),
+            Paragraph::new("SYSTEM INFORMATION").styled(Style::new().bold().with_font_size(14)),
         );
         doc.push(Break::new(0.5));
         doc.push(Paragraph::new(format!("Hostname: {}", result.hostname)));
@@ -153,8 +138,9 @@ impl PdfReportGenerator {
 
 impl ReportGenerator for PdfReportGenerator {
     fn generate(&self, result: &WipeResult) -> Result<Vec<u8>> {
-        let doc = Self::build_document(result)
-            .map_err(|e| DriveWipeError::ReportError(format!("Failed to build PDF document: {e}")))?;
+        let doc = Self::build_document(result).map_err(|e| {
+            DriveWipeError::ReportError(format!("Failed to build PDF document: {e}"))
+        })?;
 
         let mut buf = Vec::new();
         doc.render(&mut buf)

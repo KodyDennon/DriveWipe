@@ -73,9 +73,7 @@ impl LinuxDeviceIo {
             .custom_flags(libc::O_DIRECT | libc::O_SYNC | libc::O_NOFOLLOW)
             .open(path)
             .map_err(|e| match e.kind() {
-                std::io::ErrorKind::NotFound => {
-                    DriveWipeError::DeviceNotFound(path.to_path_buf())
-                }
+                std::io::ErrorKind::NotFound => DriveWipeError::DeviceNotFound(path.to_path_buf()),
                 _ => DriveWipeError::Io {
                     path: path.to_path_buf(),
                     source: e,
@@ -129,14 +127,14 @@ impl RawDeviceIo for LinuxDeviceIo {
         // `FileExt::write_at` maps to `pwrite(2)` on Unix.
         self.file
             .write_at(buf, offset)
-            .map_err(|e| DriveWipeError::IoGeneric(e))
+            .map_err(DriveWipeError::IoGeneric)
     }
 
     fn read_at(&mut self, offset: u64, buf: &mut [u8]) -> Result<usize> {
         // `FileExt::read_at` maps to `pread(2)` on Unix.
         self.file
             .read_at(buf, offset)
-            .map_err(|e| DriveWipeError::IoGeneric(e))
+            .map_err(DriveWipeError::IoGeneric)
     }
 
     fn capacity(&self) -> u64 {
@@ -148,8 +146,6 @@ impl RawDeviceIo for LinuxDeviceIo {
     }
 
     fn sync(&mut self) -> Result<()> {
-        self.file
-            .sync_all()
-            .map_err(|e| DriveWipeError::IoGeneric(e))
+        self.file.sync_all().map_err(DriveWipeError::IoGeneric)
     }
 }

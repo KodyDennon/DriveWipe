@@ -33,7 +33,7 @@ pub trait DriveEnumerator {
     /// # Arguments
     ///
     /// * `path` - OS device path (e.g. `/dev/sda`, `/dev/rdisk2`,
-    ///            `\\.\PhysicalDrive0`).
+    ///   `\\.\PhysicalDrive0`).
     fn inspect(&self, path: &std::path::Path) -> Result<DriveInfo>;
 }
 
@@ -56,6 +56,8 @@ pub fn create_enumerator() -> Box<dyn DriveEnumerator> {
     }
     #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
     {
-        compile_error!("DriveWipe does not support this platform. Supported: Linux, macOS, Windows.");
+        compile_error!(
+            "DriveWipe does not support this platform. Supported: Linux, macOS, Windows."
+        );
     }
 }

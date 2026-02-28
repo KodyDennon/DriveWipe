@@ -84,6 +84,7 @@ mod linux_opal {
 
     // Ioctl command numbers for the sed-opal driver.
     // _IOW('p', 220, struct opal_key)
+    #[allow(dead_code)]
     const IOC_OPAL_SAVE: u64 = 0x4050_70DC;
     // _IOW('p', 225, struct opal_key)
     const IOC_OPAL_TAKE_OWNERSHIP: u64 = 0x4050_70E1;
@@ -149,10 +150,7 @@ mod linux_opal {
             .map_err(|e| {
                 if e.kind() == std::io::ErrorKind::PermissionDenied {
                     DriveWipeError::InsufficientPrivileges {
-                        message: format!(
-                            "Cannot open {} — run as root",
-                            drive.path.display()
-                        ),
+                        message: format!("Cannot open {} — run as root", drive.path.display()),
                     }
                 } else {
                     DriveWipeError::Io {

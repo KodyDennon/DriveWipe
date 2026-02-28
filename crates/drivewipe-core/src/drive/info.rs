@@ -1,7 +1,7 @@
-//! Helper utilities for constructing [`DriveInfo`] instances.
+//! Helper utilities for constructing [`DriveInfo`](crate::types::DriveInfo) instances.
 //!
 //! These functions assist platform-specific enumerators in building
-//! [`DriveInfo`] structs from raw system data.
+//! [`DriveInfo`](crate::types::DriveInfo) structs from raw system data.
 
 use std::path::Path;
 
@@ -160,8 +160,10 @@ fn get_boot_volume_disk_number() -> Option<u32> {
         CreateFileW, FILE_SHARE_READ, FILE_SHARE_WRITE, OPEN_EXISTING,
     };
     use windows::Win32::System::IO::DeviceIoControl;
-    use windows::Win32::System::Ioctl::IOCTL_VOLUME_GET_VOLUME_DISK_EXTENTS;
     use windows::core::PCWSTR;
+
+    // IOCTL_VOLUME_GET_VOLUME_DISK_EXTENTS = CTL_CODE(IOCTL_VOLUME_BASE, 0, METHOD_BUFFERED, FILE_ANY_ACCESS)
+    const IOCTL_VOLUME_GET_VOLUME_DISK_EXTENTS: u32 = 0x00560000;
 
     // VOLUME_DISK_EXTENTS is variable-length; we define the fixed header
     // and one extent inline.
@@ -218,7 +220,9 @@ fn get_boot_volume_disk_number() -> Option<u32> {
         )
     };
 
-    unsafe { let _ = CloseHandle(handle); }
+    unsafe {
+        let _ = CloseHandle(handle);
+    }
 
     if ok.is_ok() && extents.NumberOfDiskExtents > 0 {
         Some(extents.Extents[0].DiskNumber)
@@ -257,17 +261,16 @@ fn extract_base_device(path: &str) -> String {
     }
 
     // macOS: disk2s1 -> disk2
-    if name.starts_with("disk") {
+    if let Some(after_disk) = name.strip_prefix("disk") {
         // Find the partition suffix 's' that comes after the disk number.
-        // Skip past "disk" prefix, then past the disk number digits, then look for 's'.
-        let after_disk = &name[4..];
+        // Skip past the disk number digits, then look for 's'.
         let digit_end = after_disk
             .find(|c: char| !c.is_ascii_digit())
             .unwrap_or(after_disk.len());
         if digit_end < after_disk.len() && after_disk.as_bytes()[digit_end] == b's' {
             let after_s = &after_disk[digit_end + 1..];
             if !after_s.is_empty() && after_s.chars().all(|c| c.is_ascii_digit()) {
-                return name[..4 + digit_end].to_string();
+                return format!("disk{}", &after_disk[..digit_end]);
             }
         }
         return name.to_string();

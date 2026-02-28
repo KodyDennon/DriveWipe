@@ -65,6 +65,12 @@ impl RandomFill {
     }
 }
 
+impl Default for RandomFill {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl PatternGenerator for RandomFill {
     fn fill(&mut self, buf: &mut [u8]) {
         self.rng.fill_bytes(buf);

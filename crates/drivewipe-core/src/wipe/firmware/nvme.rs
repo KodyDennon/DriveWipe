@@ -136,7 +136,13 @@ impl FirmwareWipe for NvmeSanitizeBlock {
         session_id: Uuid,
         progress_tx: &Sender<ProgressEvent>,
     ) -> Result<()> {
-        nvme_sanitize_impl(drive, session_id, progress_tx, SANITIZE_ACT_BLOCK_ERASE, None)
+        nvme_sanitize_impl(
+            drive,
+            session_id,
+            progress_tx,
+            SANITIZE_ACT_BLOCK_ERASE,
+            None,
+        )
     }
 }
 
@@ -168,7 +174,13 @@ impl FirmwareWipe for NvmeSanitizeCrypto {
         session_id: Uuid,
         progress_tx: &Sender<ProgressEvent>,
     ) -> Result<()> {
-        nvme_sanitize_impl(drive, session_id, progress_tx, SANITIZE_ACT_CRYPTO_ERASE, None)
+        nvme_sanitize_impl(
+            drive,
+            session_id,
+            progress_tx,
+            SANITIZE_ACT_CRYPTO_ERASE,
+            None,
+        )
     }
 }
 
@@ -201,7 +213,13 @@ impl FirmwareWipe for NvmeSanitizeOverwrite {
         progress_tx: &Sender<ProgressEvent>,
     ) -> Result<()> {
         // Use a zero overwrite pattern, 1 pass
-        nvme_sanitize_impl(drive, session_id, progress_tx, SANITIZE_ACT_OVERWRITE, Some(0))
+        nvme_sanitize_impl(
+            drive,
+            session_id,
+            progress_tx,
+            SANITIZE_ACT_OVERWRITE,
+            Some(0),
+        )
     }
 }
 
@@ -260,7 +278,13 @@ fn nvme_sanitize_impl(
 
     #[cfg(target_os = "windows")]
     {
-        windows_nvme::nvme_sanitize_windows(drive, session_id, progress_tx, sanact, overwrite_pattern)
+        windows_nvme::nvme_sanitize_windows(
+            drive,
+            session_id,
+            progress_tx,
+            sanact,
+            overwrite_pattern,
+        )
     }
 }
 
@@ -445,6 +469,7 @@ mod linux_nvme {
         progress_tx: &Sender<ProgressEvent>,
     ) -> Result<()> {
         #[repr(C)]
+        #[allow(dead_code)]
         struct SanitizeStatusLog {
             sprog: u16,
             sstat: u16,
@@ -493,13 +518,14 @@ mod linux_nvme {
             // SSTAT bits 2:0: 0=never sanitized, 1=completed, 2=in progress, 3=failed
             let status = sstat & 0x07;
             match status {
-                1 => break,                  // Completed successfully
+                1 => break, // Completed successfully
                 3 => {
                     return Err(DriveWipeError::FirmwareError {
-                        reason: "NVMe sanitize operation failed (controller reported failure)".into(),
+                        reason: "NVMe sanitize operation failed (controller reported failure)"
+                            .into(),
                     });
                 }
-                2 => continue,               // Still in progress
+                2 => continue, // Still in progress
                 _ => {
                     // 0 = never started or already done
                     if sprog == 0 && status == 0 {
@@ -652,7 +678,8 @@ mod macos_nvme {
                 let lower = line.to_lowercase();
                 if lower.contains("progress") {
                     // Try to parse percentage
-                    if let Some(pct) = line.split_whitespace()
+                    if let Some(pct) = line
+                        .split_whitespace()
                         .filter_map(|w| w.trim_end_matches('%').parse::<f32>().ok())
                         .next()
                     {
@@ -739,7 +766,10 @@ mod windows_nvme {
     const STORAGE_PROTOCOL_COMMAND_VERSION: u32 = 1;
 
     fn to_wide_null(s: &str) -> Vec<u16> {
-        OsStr::new(s).encode_wide().chain(std::iter::once(0)).collect()
+        OsStr::new(s)
+            .encode_wide()
+            .chain(std::iter::once(0))
+            .collect()
     }
 
     fn open_drive(drive: &DriveInfo) -> Result<HANDLE> {
@@ -838,7 +868,9 @@ mod windows_nvme {
             600, // 10 min timeout
         );
 
-        unsafe { let _ = CloseHandle(handle); }
+        unsafe {
+            let _ = CloseHandle(handle);
+        }
 
         result?;
 
@@ -877,13 +909,17 @@ mod windows_nvme {
         );
 
         if result.is_err() {
-            unsafe { let _ = CloseHandle(handle); }
+            unsafe {
+                let _ = CloseHandle(handle);
+            }
             return result;
         }
 
         // Poll sanitize status
         let poll_result = poll_sanitize_windows(handle, session_id, progress_tx);
-        unsafe { let _ = CloseHandle(handle); }
+        unsafe {
+            let _ = CloseHandle(handle);
+        }
         poll_result
     }
 

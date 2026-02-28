@@ -1,5 +1,5 @@
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Instant;
 
 use chrono::Utc;
@@ -8,11 +8,11 @@ use uuid::Uuid;
 
 use crate::config::DriveWipeConfig;
 use crate::error::{DriveWipeError, Result};
-use crate::io::{allocate_aligned_buffer, RawDeviceIo, DEFAULT_BLOCK_SIZE};
+use crate::io::{DEFAULT_BLOCK_SIZE, RawDeviceIo, allocate_aligned_buffer};
 use crate::progress::ProgressEvent;
 use crate::resume::WipeState;
 use crate::types::*;
-use crate::verify::{Verifier, zero_verify::ZeroVerifier, pattern_verify::PatternVerifier};
+use crate::verify::{Verifier, pattern_verify::PatternVerifier, zero_verify::ZeroVerifier};
 use crate::wipe::WipeMethod;
 
 /// A cooperative cancellation token that can be shared across threads.
@@ -166,11 +166,9 @@ impl WipeSession {
                 method_name: self.method.name().to_string(),
             });
 
-            let fw_result = self.method.execute_firmware(
-                &self.drive_info,
-                session_id,
-                progress_tx,
-            );
+            let fw_result = self
+                .method
+                .execute_firmware(&self.drive_info, session_id, progress_tx);
 
             if let Some(result) = fw_result {
                 let fw_duration = fw_start.elapsed().as_secs_f64();
@@ -244,7 +242,7 @@ impl WipeSession {
             let pattern_name = pattern.name().to_string();
 
             let _ = progress_tx.send(ProgressEvent::PassStarted {
-                session_id: session_id,
+                session_id,
                 pass_number: pass_1idx,
                 pass_name: pattern_name.clone(),
             });
@@ -274,7 +272,7 @@ impl WipeSession {
                     }
 
                     let _ = progress_tx.send(ProgressEvent::Interrupted {
-                        session_id: session_id,
+                        session_id,
                         reason: "User cancelled".to_string(),
                         bytes_written: total_bytes_written,
                     });
@@ -287,7 +285,7 @@ impl WipeSession {
                     };
 
                     return Ok(WipeResult {
-                        session_id: session_id,
+                        session_id,
                         device_path: self.drive_info.path.clone(),
                         device_serial: self.drive_info.serial.clone(),
                         device_model: self.drive_info.model.clone(),
@@ -337,10 +335,9 @@ impl WipeSession {
                             log::warn!("Failed to save wipe state on write error: {}", save_err);
                         }
 
-                        let msg =
-                            format!("Write error at offset {bytes_written_this_pass}: {e}");
+                        let msg = format!("Write error at offset {bytes_written_this_pass}: {e}");
                         let _ = progress_tx.send(ProgressEvent::Error {
-                            session_id: session_id,
+                            session_id,
                             message: msg,
                         });
 
@@ -358,7 +355,7 @@ impl WipeSession {
 
                 // Send BlockWritten event
                 let _ = progress_tx.send(ProgressEvent::BlockWritten {
-                    session_id: session_id,
+                    session_id,
                     pass_number: pass_1idx,
                     bytes_written: bytes_written_this_pass,
                     total_bytes,
@@ -389,7 +386,7 @@ impl WipeSession {
             if let Err(e) = device.sync() {
                 let msg = format!("Sync warning after pass {pass_1idx}: {e}");
                 let _ = progress_tx.send(ProgressEvent::Warning {
-                    session_id: session_id,
+                    session_id,
                     message: msg.clone(),
                 });
                 warnings.push(msg);
@@ -403,7 +400,7 @@ impl WipeSession {
             };
 
             let _ = progress_tx.send(ProgressEvent::PassCompleted {
-                session_id: session_id,
+                session_id,
                 pass_number: pass_1idx,
                 duration_secs: pass_duration,
                 throughput_mbps,
@@ -437,7 +434,11 @@ impl WipeSession {
                 let verifier = ZeroVerifier;
                 match verifier.verify(device, session_id, progress_tx) {
                     Ok(result) => result,
-                    Err(DriveWipeError::VerificationFailed { offset, expected, actual }) => {
+                    Err(DriveWipeError::VerificationFailed {
+                        offset,
+                        expected,
+                        actual,
+                    }) => {
                         let msg = format!(
                             "Verification mismatch at offset {offset:#x}: \
                              expected {expected:#04x}, got {actual:#04x}"
@@ -458,9 +459,7 @@ impl WipeSession {
                 // something was actually written).
                 let verify_start = Instant::now();
 
-                let _ = progress_tx.send(ProgressEvent::VerificationStarted {
-                    session_id,
-                });
+                let _ = progress_tx.send(ProgressEvent::VerificationStarted { session_id });
 
                 let mut sample_buf = vec![0u8; DEFAULT_BLOCK_SIZE];
                 let sample_len = (total_bytes as usize).min(DEFAULT_BLOCK_SIZE);
@@ -506,7 +505,11 @@ impl WipeSession {
                 let verifier = PatternVerifier::new(fresh_pattern);
                 match verifier.verify(device, session_id, progress_tx) {
                     Ok(result) => result,
-                    Err(DriveWipeError::VerificationFailed { offset, expected, actual }) => {
+                    Err(DriveWipeError::VerificationFailed {
+                        offset,
+                        expected,
+                        actual,
+                    }) => {
                         let msg = format!(
                             "Verification mismatch at offset {offset:#x}: \
                              expected {expected:#04x}, got {actual:#04x}"
@@ -554,7 +557,7 @@ impl WipeSession {
         };
 
         let _ = progress_tx.send(ProgressEvent::Completed {
-            session_id: session_id,
+            session_id,
             outcome,
             duration_secs: total_duration,
         });
@@ -565,7 +568,7 @@ impl WipeSession {
         }
 
         Ok(WipeResult {
-            session_id: session_id,
+            session_id,
             device_path: self.drive_info.path.clone(),
             device_serial: self.drive_info.serial.clone(),
             device_model: self.drive_info.model.clone(),
