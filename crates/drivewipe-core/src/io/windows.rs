@@ -254,6 +254,32 @@ impl WindowsDeviceIo {
             }
         };
 
+        // CRITICAL: Lock the physical drive itself to prevent any access by other processes.
+        // This is required on Windows 10/11 before writing to the raw device.
+        const FSCTL_LOCK_VOLUME: u32 = 0x00090018;
+        eprintln!("[WINDOWS] Locking physical drive...");
+        write_debug("Locking physical drive with FSCTL_LOCK_VOLUME...");
+
+        let lock_result = unsafe {
+            DeviceIoControl(
+                handle,
+                FSCTL_LOCK_VOLUME,
+                None, 0, None, 0, None, None,
+            )
+        };
+
+        if lock_result.is_err() {
+            let err_code = lock_result.unwrap_err().code().0;
+            let err_msg = format!("FSCTL_LOCK_VOLUME on physical drive FAILED: error code {}", err_code);
+            eprintln!("[WINDOWS WARNING] {}", err_msg);
+            write_debug(&err_msg);
+            log::warn!("Failed to lock physical drive {}: error {} - continuing anyway", path.display(), err_code);
+            // Don't fail here - some drives may not support locking, try to continue
+        } else {
+            eprintln!("[WINDOWS] Physical drive locked successfully");
+            write_debug("Physical drive locked successfully");
+        }
+
         write_debug(&format!("========== DEVICE OPENED SUCCESSFULLY =========="));
         write_debug(&format!("Handle: valid, Capacity: {} bytes, Block size: {} bytes", capacity, block_size));
         eprintln!("[WINDOWS] Device opened successfully!");
@@ -277,6 +303,29 @@ impl WindowsDeviceIo {
 #[cfg(target_os = "windows")]
 impl RawDeviceIo for WindowsDeviceIo {
     fn write_at(&mut self, offset: u64, buf: &[u8]) -> Result<usize> {
+        // Log write parameters for first write to debug alignment issues
+        static FIRST_WRITE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
+        if FIRST_WRITE.swap(false, std::sync::atomic::Ordering::Relaxed) {
+            let debug_log = std::env::temp_dir().join("drivewipe_debug.log");
+            if let Ok(mut f) = std::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(&debug_log)
+            {
+                use std::io::Write;
+                let _ = writeln!(f, "[WRITE_AT] First write:");
+                let _ = writeln!(f, "  Offset: {} (0x{:X})", offset, offset);
+                let _ = writeln!(f, "  Buffer size: {} bytes", buf.len());
+                let _ = writeln!(f, "  Buffer address: {:p}", buf.as_ptr());
+                let _ = writeln!(f, "  Offset % 512 = {}", offset % 512);
+                let _ = writeln!(f, "  Buffer size % 512 = {}", buf.len() % 512);
+                let _ = writeln!(f, "  Buffer address % 512 = {}", buf.as_ptr() as usize % 512);
+                let _ = writeln!(f, "  Block size: {}", self.block_size);
+            }
+            eprintln!("[WINDOWS WRITE_AT] First write: offset={}, size={}, block_size={}",
+                offset, buf.len(), self.block_size);
+        }
+
         let mut overlapped: OVERLAPPED = unsafe { mem::zeroed() };
         overlapped.Anonymous.Anonymous.Offset = offset as u32;
         overlapped.Anonymous.Anonymous.OffsetHigh = (offset >> 32) as u32;
@@ -292,8 +341,28 @@ impl RawDeviceIo for WindowsDeviceIo {
         }
         .map_err(|e| {
             let err_code = e.code().0;
-            eprintln!("[WINDOWS WRITE ERROR] WriteFile failed at offset {}: error code {} ({})",
-                offset, err_code, e);
+            let err_msg = format!(
+                "[WINDOWS WRITE ERROR] WriteFile failed:\n  \
+                Offset: {} (0x{:X})\n  \
+                Buffer size: {} bytes\n  \
+                Buffer address: {:p}\n  \
+                Error code: {} (0x{:X})\n  \
+                Error: {}",
+                offset, offset, buf.len(), buf.as_ptr(), err_code, err_code as u32, e
+            );
+            eprintln!("{}", err_msg);
+
+            // Also write to debug log
+            let debug_log = std::env::temp_dir().join("drivewipe_debug.log");
+            if let Ok(mut f) = std::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(&debug_log)
+            {
+                use std::io::Write;
+                let _ = writeln!(f, "{}", err_msg);
+            }
+
             DriveWipeError::IoGeneric(std::io::Error::from_raw_os_error(err_code as i32))
         })?;
 
