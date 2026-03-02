@@ -42,6 +42,16 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
     )));
     lines.push(Line::from(""));
 
+    // Windows admin reminder
+    #[cfg(target_os = "windows")]
+    {
+        lines.push(Line::from(Span::styled(
+            "  NOTE: Ensure you are running as Administrator on Windows.",
+            Style::default().fg(Color::Yellow),
+        )));
+        lines.push(Line::from(""));
+    }
+
     // Show each drive and method pair.
     for (drive_idx, method_id) in &app.drive_methods {
         if *drive_idx < app.drives.len() {
