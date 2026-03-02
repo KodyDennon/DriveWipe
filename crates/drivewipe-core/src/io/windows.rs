@@ -152,11 +152,19 @@ impl WindowsDeviceIo {
         write_debug(&format!("Opening with access rights: 0x{:X}", access_rights));
         eprintln!("[WINDOWS] Opening with access rights: 0x{:X}", access_rights);
 
+        // CRITICAL: Use ZERO sharing mode for exclusive access.
+        // Even FILE_SHARE_READ allows other processes to keep handles open, which
+        // blocks raw disk writes. We need complete exclusivity.
+        let share_mode = Default::default(); // 0 = no sharing
+
+        write_debug("Opening with ZERO sharing mode (exclusive access)");
+        eprintln!("[WINDOWS] Opening with ZERO sharing mode (exclusive access)");
+
         let handle = unsafe {
             CreateFileW(
                 PCWSTR(wide_path.as_ptr()),
                 access_rights,
-                FILE_SHARE_READ, // Don't share write access for exclusive disk access
+                share_mode,
                 None,
                 OPEN_EXISTING,
                 FILE_FLAG_NO_BUFFERING | FILE_FLAG_WRITE_THROUGH,
@@ -540,14 +548,14 @@ fn dismount_volumes(drive_path: &str) {
         // This volume is on our target drive — lock and dismount it.
         log::info!("Dismounting volume {}:", letter as char);
 
-        // Re-open with write access for lock/dismount.
+        // Re-open with write access for lock/dismount using ZERO sharing.
         unsafe { let _ = CloseHandle(handle); }
         let wide = to_wide_null(&vol_path);
         let handle = unsafe {
             match CreateFileW(
                 PCWSTR(wide.as_ptr()),
                 (0x80000000u32 | 0x40000000u32).into(),
-                FILE_SHARE_READ, // Exclusive write access for lock/dismount
+                Default::default(), // Zero sharing for exclusive access
                 None,
                 OPEN_EXISTING,
                 Default::default(),
