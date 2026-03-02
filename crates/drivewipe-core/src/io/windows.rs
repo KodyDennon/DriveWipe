@@ -84,37 +84,43 @@ impl WindowsDeviceIo {
         let path_str = path.to_string_lossy();
         let wide_path = to_wide_null(&path_str);
 
-        // Write to a debug file for troubleshooting
-        let _ = std::fs::write("C:\\drivewipe_debug.log", format!("Opening: {}\n", path.display()));
+        // Write to a debug file for troubleshooting - use temp dir
+        let debug_log = std::env::temp_dir().join("drivewipe_debug.log");
+        let write_debug = |msg: &str| {
+            if let Ok(mut f) = std::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(&debug_log)
+            {
+                use std::io::Write;
+                let _ = writeln!(f, "{}", msg);
+            }
+        };
+
+        write_debug(&format!("\n========== NEW ATTEMPT =========="));
+        write_debug(&format!("Opening: {}", path.display()));
+        write_debug(&format!("Debug log location: {}", debug_log.display()));
 
         log::info!("Opening Windows device: {}", path.display());
+        eprintln!("\n[WINDOWS DEBUG] Log file: {}", debug_log.display());
         eprintln!("[WINDOWS] Opening device: {}", path.display());
 
         // Dismount all volumes on this physical drive before opening.
         // Windows will block raw writes to a drive with mounted volumes.
         log::debug!("Dismounting volumes on {}", path.display());
         eprintln!("[WINDOWS] Dismounting volumes...");
-        let _ = std::fs::OpenOptions::new().append(true).open("C:\\drivewipe_debug.log").and_then(|mut f| {
-            use std::io::Write;
-            writeln!(f, "Starting dismount...")
-        });
+        write_debug("Starting dismount...");
 
         dismount_volumes(&path_str);
 
-        let _ = std::fs::OpenOptions::new().append(true).open("C:\\drivewipe_debug.log").and_then(|mut f| {
-            use std::io::Write;
-            writeln!(f, "Dismount complete")
-        });
+        write_debug("Dismount complete");
         log::debug!("Dismount complete for {}", path.display());
         eprintln!("[WINDOWS] Dismount complete");
 
         // Open the physical drive with direct, write-through access.
         log::debug!("Calling CreateFileW for {}", path.display());
         eprintln!("[WINDOWS] Calling CreateFileW...");
-        let _ = std::fs::OpenOptions::new().append(true).open("C:\\drivewipe_debug.log").and_then(|mut f| {
-            use std::io::Write;
-            writeln!(f, "Calling CreateFileW...")
-        });
+        write_debug("Calling CreateFileW...");
 
         let handle = unsafe {
             CreateFileW(
@@ -129,15 +135,14 @@ impl WindowsDeviceIo {
         }
         .map_err(|e| {
             let code = e.code().0 as u32;
-            let err_msg = format!("CreateFileW failed: error code {}", code);
-            eprintln!("[WINDOWS] {}", err_msg);
-            let _ = std::fs::OpenOptions::new().append(true).open("C:\\drivewipe_debug.log").and_then(|mut f| {
-                use std::io::Write;
-                writeln!(f, "{}", err_msg)
-            });
+            let err_msg = format!("CreateFileW FAILED: error code {}", code);
+            eprintln!("[WINDOWS ERROR] {}", err_msg);
+            write_debug(&err_msg);
+            write_debug(&format!("Error details: {}", e));
             log::error!("CreateFileW failed for {}: error code {}", path.display(), code);
             if code == 5 {
                 // ERROR_ACCESS_DENIED
+                write_debug("ERROR_ACCESS_DENIED (code 5)");
                 DriveWipeError::InsufficientPrivileges {
                     message: format!(
                         "Access denied opening {} (error 5). Ensure you are running as Administrator.",
@@ -146,8 +151,10 @@ impl WindowsDeviceIo {
                 }
             } else if code == 2 || code == 3 {
                 // ERROR_FILE_NOT_FOUND / ERROR_PATH_NOT_FOUND
+                write_debug("ERROR_FILE_NOT_FOUND or ERROR_PATH_NOT_FOUND");
                 DriveWipeError::DeviceNotFound(path.to_path_buf())
             } else {
+                write_debug(&format!("Other Windows error: {}", code));
                 DriveWipeError::Io {
                     path: path.to_path_buf(),
                     source: std::io::Error::from_raw_os_error(code as i32),
@@ -155,11 +162,8 @@ impl WindowsDeviceIo {
             }
         })?;
 
-        eprintln!("[WINDOWS] CreateFileW succeeded");
-        let _ = std::fs::OpenOptions::new().append(true).open("C:\\drivewipe_debug.log").and_then(|mut f| {
-            use std::io::Write;
-            writeln!(f, "CreateFileW succeeded")
-        });
+        eprintln!("[WINDOWS] CreateFileW SUCCESS");
+        write_debug("CreateFileW SUCCESS");
         log::debug!("CreateFileW succeeded for {}", path.display());
 
         if handle == INVALID_HANDLE_VALUE {
@@ -169,10 +173,7 @@ impl WindowsDeviceIo {
         // Query capacity via IOCTL_DISK_GET_LENGTH_INFO.
         log::debug!("Querying capacity for {}", path.display());
         eprintln!("[WINDOWS] Querying capacity...");
-        let _ = std::fs::OpenOptions::new().append(true).open("C:\\drivewipe_debug.log").and_then(|mut f| {
-            use std::io::Write;
-            writeln!(f, "Querying capacity...")
-        });
+        write_debug("Querying capacity via IOCTL_DISK_GET_LENGTH_INFO...");
 
         let capacity = {
             let mut length_info: i64 = 0;
@@ -191,12 +192,9 @@ impl WindowsDeviceIo {
             };
             if ok.is_err() {
                 let err_code = ok.unwrap_err().code().0;
-                let err_msg = format!("IOCTL_DISK_GET_LENGTH_INFO failed: error {}", err_code);
-                eprintln!("[WINDOWS] {}", err_msg);
-                let _ = std::fs::OpenOptions::new().append(true).open("C:\\drivewipe_debug.log").and_then(|mut f| {
-                    use std::io::Write;
-                    writeln!(f, "{}", err_msg)
-                });
+                let err_msg = format!("IOCTL_DISK_GET_LENGTH_INFO FAILED: error code {}", err_code);
+                eprintln!("[WINDOWS ERROR] {}", err_msg);
+                write_debug(&err_msg);
                 log::error!("IOCTL_DISK_GET_LENGTH_INFO failed for {}: error {}", path.display(), err_code);
                 unsafe {
                     let _ = CloseHandle(handle);
@@ -208,15 +206,13 @@ impl WindowsDeviceIo {
                 )));
             }
             eprintln!("[WINDOWS] Capacity: {} bytes", length_info);
-            let _ = std::fs::OpenOptions::new().append(true).open("C:\\drivewipe_debug.log").and_then(|mut f| {
-                use std::io::Write;
-                writeln!(f, "Capacity: {} bytes", length_info)
-            });
+            write_debug(&format!("Capacity SUCCESS: {} bytes", length_info));
             log::debug!("Capacity for {}: {} bytes", path.display(), length_info);
             length_info as u64
         };
 
         // Query block size via IOCTL_DISK_GET_DRIVE_GEOMETRY_EX.
+        write_debug("Querying block size via IOCTL_DISK_GET_DRIVE_GEOMETRY_EX...");
         let block_size = {
             let mut geo: DISK_GEOMETRY_EX = unsafe { mem::zeroed() };
             let mut bytes_returned: u32 = 0;
@@ -233,12 +229,19 @@ impl WindowsDeviceIo {
                 )
             };
             if ok.is_err() {
+                write_debug("Block size query failed, using default 512");
                 // Fall back to 512 bytes if the geometry query fails.
                 512u32
             } else {
+                write_debug(&format!("Block size: {}", geo.Geometry.BytesPerSector));
                 geo.Geometry.BytesPerSector
             }
         };
+
+        write_debug(&format!("========== DEVICE OPENED SUCCESSFULLY =========="));
+        write_debug(&format!("Handle: valid, Capacity: {} bytes, Block size: {} bytes", capacity, block_size));
+        eprintln!("[WINDOWS] Device opened successfully!");
+        eprintln!("[WINDOWS] Capacity: {} bytes, Block size: {}", capacity, block_size);
 
         Ok(Self {
             handle,

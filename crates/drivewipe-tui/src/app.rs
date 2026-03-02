@@ -895,6 +895,16 @@ impl App {
                 "Starting wipe on {device_display} with method {method}"
             ));
 
+            // Log debug file location on Windows
+            #[cfg(target_os = "windows")]
+            {
+                let debug_log = std::env::temp_dir().join("drivewipe_debug.log");
+                self.log_push(format!(
+                    "Debug log: {}",
+                    debug_log.display()
+                ));
+            }
+
             std::thread::spawn(move || {
                 // Build a fresh registry that contains ALL methods (software +
                 // firmware). We then find our method by id and consume the

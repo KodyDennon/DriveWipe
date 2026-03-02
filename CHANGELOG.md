@@ -16,7 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Windows TUI**: Drive capacity now displays correctly in the drive list. Fixed drive enumeration to open drives with `GENERIC_READ` access instead of zero access, which is required for `IOCTL_DISK_GET_LENGTH_INFO` to succeed.
 - **Windows TUI**: Fixed "device disconnected" error when starting wipe. Windows device paths like `\\.\PhysicalDrive0` don't support `.exists()` check, so this validation is now skipped on Windows platforms.
 - **Windows TUI**: Added Administrator reminder to confirmation dialog to help users avoid common privilege errors.
-- **Windows Debugging**: Added comprehensive logging and debug file output (`C:\drivewipe_debug.log`) to diagnose device opening failures. Error messages now include specific error codes and are written to both stderr and the debug log for troubleshooting.
+- **Windows Debugging**: Added comprehensive logging and debug file output to diagnose device opening failures. Debug log is written to `%TEMP%\drivewipe_debug.log` (typically `C:\Users\<username>\AppData\Local\Temp\drivewipe_debug.log`). The TUI now displays the debug log location in the log viewer. Error messages include specific Windows error codes and are written to stderr, the debug file, and the TUI log viewer for complete troubleshooting visibility.
 - Test suite: Fixed clippy warnings for redundant imports and bool comparisons
 - Cross-module visibility: Made `extract_windows_drive_number` visible to other modules via `pub(crate)`
 - Windows I/O: Fixed clippy warning for `std::mem::forget` on `Copy` type by using `let _ = handle` pattern
