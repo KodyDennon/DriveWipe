@@ -105,6 +105,15 @@ impl WindowsDeviceIo {
         eprintln!("\n[WINDOWS DEBUG] Log file: {}", debug_log.display());
         eprintln!("[WINDOWS] Opening device: {}", path.display());
 
+        // CRITICAL: Enable SeBackupPrivilege and SeRestorePrivilege.
+        // Even when running as Administrator, these privileges are DISABLED by default.
+        // Without them, CreateFileW may succeed but WriteFile will fail with ACCESS_DENIED.
+        eprintln!("[WINDOWS] Enabling SeBackupPrivilege and SeRestorePrivilege...");
+        write_debug("Enabling SeBackupPrivilege and SeRestorePrivilege...");
+        crate::platform::privilege::enable_raw_disk_privileges()?;
+        eprintln!("[WINDOWS] Privileges enabled successfully");
+        write_debug("Privileges enabled successfully");
+
         // Dismount all volumes on this physical drive before opening.
         // Windows will block raw writes to a drive with mounted volumes.
         log::debug!("Dismounting volumes on {}", path.display());

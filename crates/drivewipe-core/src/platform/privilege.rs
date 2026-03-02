@@ -69,6 +69,128 @@ pub fn elevation_hint() -> String {
     "Ensure you have sufficient privileges to access raw block devices".to_string()
 }
 
+/// Enable the SeBackupPrivilege and SeRestorePrivilege required for raw disk access.
+///
+/// On Windows, even when running as Administrator, these privileges are in the
+/// token but DISABLED by default. We must explicitly enable them before attempting
+/// raw disk I/O, otherwise CreateFileW may succeed but WriteFile will fail with
+/// ERROR_ACCESS_DENIED.
+#[cfg(windows)]
+pub fn enable_raw_disk_privileges() -> Result<()> {
+    use windows::Win32::Foundation::{CloseHandle, HANDLE, LUID};
+    use windows::Win32::Security::{
+        AdjustTokenPrivileges, LookupPrivilegeValueW, LUID_AND_ATTRIBUTES,
+        SE_PRIVILEGE_ENABLED, TOKEN_ADJUST_PRIVILEGES, TOKEN_PRIVILEGES, TOKEN_QUERY,
+    };
+    use windows::Win32::System::Threading::{GetCurrentProcess, OpenProcessToken};
+    use windows::core::PCWSTR;
+
+    unsafe {
+        let mut token = HANDLE::default();
+        if OpenProcessToken(
+            GetCurrentProcess(),
+            TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY,
+            &mut token,
+        )
+        .is_err()
+        {
+            return Err(DriveWipeError::InsufficientPrivileges {
+                message: "Failed to open process token for privilege adjustment".to_string(),
+            });
+        }
+
+        // Enable SeBackupPrivilege (required for reading raw disk)
+        let backup_name: Vec<u16> = "SeBackupPrivilege"
+            .encode_utf16()
+            .chain(std::iter::once(0))
+            .collect();
+        let mut backup_luid = LUID::default();
+        if LookupPrivilegeValueW(None, PCWSTR(backup_name.as_ptr()), &mut backup_luid).is_err() {
+            let _ = CloseHandle(token);
+            return Err(DriveWipeError::InsufficientPrivileges {
+                message: "Failed to lookup SeBackupPrivilege".to_string(),
+            });
+        }
+
+        // Enable SeRestorePrivilege (required for writing raw disk)
+        let restore_name: Vec<u16> = "SeRestorePrivilege"
+            .encode_utf16()
+            .chain(std::iter::once(0))
+            .collect();
+        let mut restore_luid = LUID::default();
+        if LookupPrivilegeValueW(None, PCWSTR(restore_name.as_ptr()), &mut restore_luid).is_err()
+        {
+            let _ = CloseHandle(token);
+            return Err(DriveWipeError::InsufficientPrivileges {
+                message: "Failed to lookup SeRestorePrivilege".to_string(),
+            });
+        }
+
+        // Enable SeBackupPrivilege
+        let mut tp_backup = TOKEN_PRIVILEGES {
+            PrivilegeCount: 1,
+            Privileges: [LUID_AND_ATTRIBUTES {
+                Luid: backup_luid,
+                Attributes: SE_PRIVILEGE_ENABLED,
+            }],
+        };
+
+        if AdjustTokenPrivileges(
+            token,
+            false,
+            Some(&mut tp_backup),
+            0,
+            None,
+            None,
+        )
+        .is_err()
+        {
+            let _ = CloseHandle(token);
+            return Err(DriveWipeError::InsufficientPrivileges {
+                message: "Failed to enable SeBackupPrivilege. Ensure you are running as Administrator."
+                    .to_string(),
+            });
+        }
+
+        // Enable SeRestorePrivilege
+        let mut tp_restore = TOKEN_PRIVILEGES {
+            PrivilegeCount: 1,
+            Privileges: [LUID_AND_ATTRIBUTES {
+                Luid: restore_luid,
+                Attributes: SE_PRIVILEGE_ENABLED,
+            }],
+        };
+
+        if AdjustTokenPrivileges(
+            token,
+            false,
+            Some(&mut tp_restore),
+            0,
+            None,
+            None,
+        )
+        .is_err()
+        {
+            let _ = CloseHandle(token);
+            return Err(DriveWipeError::InsufficientPrivileges {
+                message: "Failed to enable SeRestorePrivilege. Ensure you are running as Administrator."
+                    .to_string(),
+            });
+        }
+
+        let _ = CloseHandle(token);
+
+        log::info!("Successfully enabled SeBackupPrivilege and SeRestorePrivilege");
+        Ok(())
+    }
+}
+
+/// Enable raw disk privileges on non-Windows platforms (no-op).
+#[cfg(not(windows))]
+pub fn enable_raw_disk_privileges() -> Result<()> {
+    Ok(())
+}
+
 /// Check that the process is running with elevated privileges.
 ///
 /// Returns `Ok(())` if elevated, or an
