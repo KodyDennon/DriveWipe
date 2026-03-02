@@ -178,11 +178,14 @@ impl WindowsDeviceIo {
         write_debug("Sending FSCTL_ALLOW_EXTENDED_DASD_IO to enable raw disk writes...");
 
         const FSCTL_ALLOW_EXTENDED_DASD_IO: u32 = 0x0007405C;
+        let mut bytes_returned: u32 = 0;
         let dasd_result = unsafe {
             DeviceIoControl(
                 handle,
                 FSCTL_ALLOW_EXTENDED_DASD_IO,
-                None, 0, None, 0, None, None,
+                None, 0, None, 0,
+                Some(&mut bytes_returned),
+                None,
             )
         };
 
@@ -191,8 +194,13 @@ impl WindowsDeviceIo {
             let err_msg = format!("FSCTL_ALLOW_EXTENDED_DASD_IO FAILED: error code {}", err_code);
             eprintln!("[WINDOWS ERROR] {}", err_msg);
             write_debug(&err_msg);
-            log::warn!("FSCTL_ALLOW_EXTENDED_DASD_IO failed for {}: error {}", path.display(), err_code);
-            // Don't fail here - try to continue anyway
+            log::error!("FSCTL_ALLOW_EXTENDED_DASD_IO failed for {}: error {} - THIS WILL LIKELY CAUSE WRITE FAILURES", path.display(), err_code);
+            unsafe { let _ = CloseHandle(handle); }
+            return Err(DriveWipeError::DeviceError(format!(
+                "Failed to enable raw disk access for {} (error code: {}). This device may be protected by BitLocker, Windows security policies, or other disk encryption.",
+                path.display(),
+                err_code
+            )));
         } else {
             eprintln!("[WINDOWS] FSCTL_ALLOW_EXTENDED_DASD_IO SUCCESS");
             write_debug("FSCTL_ALLOW_EXTENDED_DASD_IO SUCCESS - raw disk writes enabled");
