@@ -58,6 +58,11 @@ pub struct WipeProgress {
     pub verify_total: u64,
     pub firmware_percent: Option<f32>,
     pub started_at: Instant,
+    /// Advanced stats for modern UI
+    pub current_sector: u64,
+    pub last_update: Instant,
+    pub write_operations: u64,
+    pub iops: f64,
 }
 
 impl WipeProgress {
@@ -68,6 +73,7 @@ impl WipeProgress {
         total_bytes: u64,
         total_passes: u32,
     ) -> Self {
+        let now = Instant::now();
         Self {
             session_id,
             device,
@@ -83,7 +89,11 @@ impl WipeProgress {
             verify_bytes: 0,
             verify_total: total_bytes,
             firmware_percent: None,
-            started_at: Instant::now(),
+            started_at: now,
+            current_sector: 0,
+            last_update: now,
+            write_operations: 0,
+            iops: 0.0,
         }
     }
 
@@ -695,6 +705,18 @@ impl App {
                     p.throughput_bps = throughput_bps;
                     p.current_pass = pass_number;
                     p.push_throughput(throughput_bps);
+
+                    // Update advanced stats for modern UI
+                    p.current_sector = bytes_written / 512; // Assume 512-byte sectors
+                    p.write_operations += 1;
+
+                    // Calculate IOPS (operations per second)
+                    let now = Instant::now();
+                    let elapsed = now.duration_since(p.last_update).as_secs_f64();
+                    if elapsed >= 0.1 { // Update IOPS every 100ms
+                        p.iops = 1.0 / elapsed.max(0.001);
+                        p.last_update = now;
+                    }
                 }
             }
             ProgressEvent::PassCompleted {
