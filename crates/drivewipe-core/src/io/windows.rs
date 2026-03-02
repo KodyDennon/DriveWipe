@@ -117,6 +117,11 @@ impl WindowsDeviceIo {
         log::debug!("Dismount complete for {}", path.display());
         eprintln!("[WINDOWS] Dismount complete");
 
+        // Give Windows a moment to release locks after dismount.
+        // This is critical on Windows 10/11 where volume locks can persist briefly.
+        std::thread::sleep(std::time::Duration::from_millis(500));
+        write_debug("Waited 500ms after dismount for Windows to release locks");
+
         // Open the physical drive with direct, write-through access.
         log::debug!("Calling CreateFileW for {}", path.display());
         eprintln!("[WINDOWS] Calling CreateFileW...");
@@ -126,7 +131,7 @@ impl WindowsDeviceIo {
             CreateFileW(
                 PCWSTR(wide_path.as_ptr()),
                 (0x80000000u32 | 0x40000000u32).into(), // GENERIC_READ | GENERIC_WRITE
-                FILE_SHARE_READ | FILE_SHARE_WRITE,
+                FILE_SHARE_READ, // Don't share write access for exclusive disk access
                 None,
                 OPEN_EXISTING,
                 FILE_FLAG_NO_BUFFERING | FILE_FLAG_WRITE_THROUGH,
@@ -170,41 +175,7 @@ impl WindowsDeviceIo {
             return Err(DriveWipeError::DeviceNotFound(path.to_path_buf()));
         }
 
-        // CRITICAL: Send FSCTL_ALLOW_EXTENDED_DASD_IO to allow writes to the entire
-        // physical disk. Without this, Windows will deny write operations even when
-        // running as Administrator, especially on Windows 10/11.
-        log::debug!("Sending FSCTL_ALLOW_EXTENDED_DASD_IO for {}", path.display());
-        eprintln!("[WINDOWS] Sending FSCTL_ALLOW_EXTENDED_DASD_IO...");
-        write_debug("Sending FSCTL_ALLOW_EXTENDED_DASD_IO to enable raw disk writes...");
-
-        const FSCTL_ALLOW_EXTENDED_DASD_IO: u32 = 0x0007405C;
-        let mut bytes_returned: u32 = 0;
-        let dasd_result = unsafe {
-            DeviceIoControl(
-                handle,
-                FSCTL_ALLOW_EXTENDED_DASD_IO,
-                None, 0, None, 0,
-                Some(&mut bytes_returned),
-                None,
-            )
-        };
-
-        if dasd_result.is_err() {
-            let err_code = dasd_result.unwrap_err().code().0;
-            let err_msg = format!("FSCTL_ALLOW_EXTENDED_DASD_IO FAILED: error code {}", err_code);
-            eprintln!("[WINDOWS ERROR] {}", err_msg);
-            write_debug(&err_msg);
-            log::error!("FSCTL_ALLOW_EXTENDED_DASD_IO failed for {}: error {} - THIS WILL LIKELY CAUSE WRITE FAILURES", path.display(), err_code);
-            unsafe { let _ = CloseHandle(handle); }
-            return Err(DriveWipeError::DeviceError(format!(
-                "Failed to enable raw disk access for {} (error code: {}). This device may be protected by BitLocker, Windows security policies, or other disk encryption.",
-                path.display(),
-                err_code
-            )));
-        } else {
-            eprintln!("[WINDOWS] FSCTL_ALLOW_EXTENDED_DASD_IO SUCCESS");
-            write_debug("FSCTL_ALLOW_EXTENDED_DASD_IO SUCCESS - raw disk writes enabled");
-        }
+        write_debug("Device handle opened successfully");
 
         // Query capacity via IOCTL_DISK_GET_LENGTH_INFO.
         log::debug!("Querying capacity for {}", path.display());
@@ -482,7 +453,7 @@ fn dismount_volumes(drive_path: &str) {
             match CreateFileW(
                 PCWSTR(wide.as_ptr()),
                 (0x80000000u32 | 0x40000000u32).into(),
-                FILE_SHARE_READ | FILE_SHARE_WRITE,
+                FILE_SHARE_READ, // Exclusive write access for lock/dismount
                 None,
                 OPEN_EXISTING,
                 Default::default(),
