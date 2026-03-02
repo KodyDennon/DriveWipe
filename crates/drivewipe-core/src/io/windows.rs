@@ -136,10 +136,26 @@ impl WindowsDeviceIo {
         eprintln!("[WINDOWS] Calling CreateFileW...");
         write_debug("Calling CreateFileW...");
 
+        // CRITICAL: On Windows 10/11, writing to physical drives requires specific access rights.
+        // We need GENERIC_READ | GENERIC_WRITE plus additional rights:
+        // - WRITE_DAC (0x00040000): Modify security descriptor
+        // - READ_CONTROL (0x00020000): Read security descriptor
+        // - SYNCHRONIZE (0x00100000): Synchronous I/O operations
+        const GENERIC_READ: u32 = 0x80000000;
+        const GENERIC_WRITE: u32 = 0x40000000;
+        const WRITE_DAC: u32 = 0x00040000;
+        const READ_CONTROL: u32 = 0x00020000;
+        const SYNCHRONIZE: u32 = 0x00100000;
+
+        let access_rights = GENERIC_READ | GENERIC_WRITE | WRITE_DAC | READ_CONTROL | SYNCHRONIZE;
+
+        write_debug(&format!("Opening with access rights: 0x{:X}", access_rights));
+        eprintln!("[WINDOWS] Opening with access rights: 0x{:X}", access_rights);
+
         let handle = unsafe {
             CreateFileW(
                 PCWSTR(wide_path.as_ptr()),
-                (0x80000000u32 | 0x40000000u32).into(), // GENERIC_READ | GENERIC_WRITE
+                access_rights,
                 FILE_SHARE_READ, // Don't share write access for exclusive disk access
                 None,
                 OPEN_EXISTING,
