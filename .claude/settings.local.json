@@ -16,7 +16,8 @@
       "Bash(git push:*)",
       "Bash(find:*)",
       "Bash(git reset:*)",
-      "Bash(cmd /c \"echo %TEMP%\")"
+      "Bash(cmd /c \"echo %TEMP%\")",
+      "WebSearch"
     ]
   }
 }

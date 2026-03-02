@@ -19,13 +19,11 @@ use std::os::windows::ffi::OsStrExt;
 use windows::Win32::Foundation::{CloseHandle, HANDLE, INVALID_HANDLE_VALUE};
 #[cfg(target_os = "windows")]
 use windows::Win32::Storage::FileSystem::{
-    CreateFileW, FILE_FLAG_NO_BUFFERING, FILE_FLAG_WRITE_THROUGH,
-    FlushFileBuffers, OPEN_EXISTING, ReadFile, WriteFile,
+    CreateFileW, FILE_FLAG_NO_BUFFERING, FILE_FLAG_WRITE_THROUGH, FILE_BEGIN,
+    FlushFileBuffers, OPEN_EXISTING, ReadFile, SetFilePointerEx, WriteFile,
 };
 #[cfg(target_os = "windows")]
 use windows::Win32::System::IO::DeviceIoControl;
-#[cfg(target_os = "windows")]
-use windows::Win32::System::IO::OVERLAPPED;
 #[cfg(target_os = "windows")]
 use windows::Win32::System::Ioctl::{
     DISK_GEOMETRY_EX, IOCTL_DISK_GET_DRIVE_GEOMETRY_EX, IOCTL_DISK_GET_LENGTH_INFO,
@@ -114,19 +112,84 @@ impl WindowsDeviceIo {
         eprintln!("[WINDOWS] Privileges enabled successfully");
         write_debug("Privileges enabled successfully");
 
-        // NOTE: On Windows, unlike macOS/Linux, volume dismount is NOT required for
-        // raw disk access. In fact, dismounting may CAUSE access denied errors.
-        // Windows allows raw physical disk writes even with mounted volumes, as long
-        // as you have the proper privileges and access rights.
-        eprintln!("[WINDOWS] Skipping volume dismount (not required on Windows)");
-        write_debug("Skipping volume dismount (not required on Windows)");
+        // CRITICAL: On Windows 10/11, the disk must be OFFLINE before writing.
+        // Windows monitors disk writes and blocks access when it detects partition
+        // modifications, regardless of privileges. Setting the disk offline prevents
+        // Windows from monitoring and blocking our writes.
+        eprintln!("[WINDOWS] Setting disk offline...");
+        write_debug("Attempting to set disk offline via IOCTL_DISK_SET_DISK_ATTRIBUTES...");
 
-        // Commented out - only needed on macOS/Linux:
-        // dismount_volumes(&path_str);
+        const IOCTL_DISK_SET_DISK_ATTRIBUTES: u32 = 0x0007C0F4;
 
-        // Give Windows a moment to stabilize after privilege changes.
-        std::thread::sleep(std::time::Duration::from_millis(100));
-        write_debug("Waited 100ms after privilege elevation");
+        #[repr(C)]
+        #[allow(non_snake_case)]
+        struct SetDiskAttributes {
+            Version: u32,
+            Persist: u8, // BOOLEAN
+            Reserved1: [u8; 3],
+            Attributes: u64,
+            AttributesMask: u64,
+            Reserved2: [u32; 4],
+        }
+
+        // Attribute value 0x1 = DISK_ATTRIBUTE_OFFLINE
+        let mut attrs = SetDiskAttributes {
+            Version: mem::size_of::<SetDiskAttributes>() as u32,
+            Persist: 0, // Don't persist across reboots
+            Reserved1: [0; 3],
+            Attributes: 0x1, // Set OFFLINE
+            AttributesMask: 0x1, // Modify OFFLINE attribute
+            Reserved2: [0; 4],
+        };
+
+        // Open the disk first to set it offline
+        let wide_for_offline = to_wide_null(&path_str);
+        let offline_handle = unsafe {
+            CreateFileW(
+                PCWSTR(wide_for_offline.as_ptr()),
+                0x80000000u32 | 0x40000000u32, // GENERIC_READ | GENERIC_WRITE
+                Default::default(), // No sharing
+                None,
+                OPEN_EXISTING,
+                Default::default(),
+                None,
+            )
+        };
+
+        if let Ok(h) = offline_handle {
+            if h != INVALID_HANDLE_VALUE {
+                let mut bytes_returned: u32 = 0;
+                let offline_result = unsafe {
+                    DeviceIoControl(
+                        h,
+                        IOCTL_DISK_SET_DISK_ATTRIBUTES,
+                        Some(&mut attrs as *mut _ as *mut _),
+                        mem::size_of::<SetDiskAttributes>() as u32,
+                        None,
+                        0,
+                        Some(&mut bytes_returned),
+                        None,
+                    )
+                };
+
+                unsafe { let _ = CloseHandle(h); }
+
+                if offline_result.is_ok() {
+                    eprintln!("[WINDOWS] Disk set offline successfully");
+                    write_debug("Disk set offline successfully");
+                } else {
+                    let err = offline_result.unwrap_err();
+                    let err_msg = format!("Failed to set disk offline: error code {}", err.code().0);
+                    eprintln!("[WINDOWS WARNING] {}", err_msg);
+                    write_debug(&err_msg);
+                    write_debug("Continuing anyway - wipe may fail if disk has partitions");
+                }
+            }
+        }
+
+        // Give Windows a moment to process the offline state
+        std::thread::sleep(std::time::Duration::from_millis(500));
+        write_debug("Waited 500ms after setting disk offline");
 
         // Open the physical drive with direct, write-through access.
         log::debug!("Calling CreateFileW for {}", path.display());
@@ -311,7 +374,7 @@ impl RawDeviceIo for WindowsDeviceIo {
                 .open(&debug_log)
             {
                 use std::io::Write;
-                let _ = writeln!(f, "[WRITE_AT] First write:");
+                let _ = writeln!(f, "[WRITE_AT] First write (SYNCHRONOUS I/O):");
                 let _ = writeln!(f, "  Offset: {} (0x{:X})", offset, offset);
                 let _ = writeln!(f, "  Buffer size: {} bytes", buf.len());
                 let _ = writeln!(f, "  Buffer address: {:p}", buf.as_ptr());
@@ -320,21 +383,36 @@ impl RawDeviceIo for WindowsDeviceIo {
                 let _ = writeln!(f, "  Buffer address % 512 = {}", buf.as_ptr() as usize % 512);
                 let _ = writeln!(f, "  Block size: {}", self.block_size);
             }
-            eprintln!("[WINDOWS WRITE_AT] First write: offset={}, size={}, block_size={}",
+            eprintln!("[WINDOWS WRITE_AT] First write (SYNCHRONOUS): offset={}, size={}, block_size={}",
                 offset, buf.len(), self.block_size);
         }
 
-        let mut overlapped: OVERLAPPED = unsafe { mem::zeroed() };
-        overlapped.Anonymous.Anonymous.Offset = offset as u32;
-        overlapped.Anonymous.Anonymous.OffsetHigh = (offset >> 32) as u32;
+        // Use synchronous I/O with SetFilePointerEx instead of OVERLAPPED
+        // SetFilePointerEx to position the file pointer
+        let distance_to_move = offset as i64;
+        unsafe {
+            SetFilePointerEx(
+                self.handle,
+                distance_to_move,
+                None,
+                FILE_BEGIN,
+            )
+        }
+        .map_err(|e| {
+            let err_code = e.code().0;
+            let err_msg = format!("SetFilePointerEx failed: error code {} (0x{:X})", err_code, err_code as u32);
+            eprintln!("[WINDOWS ERROR] {}", err_msg);
+            DriveWipeError::IoGeneric(std::io::Error::from_raw_os_error(err_code as i32))
+        })?;
 
+        // Now write at the current file position (synchronous, no OVERLAPPED)
         let mut bytes_written: u32 = 0;
         unsafe {
             WriteFile(
                 self.handle,
                 Some(buf),
                 Some(&mut bytes_written),
-                Some(&mut overlapped),
+                None, // No OVERLAPPED - synchronous I/O
             )
         }
         .map_err(|e| {
@@ -368,9 +446,19 @@ impl RawDeviceIo for WindowsDeviceIo {
     }
 
     fn read_at(&mut self, offset: u64, buf: &mut [u8]) -> Result<usize> {
-        let mut overlapped: OVERLAPPED = unsafe { mem::zeroed() };
-        overlapped.Anonymous.Anonymous.Offset = offset as u32;
-        overlapped.Anonymous.Anonymous.OffsetHigh = (offset >> 32) as u32;
+        // Use synchronous I/O with SetFilePointerEx
+        let distance_to_move = offset as i64;
+        unsafe {
+            SetFilePointerEx(
+                self.handle,
+                distance_to_move,
+                None,
+                FILE_BEGIN,
+            )
+        }
+        .map_err(|e| {
+            DriveWipeError::IoGeneric(std::io::Error::from_raw_os_error(e.code().0 as i32))
+        })?;
 
         let mut bytes_read: u32 = 0;
         unsafe {
@@ -378,7 +466,7 @@ impl RawDeviceIo for WindowsDeviceIo {
                 self.handle,
                 Some(buf),
                 Some(&mut bytes_read),
-                Some(&mut overlapped),
+                None, // No OVERLAPPED - synchronous I/O
             )
         }
         .map_err(|e| {
