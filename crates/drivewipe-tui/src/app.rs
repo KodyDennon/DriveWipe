@@ -966,9 +966,11 @@ impl App {
                 let mut device = match device_result {
                     Ok(d) => d,
                     Err(e) => {
+                        let err_msg = format!("Failed to open {}: {}", drive_info.path.display(), e);
+                        eprintln!("DEVICE OPEN ERROR: {}", err_msg);  // Also print to stderr for debugging
                         let _ = progress_tx.send(ProgressEvent::Error {
                             session_id: session.session_id,
-                            message: format!("Failed to open {}: {e}", drive_info.path.display()),
+                            message: err_msg,
                         });
                         let _ = progress_tx.send(ProgressEvent::Completed {
                             session_id: session.session_id,
