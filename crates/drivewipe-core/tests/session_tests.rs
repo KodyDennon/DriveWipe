@@ -1,7 +1,5 @@
 use std::path::PathBuf;
 
-use crossbeam_channel;
-
 use drivewipe_core::config::DriveWipeConfig;
 use drivewipe_core::error::Result;
 use drivewipe_core::io::RawDeviceIo;

@@ -144,7 +144,7 @@ fn detect_boot_drive_windows(device_path: &str) -> bool {
 ///
 /// E.g. `\\.\PhysicalDrive0` → `Some(0)`, `\\.\PhysicalDrive12` → `Some(12)`.
 #[cfg(target_os = "windows")]
-fn extract_windows_drive_number(path: &str) -> Option<u32> {
+pub(crate) fn extract_windows_drive_number(path: &str) -> Option<u32> {
     // Normalize separators
     let normalized = path.replace('/', "\\");
     let lower = normalized.to_lowercase();

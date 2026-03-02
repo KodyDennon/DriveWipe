@@ -92,7 +92,7 @@ mod imp {
         let handle = unsafe {
             CreateFileW(
                 PCWSTR(wide.as_ptr()),
-                0, // Zero access — just query properties
+                0x80000000u32.into(), // GENERIC_READ — needed for IOCTL_DISK_GET_LENGTH_INFO
                 FILE_SHARE_READ | FILE_SHARE_WRITE,
                 None,
                 OPEN_EXISTING,

@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Windows**: DoD wipe verification now works correctly on Windows. Fixed buffer alignment issues that caused verification to fail silently when using `FILE_FLAG_NO_BUFFERING`.
+  - `PatternVerifier`, `ZeroVerifier`, and random pattern verification now use aligned buffers for reads, matching the alignment requirements of Windows direct I/O
+  - Verification warnings and errors are now properly sent as `ProgressEvent` messages so they appear in the TUI log viewer
+  - Users will now see detailed error messages (e.g., "Verification mismatch at offset 0x1234") instead of just "FAILED"
+- **Windows TUI**: Drive capacity now displays correctly in the drive list. Fixed drive enumeration to open drives with `GENERIC_READ` access instead of zero access, which is required for `IOCTL_DISK_GET_LENGTH_INFO` to succeed.
+- Test suite: Fixed clippy warnings for redundant imports and bool comparisons
+- Cross-module visibility: Made `extract_windows_drive_number` visible to other modules via `pub(crate)`
+- Windows I/O: Fixed clippy warning for `std::mem::forget` on `Copy` type by using `let _ = handle` pattern
+
 ### Added
 
 - Core library (`drivewipe-core`) with full wipe engine

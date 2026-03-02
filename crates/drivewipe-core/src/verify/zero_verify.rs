@@ -3,7 +3,7 @@ use uuid::Uuid;
 
 use super::Verifier;
 use crate::error::{DriveWipeError, Result};
-use crate::io::{DEFAULT_BLOCK_SIZE, RawDeviceIo};
+use crate::io::{DEFAULT_BLOCK_SIZE, RawDeviceIo, allocate_aligned_buffer};
 use crate::progress::ProgressEvent;
 
 /// Optimized verifier that checks whether the entire device is filled with zeros.
@@ -66,7 +66,8 @@ impl Verifier for ZeroVerifier {
 
         let verify_start = std::time::Instant::now();
 
-        let mut buf = vec![0u8; DEFAULT_BLOCK_SIZE];
+        // Use aligned buffer for Windows FILE_FLAG_NO_BUFFERING compatibility
+        let mut buf = allocate_aligned_buffer(DEFAULT_BLOCK_SIZE, 4096);
         let mut bytes_verified: u64 = 0;
 
         while bytes_verified < total_bytes {

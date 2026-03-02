@@ -415,7 +415,7 @@ fn dismount_volumes(drive_path: &str) {
         // Keep the handle open — closing it would allow the OS to remount.
         // The handle will be closed when the process exits or the drive is
         // released. We intentionally leak it here.
-        std::mem::forget(handle);
+        let _ = handle;
     }
 }
 

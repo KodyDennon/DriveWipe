@@ -461,7 +461,8 @@ impl WipeSession {
 
                 let _ = progress_tx.send(ProgressEvent::VerificationStarted { session_id });
 
-                let mut sample_buf = vec![0u8; DEFAULT_BLOCK_SIZE];
+                // Use aligned buffer for Windows FILE_FLAG_NO_BUFFERING compatibility
+                let mut sample_buf = allocate_aligned_buffer(DEFAULT_BLOCK_SIZE, 4096);
                 let sample_len = (total_bytes as usize).min(DEFAULT_BLOCK_SIZE);
                 let passed = match device.read_at(0, &mut sample_buf[..sample_len]) {
                     Ok(n) => {
@@ -535,6 +536,14 @@ impl WipeSession {
         } else {
             None
         };
+
+        // Send all warnings as progress events so they're visible in the UI
+        for warning in &warnings {
+            let _ = progress_tx.send(ProgressEvent::Warning {
+                session_id,
+                message: warning.clone(),
+            });
+        }
 
         // Determine outcome
         let outcome = match verification_passed {

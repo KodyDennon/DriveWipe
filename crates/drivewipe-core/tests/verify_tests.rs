@@ -1,4 +1,3 @@
-use crossbeam_channel;
 use uuid::Uuid;
 
 use drivewipe_core::error::Result;
@@ -63,7 +62,7 @@ fn zero_verify_passes_on_all_zeros() {
     let verifier = ZeroVerifier;
     let result = verifier.verify(&mut device, Uuid::new_v4(), &tx);
     assert!(result.is_ok());
-    assert_eq!(result.unwrap(), true);
+    assert!(result.unwrap());
 }
 
 #[test]
