@@ -84,6 +84,10 @@ impl WindowsDeviceIo {
         let path_str = path.to_string_lossy();
         let wide_path = to_wide_null(&path_str);
 
+        // Dismount all volumes on this physical drive before opening.
+        // Windows will block raw writes to a drive with mounted volumes.
+        dismount_volumes(&path_str);
+
         // Open the physical drive with direct, write-through access.
         let handle = unsafe {
             CreateFileW(
@@ -274,6 +278,144 @@ impl RawDeviceIo for WindowsDeviceIo {
         Err(DriveWipeError::PlatformNotSupported(
             "Windows sync is only available on Windows".to_string(),
         ))
+    }
+}
+
+/// Dismount all volumes on a physical drive before opening for raw I/O.
+///
+/// On Windows, mounted volumes prevent raw writes to the underlying physical
+/// drive.  This function iterates volumes A:-Z:, checks if they reside on
+/// the target physical drive, and dismounts them via
+/// `FSCTL_LOCK_VOLUME` + `FSCTL_DISMOUNT_VOLUME`.
+#[cfg(target_os = "windows")]
+fn dismount_volumes(drive_path: &str) {
+    use crate::drive::info::extract_windows_drive_number;
+
+    // Extract the target drive number (e.g. 2 from \\.\PhysicalDrive2).
+    let Some(target_num) = extract_windows_drive_number(drive_path) else {
+        return;
+    };
+
+    // IOCTL_VOLUME_GET_VOLUME_DISK_EXTENTS
+    const IOCTL_VOLUME_GET_VOLUME_DISK_EXTENTS: u32 = 0x00560000;
+    // FSCTL_LOCK_VOLUME / FSCTL_DISMOUNT_VOLUME
+    const FSCTL_LOCK_VOLUME: u32 = 0x00090018;
+    const FSCTL_DISMOUNT_VOLUME: u32 = 0x00090020;
+
+    #[repr(C)]
+    #[allow(non_snake_case)]
+    struct DiskExtent {
+        DiskNumber: u32,
+        _StartingOffset: i64,
+        _ExtentLength: i64,
+    }
+
+    #[repr(C)]
+    #[allow(non_snake_case)]
+    struct VolumeDiskExtents {
+        NumberOfDiskExtents: u32,
+        Extents: [DiskExtent; 1],
+    }
+
+    for letter in b'A'..=b'Z' {
+        let vol_path = format!("\\\\.\\{}:", letter as char);
+        let wide = to_wide_null(&vol_path);
+
+        let handle = unsafe {
+            match CreateFileW(
+                PCWSTR(wide.as_ptr()),
+                0, // Query only — no read/write needed for the check
+                FILE_SHARE_READ | FILE_SHARE_WRITE,
+                None,
+                OPEN_EXISTING,
+                Default::default(),
+                None,
+            ) {
+                Ok(h) if h != INVALID_HANDLE_VALUE => h,
+                _ => continue,
+            }
+        };
+
+        // Check which physical drive backs this volume.
+        let mut extents: VolumeDiskExtents = unsafe { mem::zeroed() };
+        let mut bytes_returned: u32 = 0;
+        let ok = unsafe {
+            DeviceIoControl(
+                handle,
+                IOCTL_VOLUME_GET_VOLUME_DISK_EXTENTS,
+                None,
+                0,
+                Some(&mut extents as *mut _ as *mut _),
+                mem::size_of::<VolumeDiskExtents>() as u32,
+                Some(&mut bytes_returned),
+                None,
+            )
+        };
+
+        if ok.is_err() || extents.NumberOfDiskExtents == 0 {
+            unsafe { let _ = CloseHandle(handle); }
+            continue;
+        }
+
+        if extents.Extents[0].DiskNumber != target_num {
+            unsafe { let _ = CloseHandle(handle); }
+            continue;
+        }
+
+        // This volume is on our target drive — lock and dismount it.
+        log::info!("Dismounting volume {}:", letter as char);
+
+        // Re-open with write access for lock/dismount.
+        unsafe { let _ = CloseHandle(handle); }
+        let wide = to_wide_null(&vol_path);
+        let handle = unsafe {
+            match CreateFileW(
+                PCWSTR(wide.as_ptr()),
+                (0x80000000u32 | 0x40000000u32).into(),
+                FILE_SHARE_READ | FILE_SHARE_WRITE,
+                None,
+                OPEN_EXISTING,
+                Default::default(),
+                None,
+            ) {
+                Ok(h) if h != INVALID_HANDLE_VALUE => h,
+                _ => {
+                    log::warn!("Failed to re-open volume {}: for dismount", letter as char);
+                    continue;
+                }
+            }
+        };
+
+        // Lock the volume.
+        let lock_ok = unsafe {
+            DeviceIoControl(
+                handle,
+                FSCTL_LOCK_VOLUME,
+                None, 0, None, 0, None, None,
+            )
+        };
+        if lock_ok.is_err() {
+            log::warn!("Failed to lock volume {}:", letter as char);
+        }
+
+        // Dismount the volume.
+        let dismount_ok = unsafe {
+            DeviceIoControl(
+                handle,
+                FSCTL_DISMOUNT_VOLUME,
+                None, 0, None, 0, None, None,
+            )
+        };
+        if dismount_ok.is_err() {
+            log::warn!("Failed to dismount volume {}:", letter as char);
+        } else {
+            log::info!("Successfully dismounted volume {}:", letter as char);
+        }
+
+        // Keep the handle open — closing it would allow the OS to remount.
+        // The handle will be closed when the process exits or the drive is
+        // released. We intentionally leak it here.
+        std::mem::forget(handle);
     }
 }
 

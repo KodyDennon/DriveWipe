@@ -57,7 +57,10 @@ fn detect_boot_drive_linux(device_path: &str) -> bool {
     let base_dev = extract_base_device(device_path);
 
     let Ok(mounts) = std::fs::read_to_string("/proc/mounts") else {
-        return false;
+        // Fail closed: if we can't read mounts, assume it IS the boot
+        // drive to prevent accidental data loss.
+        log::warn!("Failed to read /proc/mounts — assuming {} is a boot drive for safety", device_path);
+        return true;
     };
 
     for line in mounts.lines() {
@@ -90,11 +93,15 @@ fn detect_boot_drive_macos(device_path: &str) -> bool {
     // Use `mount` output to find what backs `/`.
     // Use absolute path to avoid PATH manipulation attacks.
     let Ok(output) = std::process::Command::new("/sbin/mount").output() else {
-        return false;
+        // Fail closed: if we can't determine the boot drive, assume it IS
+        // the boot drive to prevent accidental data loss.
+        log::warn!("Failed to run /sbin/mount — assuming {} is a boot drive for safety", device_path);
+        return true;
     };
 
     let Ok(stdout) = std::str::from_utf8(&output.stdout) else {
-        return false;
+        log::warn!("Failed to parse mount output — assuming {} is a boot drive for safety", device_path);
+        return true;
     };
 
     for line in stdout.lines() {

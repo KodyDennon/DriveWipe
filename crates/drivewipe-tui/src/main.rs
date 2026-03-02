@@ -15,13 +15,19 @@ mod widgets;
 fn main() -> anyhow::Result<()> {
     env_logger::init();
 
-    // Check privileges (warn but don't block)
+    // Check privileges — warn but allow the TUI to start so users can at
+    // least browse the drive list. Wipe operations will fail gracefully if
+    // elevated privileges are truly required.
     if !drivewipe_core::platform::privilege::is_elevated() {
         eprintln!(
             "Warning: {}",
             drivewipe_core::platform::privilege::elevation_hint()
         );
     }
+
+    // Load config before entering raw mode so parse errors are readable.
+    let config =
+        drivewipe_core::config::DriveWipeConfig::load().map_err(|e| anyhow::anyhow!("{e}"))?;
 
     // Setup terminal
     enable_raw_mode()?;
@@ -30,11 +36,11 @@ fn main() -> anyhow::Result<()> {
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
 
-    // Create app and run
-    let config =
-        drivewipe_core::config::DriveWipeConfig::load().map_err(|e| anyhow::anyhow!("{e}"))?;
-    let mut app = app::App::new(config)?;
-    let result = app.run(&mut terminal);
+    // Create app and run — always restore the terminal even on error.
+    let result = (|| -> anyhow::Result<()> {
+        let mut app = app::App::new(config)?;
+        app.run(&mut terminal)
+    })();
 
     // Restore terminal
     disable_raw_mode()?;

@@ -72,7 +72,13 @@ impl WipeProgressDisplay {
 
     /// Process a `ProgressEvent` and update the display accordingly.
     pub fn update(&self, event: &ProgressEvent) {
-        let mut inner = self.inner.lock().unwrap();
+        let mut inner = match self.inner.lock() {
+            Ok(guard) => guard,
+            Err(poisoned) => {
+                log::warn!("Progress display lock was poisoned, recovering");
+                poisoned.into_inner()
+            }
+        };
 
         match event {
             ProgressEvent::SessionStarted {
@@ -227,7 +233,13 @@ impl WipeProgressDisplay {
 
     /// Signal that the display is complete; clear spinners.
     pub fn finish(&self) {
-        let inner = self.inner.lock().unwrap();
+        let inner = match self.inner.lock() {
+            Ok(guard) => guard,
+            Err(poisoned) => {
+                log::warn!("Progress display lock was poisoned, recovering");
+                poisoned.into_inner()
+            }
+        };
         inner.overall_bar.finish_and_clear();
         inner.pass_bar.finish_and_clear();
         if let Some(ref bar) = inner.verify_bar {

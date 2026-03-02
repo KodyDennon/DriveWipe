@@ -55,7 +55,13 @@ impl Verifier for PatternVerifier {
 
             // Fill expected buffer with the pattern
             {
-                let mut pattern = self.pattern.lock().unwrap();
+                let mut pattern = match self.pattern.lock() {
+                    Ok(guard) => guard,
+                    Err(poisoned) => {
+                        log::warn!("Pattern lock was poisoned, recovering");
+                        poisoned.into_inner()
+                    }
+                };
                 pattern.fill(expected_slice);
             }
 

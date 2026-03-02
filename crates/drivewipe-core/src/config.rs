@@ -86,7 +86,12 @@ fn default_state_save_interval() -> u64 {
 /// `~/.local/share/drivewipe/sessions/`
 fn default_sessions_dir() -> PathBuf {
     dirs::data_local_dir()
-        .unwrap_or_else(|| PathBuf::from("."))
+        .unwrap_or_else(|| {
+            log::warn!(
+                "Could not determine local data directory, falling back to /tmp/drivewipe"
+            );
+            PathBuf::from("/tmp")
+        })
         .join("drivewipe")
         .join("sessions")
 }
@@ -114,7 +119,10 @@ impl DriveWipeConfig {
     /// `~/.config/drivewipe/config.toml`
     pub fn config_path() -> PathBuf {
         dirs::config_dir()
-            .unwrap_or_else(|| PathBuf::from(".config"))
+            .unwrap_or_else(|| {
+                log::warn!("Could not determine config directory, falling back to /tmp");
+                PathBuf::from("/tmp")
+            })
             .join("drivewipe")
             .join("config.toml")
     }

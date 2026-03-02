@@ -211,6 +211,9 @@ impl App {
             quit_confirm: false,
         };
 
+        // Populate the drive list. Errors are logged into the TUI rather
+        // than propagated — this lets users see a helpful message on-screen
+        // instead of crashing with a raw OS error.
         app.refresh_drives();
         Ok(app)
     }
@@ -853,6 +856,15 @@ impl App {
             }
 
             let drive_info = self.drives[drive_idx].clone();
+
+            // Validate the device still exists before spawning a wipe thread.
+            if !drive_info.path.exists() {
+                self.log_push(format!(
+                    "Skipping {}: device no longer available (disconnected?)",
+                    drive_info.path.display()
+                ));
+                continue;
+            }
             let config = self.config.clone();
             let auto_report_json = config.auto_report_json;
             let sessions_dir = config.sessions_dir().clone();

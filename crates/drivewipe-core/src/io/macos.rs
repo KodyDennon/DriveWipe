@@ -9,6 +9,7 @@ use std::io::{Seek, SeekFrom};
 use std::os::unix::fs::FileExt;
 use std::os::unix::io::AsRawFd;
 use std::path::Path;
+use std::process::Command;
 
 use super::RawDeviceIo;
 use crate::error::{DriveWipeError, Result};
@@ -50,6 +51,10 @@ impl MacosDeviceIo {
             )));
         }
 
+        // Unmount all volumes on the disk before opening for raw I/O.
+        // macOS will return EBUSY if any partition is still mounted.
+        unmount_disk(path)?;
+
         // Open directly — handle NotFound in the error rather than a separate
         // exists() check (eliminates TOCTOU race).
         let mut file = OpenOptions::new()
@@ -58,9 +63,23 @@ impl MacosDeviceIo {
             .open(path)
             .map_err(|e| match e.kind() {
                 std::io::ErrorKind::NotFound => DriveWipeError::DeviceNotFound(path.to_path_buf()),
-                _ => DriveWipeError::Io {
-                    path: path.to_path_buf(),
-                    source: e,
+                std::io::ErrorKind::PermissionDenied => DriveWipeError::DeviceError(format!(
+                    "Permission denied opening {}. Try running with: sudo",
+                    path.display()
+                )),
+                _ => match e.raw_os_error() {
+                    Some(libc::EBUSY) => DriveWipeError::DeviceError(format!(
+                        "{} is still busy after unmount attempt. Close all programs using it.",
+                        path.display()
+                    )),
+                    Some(libc::ENXIO) => DriveWipeError::DeviceError(format!(
+                        "{} is not configured (device may be disconnected or locked)",
+                        path.display()
+                    )),
+                    _ => DriveWipeError::Io {
+                        path: path.to_path_buf(),
+                        source: e,
+                    },
                 },
             })?;
 
@@ -137,4 +156,44 @@ impl RawDeviceIo for MacosDeviceIo {
     fn sync(&mut self) -> Result<()> {
         self.file.sync_all().map_err(DriveWipeError::IoGeneric)
     }
+}
+
+/// Unmount all volumes on a disk so it can be opened for raw I/O.
+///
+/// Converts `/dev/rdiskN` → `diskN` and runs `diskutil unmountDisk diskN`.
+/// This is required on macOS because the OS returns `EBUSY` when opening a
+/// device that has mounted partitions.
+fn unmount_disk(path: &Path) -> Result<()> {
+    // Extract the disk identifier: /dev/rdisk12 → disk12, /dev/disk12 → disk12
+    let name = path
+        .file_name()
+        .and_then(|n| n.to_str())
+        .ok_or_else(|| {
+            DriveWipeError::DeviceError(format!("Invalid device path: {}", path.display()))
+        })?;
+
+    let disk_id = name.strip_prefix('r').unwrap_or(name);
+
+    log::info!("Unmounting all volumes on {} before opening for raw I/O", disk_id);
+
+    let output = Command::new("diskutil")
+        .args(["unmountDisk", disk_id])
+        .output()
+        .map_err(|e| DriveWipeError::DeviceError(format!(
+            "Failed to run diskutil unmountDisk {}: {}", disk_id, e
+        )))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        // Don't fail if the disk has no mounted volumes — that's fine.
+        if !stderr.contains("was already not mounted")
+            && !stderr.contains("not find disk")
+        {
+            log::warn!("diskutil unmountDisk {} failed: {}", disk_id, stderr.trim());
+        }
+    } else {
+        log::info!("Successfully unmounted {}", disk_id);
+    }
+
+    Ok(())
 }

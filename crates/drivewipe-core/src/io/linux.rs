@@ -8,6 +8,7 @@ use std::io::{Seek, SeekFrom};
 use std::os::unix::fs::{FileExt, OpenOptionsExt};
 use std::os::unix::io::AsRawFd;
 use std::path::Path;
+use std::process::Command;
 
 use super::RawDeviceIo;
 use crate::error::{DriveWipeError, Result};
@@ -65,6 +66,9 @@ impl LinuxDeviceIo {
                 });
             }
         }
+
+        // Unmount all partitions of this device before opening for raw I/O.
+        unmount_device(path);
 
         // Open with O_NOFOLLOW to prevent symlink attacks (TOCTOU mitigation).
         let mut file = OpenOptions::new()
@@ -147,5 +151,54 @@ impl RawDeviceIo for LinuxDeviceIo {
 
     fn sync(&mut self) -> Result<()> {
         self.file.sync_all().map_err(DriveWipeError::IoGeneric)
+    }
+}
+
+/// Unmount all mounted partitions of a block device before opening for raw I/O.
+///
+/// Reads `/proc/mounts` to find partitions belonging to the device (e.g.
+/// `/dev/sda1`, `/dev/sda2` for `/dev/sda`) and unmounts each one.
+fn unmount_device(path: &Path) {
+    let dev_name = match path.file_name().and_then(|n| n.to_str()) {
+        Some(name) => name.to_string(),
+        None => return,
+    };
+
+    let mounts = match std::fs::read_to_string("/proc/mounts") {
+        Ok(m) => m,
+        Err(e) => {
+            log::warn!("Failed to read /proc/mounts for unmount check: {}", e);
+            return;
+        }
+    };
+
+    // Find all mount entries whose device starts with our base device name
+    // (e.g. /dev/sda matches /dev/sda1, /dev/sda2, etc.)
+    for line in mounts.lines() {
+        let mut parts = line.split_whitespace();
+        let Some(mount_dev) = parts.next() else {
+            continue;
+        };
+        let Some(mount_point) = parts.next() else {
+            continue;
+        };
+
+        // Check if this mount is a partition of our device.
+        if mount_dev.starts_with(&format!("/dev/{dev_name}")) {
+            log::info!("Unmounting {} (mounted at {})", mount_dev, mount_point);
+            let result = Command::new("umount").arg(mount_point).output();
+            match result {
+                Ok(output) if output.status.success() => {
+                    log::info!("Successfully unmounted {}", mount_point);
+                }
+                Ok(output) => {
+                    let stderr = String::from_utf8_lossy(&output.stderr);
+                    log::warn!("Failed to unmount {}: {}", mount_point, stderr.trim());
+                }
+                Err(e) => {
+                    log::warn!("Failed to run umount {}: {}", mount_point, e);
+                }
+            }
+        }
     }
 }
