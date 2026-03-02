@@ -858,6 +858,9 @@ impl App {
             let drive_info = self.drives[drive_idx].clone();
 
             // Validate the device still exists before spawning a wipe thread.
+            // On Windows, device paths like \\.\PhysicalDrive0 don't support .exists()
+            // so we skip this check and let the device open operation fail if needed.
+            #[cfg(not(target_os = "windows"))]
             if !drive_info.path.exists() {
                 self.log_push(format!(
                     "Skipping {}: device no longer available (disconnected?)",
