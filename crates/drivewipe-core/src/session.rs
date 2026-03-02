@@ -241,6 +241,11 @@ impl WipeSession {
         log::debug!("[SESSION] Starting software method pass loop");
         log::debug!("[SESSION] Start pass: {}, Total passes: {}", start_pass_1indexed, total_passes);
 
+        // Allocate a page-aligned write buffer once for all passes (O_DIRECT / F_NOCACHE compatibility).
+        log::debug!("[SESSION] Allocating aligned buffer");
+        let mut buffer = allocate_aligned_buffer(DEFAULT_BLOCK_SIZE, 4096);
+        log::debug!("[SESSION] Buffer allocated");
+
         // Iterate passes: pass_1idx is 1-indexed, pass_0idx is 0-indexed.
         for pass_1idx in start_pass_1indexed..=total_passes {
             log::debug!("[SESSION] === STARTING PASS {} of {} ===", pass_1idx, total_passes);
@@ -257,10 +262,6 @@ impl WipeSession {
                 pass_name: pattern_name.clone(),
             });
 
-            // Allocate a page-aligned write buffer for O_DIRECT / F_NOCACHE.
-            log::debug!("[SESSION] Allocating aligned buffer");
-            let mut buffer = allocate_aligned_buffer(DEFAULT_BLOCK_SIZE, 4096);
-            log::debug!("[SESSION] Buffer allocated");
             let mut bytes_written_this_pass: u64 = if pass_1idx == start_pass_1indexed {
                 start_offset
             } else {
@@ -268,6 +269,7 @@ impl WipeSession {
             };
 
             let mut last_state_save = Instant::now();
+            let mut last_progress_update = Instant::now();
             let mut throughput_timer = Instant::now();
             let mut throughput_bytes: u64 = 0;
 
@@ -378,14 +380,18 @@ impl WipeSession {
                     0.0
                 };
 
-                // Send BlockWritten event
-                let _ = progress_tx.send(ProgressEvent::BlockWritten {
-                    session_id,
-                    pass_number: pass_1idx,
-                    bytes_written: bytes_written_this_pass,
-                    total_bytes,
-                    throughput_bps,
-                });
+                // Send BlockWritten event only every 250ms to avoid channel saturation
+                let elapsed_progress = last_progress_update.elapsed().as_secs_f64();
+                if elapsed_progress >= 0.25 {
+                    let _ = progress_tx.send(ProgressEvent::BlockWritten {
+                        session_id,
+                        pass_number: pass_1idx,
+                        bytes_written: bytes_written_this_pass,
+                        total_bytes,
+                        throughput_bps,
+                    });
+                    last_progress_update = Instant::now();
+                }
 
                 // Reset throughput counter periodically
                 if elapsed_throughput >= 1.0 {
@@ -430,6 +436,12 @@ impl WipeSession {
                 duration_secs: pass_duration,
                 throughput_mbps,
             });
+
+            // Flush device cache after each pass for durability
+            log::debug!("[SESSION] Syncing device after pass {}", pass_1idx);
+            if let Err(e) = device.sync() {
+                log::warn!("[SESSION] Failed to sync device after pass {}: {:?}", pass_1idx, e);
+            }
 
             pass_results.push(PassResult {
                 pass_number: pass_1idx,

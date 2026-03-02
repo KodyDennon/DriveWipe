@@ -20,7 +20,8 @@
       "WebSearch",
       "Bash(echo:*)",
       "Bash(git checkout:*)",
-      "Bash(perl -i -pe:*)"
+      "Bash(perl -i -pe:*)",
+      "Bash(cargo check:*)"
     ]
   }
 }

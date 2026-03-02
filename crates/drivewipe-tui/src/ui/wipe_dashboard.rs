@@ -94,11 +94,14 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
         .split(main_chunks[2]);
 
     draw_system_stats(frame, bottom_chunks[0], &sorted_progress);
+
+    let history_vec: Vec<f64> = app.wipe_progress.values()
+        .find(|p| p.outcome.is_none())
+        .map(|p| p.throughput_history.iter().copied().collect())
+        .unwrap_or_default();
+
     throughput_sparkline::draw(frame, bottom_chunks[1],
-        &app.wipe_progress.values()
-            .find(|p| p.outcome.is_none())
-            .map(|p| p.throughput_history.clone())
-            .unwrap_or_default(),
+        &history_vec,
         app.wipe_progress.values()
             .filter(|p| p.outcome.is_none())
             .map(|p| p.throughput_bps)

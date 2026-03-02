@@ -93,9 +93,13 @@ impl PatternGenerator for RepeatingPattern {
             return;
         }
         let pattern = &self.0;
-        let pat_len = pattern.len();
-        for (i, byte) in buf.iter_mut().enumerate() {
-            *byte = pattern[i % pat_len];
+
+        // Use efficient chunk copying instead of modulo for each byte
+        let mut remaining = buf;
+        while !remaining.is_empty() {
+            let chunk_len = remaining.len().min(pattern.len());
+            remaining[..chunk_len].copy_from_slice(&pattern[..chunk_len]);
+            remaining = &mut remaining[chunk_len..];
         }
     }
 

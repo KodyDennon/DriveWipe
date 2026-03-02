@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::io;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -51,7 +51,7 @@ pub struct WipeProgress {
     pub throughput_bps: f64,
     pub outcome: Option<WipeOutcome>,
     /// Last 60 throughput samples for the sparkline widget.
-    pub throughput_history: Vec<f64>,
+    pub throughput_history: VecDeque<f64>,
     /// Whether we are in verification phase.
     pub verifying: bool,
     pub verify_bytes: u64,
@@ -84,7 +84,7 @@ impl WipeProgress {
             total_bytes,
             throughput_bps: 0.0,
             outcome: None,
-            throughput_history: Vec::with_capacity(60),
+            throughput_history: VecDeque::with_capacity(60),
             verifying: false,
             verify_bytes: 0,
             verify_total: total_bytes,
@@ -130,9 +130,9 @@ impl WipeProgress {
     /// Push a throughput sample, keeping only the last 60.
     pub fn push_throughput(&mut self, bps: f64) {
         if self.throughput_history.len() >= 60 {
-            self.throughput_history.remove(0);
+            self.throughput_history.pop_front();
         }
-        self.throughput_history.push(bps);
+        self.throughput_history.push_back(bps);
     }
 }
 

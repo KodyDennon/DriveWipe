@@ -23,11 +23,12 @@ pub mod windows;
 
 // ── Constants ───────────────────────────────────────────────────────────────
 
-/// Default I/O block size used by the wipe engine (1 MiB).
+/// Default I/O block size used by the wipe engine (4 MiB).
 ///
+/// Larger buffers improve throughput on modern drives with large write caches.
 /// This strikes a good balance between throughput and memory usage for
 /// sequential overwrites of block devices.
-pub const DEFAULT_BLOCK_SIZE: usize = 1024 * 1024;
+pub const DEFAULT_BLOCK_SIZE: usize = 4 * 1024 * 1024;
 
 // ── Trait ────────────────────────────────────────────────────────────────────
 

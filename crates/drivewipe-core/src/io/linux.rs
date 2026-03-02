@@ -1,7 +1,7 @@
-//! Linux raw device I/O using `O_DIRECT | O_SYNC`.
+//! Linux raw device I/O using `O_DIRECT`.
 //!
 //! Opens block devices with direct I/O so that every write bypasses the kernel
-//! page cache and is committed synchronously to the storage medium.
+//! page cache. Manual sync via `sync()` ensures data is committed to storage.
 
 use std::fs::{File, OpenOptions};
 use std::io::{Seek, SeekFrom};
@@ -15,14 +15,13 @@ use crate::error::{DriveWipeError, Result};
 
 /// Raw device I/O handle for Linux block devices.
 ///
-/// The underlying file descriptor is opened with `O_RDWR | O_DIRECT | O_SYNC`
+/// The underlying file descriptor is opened with `O_RDWR | O_DIRECT`
 /// so that:
 ///
 /// - `O_DIRECT` bypasses the kernel page cache, ensuring data goes straight to
-///   the device's write-back buffer (or directly to platters/flash with
-///   `O_SYNC`).
-/// - `O_SYNC` forces the device to flush its internal write cache on every
-///   write, guaranteeing durability.
+///   the device's write-back buffer.
+/// - Manual `sync()` after each pass flushes the device's internal write cache,
+///   guaranteeing durability without the performance penalty of syncing every write.
 ///
 /// Callers must ensure that I/O buffers are aligned to the device's logical
 /// block size (typically 512 bytes) when using `O_DIRECT`.
@@ -74,7 +73,7 @@ impl LinuxDeviceIo {
         let mut file = OpenOptions::new()
             .read(true)
             .write(true)
-            .custom_flags(libc::O_DIRECT | libc::O_SYNC | libc::O_NOFOLLOW)
+            .custom_flags(libc::O_DIRECT | libc::O_NOFOLLOW)
             .open(path)
             .map_err(|e| match e.kind() {
                 std::io::ErrorKind::NotFound => DriveWipeError::DeviceNotFound(path.to_path_buf()),
