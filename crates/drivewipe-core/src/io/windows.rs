@@ -114,22 +114,19 @@ impl WindowsDeviceIo {
         eprintln!("[WINDOWS] Privileges enabled successfully");
         write_debug("Privileges enabled successfully");
 
-        // Dismount all volumes on this physical drive before opening.
-        // Windows will block raw writes to a drive with mounted volumes.
-        log::debug!("Dismounting volumes on {}", path.display());
-        eprintln!("[WINDOWS] Dismounting volumes...");
-        write_debug("Starting dismount...");
+        // NOTE: On Windows, unlike macOS/Linux, volume dismount is NOT required for
+        // raw disk access. In fact, dismounting may CAUSE access denied errors.
+        // Windows allows raw physical disk writes even with mounted volumes, as long
+        // as you have the proper privileges and access rights.
+        eprintln!("[WINDOWS] Skipping volume dismount (not required on Windows)");
+        write_debug("Skipping volume dismount (not required on Windows)");
 
-        dismount_volumes(&path_str);
+        // Commented out - only needed on macOS/Linux:
+        // dismount_volumes(&path_str);
 
-        write_debug("Dismount complete");
-        log::debug!("Dismount complete for {}", path.display());
-        eprintln!("[WINDOWS] Dismount complete");
-
-        // Give Windows a moment to release locks after dismount.
-        // This is critical on Windows 10/11 where volume locks can persist briefly.
-        std::thread::sleep(std::time::Duration::from_millis(500));
-        write_debug("Waited 500ms after dismount for Windows to release locks");
+        // Give Windows a moment to stabilize after privilege changes.
+        std::thread::sleep(std::time::Duration::from_millis(100));
+        write_debug("Waited 100ms after privilege elevation");
 
         // Open the physical drive with direct, write-through access.
         log::debug!("Calling CreateFileW for {}", path.display());
@@ -278,31 +275,8 @@ impl WindowsDeviceIo {
             }
         };
 
-        // CRITICAL: Lock the physical drive itself to prevent any access by other processes.
-        // This is required on Windows 10/11 before writing to the raw device.
-        const FSCTL_LOCK_VOLUME: u32 = 0x00090018;
-        eprintln!("[WINDOWS] Locking physical drive...");
-        write_debug("Locking physical drive with FSCTL_LOCK_VOLUME...");
-
-        let lock_result = unsafe {
-            DeviceIoControl(
-                handle,
-                FSCTL_LOCK_VOLUME,
-                None, 0, None, 0, None, None,
-            )
-        };
-
-        if lock_result.is_err() {
-            let err_code = lock_result.unwrap_err().code().0;
-            let err_msg = format!("FSCTL_LOCK_VOLUME on physical drive FAILED: error code {}", err_code);
-            eprintln!("[WINDOWS WARNING] {}", err_msg);
-            write_debug(&err_msg);
-            log::warn!("Failed to lock physical drive {}: error {} - continuing anyway", path.display(), err_code);
-            // Don't fail here - some drives may not support locking, try to continue
-        } else {
-            eprintln!("[WINDOWS] Physical drive locked successfully");
-            write_debug("Physical drive locked successfully");
-        }
+        // NOTE: FSCTL_LOCK_VOLUME only works on VOLUME handles (\\.\C:), not on
+        // physical drive handles (\\.\PhysicalDrive0). We don't need to lock.
 
         write_debug(&format!("========== DEVICE OPENED SUCCESSFULLY =========="));
         write_debug(&format!("Handle: valid, Capacity: {} bytes, Block size: {} bytes", capacity, block_size));
@@ -469,15 +443,30 @@ impl RawDeviceIo for WindowsDeviceIo {
 fn dismount_volumes(drive_path: &str) {
     use crate::drive::info::extract_windows_drive_number;
 
+    let debug_log = std::env::temp_dir().join("drivewipe_debug.log");
+    let write_debug = |msg: &str| {
+        if let Ok(mut f) = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&debug_log)
+        {
+            use std::io::Write;
+            let _ = writeln!(f, "{}", msg);
+        }
+    };
+
     log::info!("Dismounting volumes for {}", drive_path);
+    write_debug(&format!("=== DISMOUNT_VOLUMES START for {} ===", drive_path));
 
     // Extract the target drive number (e.g. 2 from \\.\PhysicalDrive2).
     let Some(target_num) = extract_windows_drive_number(drive_path) else {
         log::warn!("Could not extract drive number from {}", drive_path);
+        write_debug(&format!("ERROR: Could not extract drive number from {}", drive_path));
         return;
     };
 
     log::debug!("Target drive number: {}", target_num);
+    write_debug(&format!("Target drive number: {}", target_num));
 
     // IOCTL_VOLUME_GET_VOLUME_DISK_EXTENTS
     const IOCTL_VOLUME_GET_VOLUME_DISK_EXTENTS: u32 = 0x00560000;
@@ -499,6 +488,8 @@ fn dismount_volumes(drive_path: &str) {
         NumberOfDiskExtents: u32,
         Extents: [DiskExtent; 1],
     }
+
+    let mut dismounted_volumes = Vec::new();
 
     for letter in b'A'..=b'Z' {
         let vol_path = format!("\\\\.\\{}:", letter as char);
@@ -540,12 +531,14 @@ fn dismount_volumes(drive_path: &str) {
             continue;
         }
 
-        if extents.Extents[0].DiskNumber != target_num {
+        let disk_num = extents.Extents[0].DiskNumber;
+        if disk_num != target_num {
             unsafe { let _ = CloseHandle(handle); }
             continue;
         }
 
         // This volume is on our target drive — lock and dismount it.
+        write_debug(&format!("Found volume {}:  on PhysicalDrive{}", letter as char, disk_num));
         log::info!("Dismounting volume {}:", letter as char);
 
         // Re-open with write access for lock/dismount using ZERO sharing.
@@ -578,7 +571,12 @@ fn dismount_volumes(drive_path: &str) {
             )
         };
         if lock_ok.is_err() {
-            log::warn!("Failed to lock volume {}:", letter as char);
+            let err = lock_ok.unwrap_err();
+            let msg = format!("Failed to lock volume {}: error code {}", letter as char, err.code().0);
+            write_debug(&msg);
+            log::warn!("{}", msg);
+        } else {
+            write_debug(&format!("Locked volume {}:", letter as char));
         }
 
         // Dismount the volume.
@@ -590,10 +588,16 @@ fn dismount_volumes(drive_path: &str) {
             )
         };
         if dismount_ok.is_err() {
-            log::warn!("Failed to dismount volume {}:", letter as char);
+            let err = dismount_ok.unwrap_err();
+            let msg = format!("Failed to dismount volume {}: error code {}", letter as char, err.code().0);
+            write_debug(&msg);
+            log::warn!("{}", msg);
             unsafe { let _ = CloseHandle(handle); }
         } else {
-            log::info!("Successfully dismounted volume {}:", letter as char);
+            let msg = format!("Successfully dismounted volume {}:", letter as char);
+            write_debug(&msg);
+            log::info!("{}", msg);
+            dismounted_volumes.push(letter as char);
             // IMPORTANT: Close the volume handle after dismount.
             // Keeping it open can cause ERROR_ACCESS_DENIED when writing to the
             // physical drive, especially on Windows 11. The volume will stay
@@ -601,6 +605,13 @@ fn dismount_volumes(drive_path: &str) {
             unsafe { let _ = CloseHandle(handle); }
         }
     }
+
+    if dismounted_volumes.is_empty() {
+        write_debug("WARNING: No volumes were dismounted!");
+    } else {
+        write_debug(&format!("Dismounted volumes: {:?}", dismounted_volumes));
+    }
+    write_debug("=== DISMOUNT_VOLUMES END ===");
 }
 
 #[cfg(target_os = "windows")]
