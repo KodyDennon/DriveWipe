@@ -372,17 +372,17 @@ impl WipeSession {
                     }
                 }
 
-                // Calculate throughput
-                let elapsed_throughput = throughput_timer.elapsed().as_secs_f64();
-                let throughput_bps = if elapsed_throughput > 0.0 {
-                    throughput_bytes as f64 / elapsed_throughput
-                } else {
-                    0.0
-                };
-
-                // Send BlockWritten event only every 250ms to avoid channel saturation
+                // Send BlockWritten event only every 500ms to avoid channel saturation
+                // Calculate throughput over longer windows for stability
                 let elapsed_progress = last_progress_update.elapsed().as_secs_f64();
-                if elapsed_progress >= 0.25 {
+                if elapsed_progress >= 0.5 {
+                    let elapsed_throughput = throughput_timer.elapsed().as_secs_f64();
+                    let throughput_bps = if elapsed_throughput > 0.1 {
+                        throughput_bytes as f64 / elapsed_throughput
+                    } else {
+                        0.0
+                    };
+
                     let _ = progress_tx.send(ProgressEvent::BlockWritten {
                         session_id,
                         pass_number: pass_1idx,
@@ -391,12 +391,13 @@ impl WipeSession {
                         throughput_bps,
                     });
                     last_progress_update = Instant::now();
-                }
 
-                // Reset throughput counter periodically
-                if elapsed_throughput >= 1.0 {
-                    throughput_timer = Instant::now();
-                    throughput_bytes = 0;
+                    // Reset throughput measurement window after reporting
+                    // Use a 2-second window for smoother readings
+                    if elapsed_throughput >= 2.0 {
+                        throughput_timer = Instant::now();
+                        throughput_bytes = 0;
+                    }
                 }
 
                 // Periodically save state

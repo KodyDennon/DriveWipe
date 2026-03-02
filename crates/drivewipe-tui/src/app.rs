@@ -702,9 +702,20 @@ impl App {
             } => {
                 if let Some(p) = self.wipe_progress.get_mut(&sid) {
                     p.bytes_written = bytes_written;
-                    p.throughput_bps = throughput_bps;
                     p.current_pass = pass_number;
-                    p.push_throughput(throughput_bps);
+
+                    // Apply exponential smoothing to reduce throughput fluctuations
+                    // alpha=0.3 balances responsiveness with stability
+                    const SMOOTHING_FACTOR: f64 = 0.3;
+                    if p.throughput_bps == 0.0 {
+                        // First sample, use raw value
+                        p.throughput_bps = throughput_bps;
+                    } else {
+                        // Exponential moving average: new = alpha * raw + (1-alpha) * old
+                        p.throughput_bps = SMOOTHING_FACTOR * throughput_bps
+                            + (1.0 - SMOOTHING_FACTOR) * p.throughput_bps;
+                    }
+                    p.push_throughput(p.throughput_bps);
 
                     // Update advanced stats for modern UI
                     p.current_sector = bytes_written / 512; // Assume 512-byte sectors
