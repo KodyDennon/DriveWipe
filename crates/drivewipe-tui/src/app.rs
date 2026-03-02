@@ -895,28 +895,48 @@ impl App {
                 "Starting wipe on {device_display} with method {method}"
             ));
 
-            // Log debug file location on Windows
-            #[cfg(target_os = "windows")]
-            {
-                let debug_log = std::env::temp_dir().join("drivewipe_debug.log");
-                self.log_push(format!(
-                    "Debug log: {}",
-                    debug_log.display()
-                ));
-            }
+            // Log debug file locations
+            let io_debug_log = std::env::temp_dir().join("drivewipe_debug.log");
+            let thread_debug_log = std::env::temp_dir().join("drivewipe_thread_debug.log");
+            self.log_push(format!(
+                "I/O log: {}",
+                io_debug_log.display()
+            ));
+            self.log_push(format!(
+                "Thread log: {}",
+                thread_debug_log.display()
+            ));
 
             std::thread::spawn(move || {
+                let debug_log = std::env::temp_dir().join("drivewipe_thread_debug.log");
+                let write_debug = |msg: &str| {
+                    let _ = std::fs::OpenOptions::new()
+                        .create(true)
+                        .append(true)
+                        .open(&debug_log)
+                        .and_then(|mut f| {
+                            use std::io::Write;
+                            writeln!(f, "{}", msg)
+                        });
+                };
+
+                write_debug("=== WIPE THREAD STARTED ===");
+                write_debug(&format!("Device: {}", drive_info.path.display()));
+                write_debug(&format!("Method: {}", method));
                 // Build a fresh registry that contains ALL methods (software +
                 // firmware). We then find our method by id and consume the
                 // registry to extract the owned Box<dyn WipeMethod>.
+                write_debug("Building method registry...");
                 let registry = WipeMethodRegistry::new();
                 if registry.get(&method).is_none() {
+                    write_debug(&format!("ERROR: Method not found: {}", method));
                     let _ = progress_tx.send(ProgressEvent::Error {
                         session_id: Uuid::new_v4(),
                         message: format!("Method not found for session: {method}"),
                     });
                     return;
                 }
+                write_debug("Method found in registry");
 
                 // Re-create owned method instances. Try software first, then firmware.
                 let all_software = drivewipe_core::wipe::software::all_software_methods();
@@ -954,9 +974,12 @@ impl App {
                     }
                 };
 
+                write_debug("Boxed method created");
                 let session = WipeSession::new(drive_info.clone(), boxed_method, config);
+                write_debug(&format!("Session created, ID: {}", session.session_id));
 
                 // Open the device for raw I/O.
+                write_debug("Opening device for I/O...");
                 #[cfg(target_os = "linux")]
                 let device_result = {
                     use drivewipe_core::io::linux::LinuxDeviceIo;
@@ -974,9 +997,13 @@ impl App {
                 };
 
                 let mut device = match device_result {
-                    Ok(d) => d,
+                    Ok(d) => {
+                        write_debug("Device opened SUCCESSFULLY");
+                        d
+                    }
                     Err(e) => {
                         let err_msg = format!("Failed to open {}: {}", drive_info.path.display(), e);
+                        write_debug(&format!("Device open FAILED: {}", err_msg));
                         eprintln!("DEVICE OPEN ERROR: {}", err_msg);  // Also print to stderr for debugging
                         let _ = progress_tx.send(ProgressEvent::Error {
                             session_id: session.session_id,
@@ -994,8 +1021,10 @@ impl App {
                 // Use the global cancellation token directly — no need for a
                 // watcher thread that polls and leaks.
 
+                write_debug("Calling session.execute()...");
                 match session.execute(&mut device, &progress_tx, &cancel_token, None) {
                     Ok(result) => {
+                        write_debug(&format!("session.execute() returned OK, outcome: {}", result.outcome));
                         // Completion event already sent by the session.
                         // Auto-generate JSON report in the thread while we
                         // have access to the WipeResult.
@@ -1023,6 +1052,7 @@ impl App {
                         }
                     }
                     Err(e) => {
+                        write_debug(&format!("session.execute() returned ERROR: {}", e));
                         let _ = progress_tx.send(ProgressEvent::Error {
                             session_id: session.session_id,
                             message: format!("Wipe failed: {e}"),
@@ -1034,6 +1064,7 @@ impl App {
                         });
                     }
                 }
+                write_debug("=== WIPE THREAD ENDING ===");
             });
         }
     }
