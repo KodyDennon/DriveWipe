@@ -170,6 +170,34 @@ impl WindowsDeviceIo {
             return Err(DriveWipeError::DeviceNotFound(path.to_path_buf()));
         }
 
+        // CRITICAL: Send FSCTL_ALLOW_EXTENDED_DASD_IO to allow writes to the entire
+        // physical disk. Without this, Windows will deny write operations even when
+        // running as Administrator, especially on Windows 10/11.
+        log::debug!("Sending FSCTL_ALLOW_EXTENDED_DASD_IO for {}", path.display());
+        eprintln!("[WINDOWS] Sending FSCTL_ALLOW_EXTENDED_DASD_IO...");
+        write_debug("Sending FSCTL_ALLOW_EXTENDED_DASD_IO to enable raw disk writes...");
+
+        const FSCTL_ALLOW_EXTENDED_DASD_IO: u32 = 0x0007405C;
+        let dasd_result = unsafe {
+            DeviceIoControl(
+                handle,
+                FSCTL_ALLOW_EXTENDED_DASD_IO,
+                None, 0, None, 0, None, None,
+            )
+        };
+
+        if dasd_result.is_err() {
+            let err_code = dasd_result.unwrap_err().code().0;
+            let err_msg = format!("FSCTL_ALLOW_EXTENDED_DASD_IO FAILED: error code {}", err_code);
+            eprintln!("[WINDOWS ERROR] {}", err_msg);
+            write_debug(&err_msg);
+            log::warn!("FSCTL_ALLOW_EXTENDED_DASD_IO failed for {}: error {}", path.display(), err_code);
+            // Don't fail here - try to continue anyway
+        } else {
+            eprintln!("[WINDOWS] FSCTL_ALLOW_EXTENDED_DASD_IO SUCCESS");
+            write_debug("FSCTL_ALLOW_EXTENDED_DASD_IO SUCCESS - raw disk writes enabled");
+        }
+
         // Query capacity via IOCTL_DISK_GET_LENGTH_INFO.
         log::debug!("Querying capacity for {}", path.display());
         eprintln!("[WINDOWS] Querying capacity...");
@@ -275,7 +303,10 @@ impl RawDeviceIo for WindowsDeviceIo {
             )
         }
         .map_err(|e| {
-            DriveWipeError::IoGeneric(std::io::Error::from_raw_os_error(e.code().0 as i32))
+            let err_code = e.code().0;
+            eprintln!("[WINDOWS WRITE ERROR] WriteFile failed at offset {}: error code {} ({})",
+                offset, err_code, e);
+            DriveWipeError::IoGeneric(std::io::Error::from_raw_os_error(err_code as i32))
         })?;
 
         Ok(bytes_written as usize)
@@ -479,14 +510,15 @@ fn dismount_volumes(drive_path: &str) {
         };
         if dismount_ok.is_err() {
             log::warn!("Failed to dismount volume {}:", letter as char);
+            unsafe { let _ = CloseHandle(handle); }
         } else {
             log::info!("Successfully dismounted volume {}:", letter as char);
+            // IMPORTANT: Close the volume handle after dismount.
+            // Keeping it open can cause ERROR_ACCESS_DENIED when writing to the
+            // physical drive, especially on Windows 11. The volume will stay
+            // dismounted for a short time which is enough for our operations.
+            unsafe { let _ = CloseHandle(handle); }
         }
-
-        // Keep the handle open — closing it would allow the OS to remount.
-        // The handle will be closed when the process exits or the drive is
-        // released. We intentionally leak it here.
-        let _ = handle;
     }
 }
 
