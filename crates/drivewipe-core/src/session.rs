@@ -97,11 +97,11 @@ impl WipeSession {
         cancel_token: &CancellationToken,
         resume_state: Option<WipeState>,
     ) -> Result<WipeResult> {
-        eprintln!("[SESSION] Execute called for {}", self.drive_info.path.display());
+        log::debug!("[SESSION] Execute called for {}", self.drive_info.path.display());
         let total_bytes = self.drive_info.capacity;
         let total_passes = self.method.pass_count();
         let session_start = Instant::now();
-        eprintln!("[SESSION] Capacity: {} bytes, Passes: {}", total_bytes, total_passes);
+        log::debug!("[SESSION] Capacity: {} bytes, Passes: {}", total_bytes, total_passes);
 
         // When resuming, reuse the original session's UUID so that events
         // and the final WipeResult carry a consistent identity.
@@ -146,7 +146,7 @@ impl WipeSession {
         });
 
         // Send SessionStarted event
-        eprintln!("[SESSION] Sending SessionStarted event");
+        log::debug!("[SESSION] Sending SessionStarted event");
         let _ = progress_tx.send(ProgressEvent::SessionStarted {
             session_id,
             device_path: self.drive_info.path.display().to_string(),
@@ -156,16 +156,16 @@ impl WipeSession {
             total_bytes,
             total_passes,
         });
-        eprintln!("[SESSION] SessionStarted event sent");
+        log::debug!("[SESSION] SessionStarted event sent");
 
         // ── Firmware dispatch ──────────────────────────────────────────
         // Firmware methods are atomic from the host's perspective: a single
         // ioctl/admin-command triggers the drive controller's own erase
         // routine. We skip the entire software write loop and return a
         // firmware-specific WipeResult.
-        eprintln!("[SESSION] Is firmware method: {}", self.method.is_firmware());
+        log::debug!("[SESSION] Is firmware method: {}", self.method.is_firmware());
         if self.method.is_firmware() {
-            eprintln!("[SESSION] Executing firmware method");
+            log::debug!("[SESSION] Executing firmware method");
             let fw_start = Instant::now();
             let _ = progress_tx.send(ProgressEvent::FirmwareEraseStarted {
                 session_id,
@@ -238,12 +238,12 @@ impl WipeSession {
         let mut warnings: Vec<String> = Vec::new();
         let state_save_interval = self.config.state_save_interval_secs;
 
-        eprintln!("[SESSION] Starting software method pass loop");
-        eprintln!("[SESSION] Start pass: {}, Total passes: {}", start_pass_1indexed, total_passes);
+        log::debug!("[SESSION] Starting software method pass loop");
+        log::debug!("[SESSION] Start pass: {}, Total passes: {}", start_pass_1indexed, total_passes);
 
         // Iterate passes: pass_1idx is 1-indexed, pass_0idx is 0-indexed.
         for pass_1idx in start_pass_1indexed..=total_passes {
-            eprintln!("[SESSION] === STARTING PASS {} of {} ===", pass_1idx, total_passes);
+            log::debug!("[SESSION] === STARTING PASS {} of {} ===", pass_1idx, total_passes);
             let pass_0idx = pass_1idx - 1;
             let pass_start = Instant::now();
 
@@ -258,9 +258,9 @@ impl WipeSession {
             });
 
             // Allocate a page-aligned write buffer for O_DIRECT / F_NOCACHE.
-            eprintln!("[SESSION] Allocating aligned buffer");
+            log::debug!("[SESSION] Allocating aligned buffer");
             let mut buffer = allocate_aligned_buffer(DEFAULT_BLOCK_SIZE, 4096);
-            eprintln!("[SESSION] Buffer allocated");
+            log::debug!("[SESSION] Buffer allocated");
             let mut bytes_written_this_pass: u64 = if pass_1idx == start_pass_1indexed {
                 start_offset
             } else {
@@ -271,12 +271,12 @@ impl WipeSession {
             let mut throughput_timer = Instant::now();
             let mut throughput_bytes: u64 = 0;
 
-            eprintln!("[SESSION] Starting write loop, bytes to write: {}", total_bytes);
+            log::debug!("[SESSION] Starting write loop, bytes to write: {}", total_bytes);
             let mut write_count = 0;
             while bytes_written_this_pass < total_bytes {
                 write_count += 1;
                 if write_count == 1 || write_count % 1000 == 0 {
-                    eprintln!("[SESSION] Write iteration {}, bytes written: {}/{}", write_count, bytes_written_this_pass, total_bytes);
+                    log::debug!("[SESSION] Write iteration {}, bytes written: {}/{}", write_count, bytes_written_this_pass, total_bytes);
                 }
                 // Check for cancellation
                 if cancel_token.is_cancelled() {
@@ -338,19 +338,19 @@ impl WipeSession {
 
                 // Write to device at the current offset
                 if write_count == 1 {
-                    eprintln!("[SESSION] First write: offset={}, len={}", bytes_written_this_pass, write_len);
+                    log::debug!("[SESSION] First write: offset={}, len={}", bytes_written_this_pass, write_len);
                 }
                 match device.write_at(bytes_written_this_pass, write_buf) {
                     Ok(n) => {
                         if write_count == 1 {
-                            eprintln!("[SESSION] First write SUCCESS: wrote {} bytes", n);
+                            log::debug!("[SESSION] First write SUCCESS: wrote {} bytes", n);
                         }
                         bytes_written_this_pass += n as u64;
                         total_bytes_written += n as u64;
                         throughput_bytes += n as u64;
                     }
                     Err(e) => {
-                        eprintln!("[SESSION ERROR] Write FAILED at offset {}: {}", bytes_written_this_pass, e);
+                        log::debug!("[SESSION ERROR] Write FAILED at offset {}: {}", bytes_written_this_pass, e);
                         wipe_state.update_progress(
                             pass_1idx,
                             bytes_written_this_pass,

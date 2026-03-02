@@ -100,23 +100,23 @@ impl WindowsDeviceIo {
         write_debug(&format!("Debug log location: {}", debug_log.display()));
 
         log::info!("Opening Windows device: {}", path.display());
-        eprintln!("\n[WINDOWS DEBUG] Log file: {}", debug_log.display());
-        eprintln!("[WINDOWS] Opening device: {}", path.display());
+        log::debug!("\n[WINDOWS DEBUG] Log file: {}", debug_log.display());
+        log::debug!("[WINDOWS] Opening device: {}", path.display());
 
         // CRITICAL: Enable SeBackupPrivilege and SeRestorePrivilege.
         // Even when running as Administrator, these privileges are DISABLED by default.
         // Without them, CreateFileW may succeed but WriteFile will fail with ACCESS_DENIED.
-        eprintln!("[WINDOWS] Enabling SeBackupPrivilege and SeRestorePrivilege...");
+        log::debug!("[WINDOWS] Enabling SeBackupPrivilege and SeRestorePrivilege...");
         write_debug("Enabling SeBackupPrivilege and SeRestorePrivilege...");
         crate::platform::privilege::enable_raw_disk_privileges()?;
-        eprintln!("[WINDOWS] Privileges enabled successfully");
+        log::debug!("[WINDOWS] Privileges enabled successfully");
         write_debug("Privileges enabled successfully");
 
         // CRITICAL: On Windows 10/11, the disk must be OFFLINE before writing.
         // Windows monitors disk writes and blocks access when it detects partition
         // modifications, regardless of privileges. Setting the disk offline prevents
         // Windows from monitoring and blocking our writes.
-        eprintln!("[WINDOWS] Setting disk offline...");
+        log::debug!("[WINDOWS] Setting disk offline...");
         write_debug("Attempting to set disk offline via IOCTL_DISK_SET_DISK_ATTRIBUTES...");
 
         const IOCTL_DISK_SET_DISK_ATTRIBUTES: u32 = 0x0007C0F4;
@@ -175,12 +175,12 @@ impl WindowsDeviceIo {
                 unsafe { let _ = CloseHandle(h); }
 
                 if offline_result.is_ok() {
-                    eprintln!("[WINDOWS] Disk set offline successfully");
+                    log::debug!("[WINDOWS] Disk set offline successfully");
                     write_debug("Disk set offline successfully");
                 } else {
                     let err = offline_result.unwrap_err();
                     let err_msg = format!("Failed to set disk offline: error code {}", err.code().0);
-                    eprintln!("[WINDOWS WARNING] {}", err_msg);
+                    log::debug!("[WINDOWS WARNING] {}", err_msg);
                     write_debug(&err_msg);
                     write_debug("Continuing anyway - wipe may fail if disk has partitions");
                 }
@@ -193,7 +193,7 @@ impl WindowsDeviceIo {
 
         // Open the physical drive with direct, write-through access.
         log::debug!("Calling CreateFileW for {}", path.display());
-        eprintln!("[WINDOWS] Calling CreateFileW...");
+        log::debug!("[WINDOWS] Calling CreateFileW...");
         write_debug("Calling CreateFileW...");
 
         // CRITICAL: On Windows 10/11, writing to physical drives requires specific access rights.
@@ -210,7 +210,7 @@ impl WindowsDeviceIo {
         let access_rights = GENERIC_READ | GENERIC_WRITE | WRITE_DAC | READ_CONTROL | SYNCHRONIZE;
 
         write_debug(&format!("Opening with access rights: 0x{:X}", access_rights));
-        eprintln!("[WINDOWS] Opening with access rights: 0x{:X}", access_rights);
+        log::debug!("[WINDOWS] Opening with access rights: 0x{:X}", access_rights);
 
         // CRITICAL: Use ZERO sharing mode for exclusive access.
         // Even FILE_SHARE_READ allows other processes to keep handles open, which
@@ -218,7 +218,7 @@ impl WindowsDeviceIo {
         let share_mode = Default::default(); // 0 = no sharing
 
         write_debug("Opening with ZERO sharing mode (exclusive access)");
-        eprintln!("[WINDOWS] Opening with ZERO sharing mode (exclusive access)");
+        log::debug!("[WINDOWS] Opening with ZERO sharing mode (exclusive access)");
 
         let handle = unsafe {
             CreateFileW(
@@ -234,7 +234,7 @@ impl WindowsDeviceIo {
         .map_err(|e| {
             let code = e.code().0 as u32;
             let err_msg = format!("CreateFileW FAILED: error code {}", code);
-            eprintln!("[WINDOWS ERROR] {}", err_msg);
+            log::debug!("[WINDOWS ERROR] {}", err_msg);
             write_debug(&err_msg);
             write_debug(&format!("Error details: {}", e));
             log::error!("CreateFileW failed for {}: error code {}", path.display(), code);
@@ -260,7 +260,7 @@ impl WindowsDeviceIo {
             }
         })?;
 
-        eprintln!("[WINDOWS] CreateFileW SUCCESS");
+        log::debug!("[WINDOWS] CreateFileW SUCCESS");
         write_debug("CreateFileW SUCCESS");
         log::debug!("CreateFileW succeeded for {}", path.display());
 
@@ -272,7 +272,7 @@ impl WindowsDeviceIo {
 
         // Query capacity via IOCTL_DISK_GET_LENGTH_INFO.
         log::debug!("Querying capacity for {}", path.display());
-        eprintln!("[WINDOWS] Querying capacity...");
+        log::debug!("[WINDOWS] Querying capacity...");
         write_debug("Querying capacity via IOCTL_DISK_GET_LENGTH_INFO...");
 
         let capacity = {
@@ -293,7 +293,7 @@ impl WindowsDeviceIo {
             if ok.is_err() {
                 let err_code = ok.unwrap_err().code().0;
                 let err_msg = format!("IOCTL_DISK_GET_LENGTH_INFO FAILED: error code {}", err_code);
-                eprintln!("[WINDOWS ERROR] {}", err_msg);
+                log::debug!("[WINDOWS ERROR] {}", err_msg);
                 write_debug(&err_msg);
                 log::error!("IOCTL_DISK_GET_LENGTH_INFO failed for {}: error {}", path.display(), err_code);
                 unsafe {
@@ -305,7 +305,7 @@ impl WindowsDeviceIo {
                     err_code
                 )));
             }
-            eprintln!("[WINDOWS] Capacity: {} bytes", length_info);
+            log::debug!("[WINDOWS] Capacity: {} bytes", length_info);
             write_debug(&format!("Capacity SUCCESS: {} bytes", length_info));
             log::debug!("Capacity for {}: {} bytes", path.display(), length_info);
             length_info as u64
@@ -343,8 +343,8 @@ impl WindowsDeviceIo {
 
         write_debug(&format!("========== DEVICE OPENED SUCCESSFULLY =========="));
         write_debug(&format!("Handle: valid, Capacity: {} bytes, Block size: {} bytes", capacity, block_size));
-        eprintln!("[WINDOWS] Device opened successfully!");
-        eprintln!("[WINDOWS] Capacity: {} bytes, Block size: {}", capacity, block_size);
+        log::debug!("[WINDOWS] Device opened successfully!");
+        log::debug!("[WINDOWS] Capacity: {} bytes, Block size: {}", capacity, block_size);
 
         Ok(Self {
             handle,
@@ -383,7 +383,7 @@ impl RawDeviceIo for WindowsDeviceIo {
                 let _ = writeln!(f, "  Buffer address % 512 = {}", buf.as_ptr() as usize % 512);
                 let _ = writeln!(f, "  Block size: {}", self.block_size);
             }
-            eprintln!("[WINDOWS WRITE_AT] First write (SYNCHRONOUS): offset={}, size={}, block_size={}",
+            log::debug!("[WINDOWS WRITE_AT] First write (SYNCHRONOUS): offset={}, size={}, block_size={}",
                 offset, buf.len(), self.block_size);
         }
 
@@ -401,7 +401,7 @@ impl RawDeviceIo for WindowsDeviceIo {
         .map_err(|e| {
             let err_code = e.code().0;
             let err_msg = format!("SetFilePointerEx failed: error code {} (0x{:X})", err_code, err_code as u32);
-            eprintln!("[WINDOWS ERROR] {}", err_msg);
+            log::debug!("[WINDOWS ERROR] {}", err_msg);
             DriveWipeError::IoGeneric(std::io::Error::from_raw_os_error(err_code as i32))
         })?;
 
@@ -426,7 +426,7 @@ impl RawDeviceIo for WindowsDeviceIo {
                 Error: {}",
                 offset, offset, buf.len(), buf.as_ptr(), err_code, err_code as u32, e
             );
-            eprintln!("{}", err_msg);
+            log::debug!("{}", err_msg);
 
             // Also write to debug log
             let debug_log = std::env::temp_dir().join("drivewipe_debug.log");
