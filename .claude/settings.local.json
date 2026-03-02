@@ -21,7 +21,8 @@
       "Bash(echo:*)",
       "Bash(git checkout:*)",
       "Bash(perl -i -pe:*)",
-      "Bash(cargo check:*)"
+      "Bash(cargo check:*)",
+      "mcp__ide__getDiagnostics"
     ]
   }
 }
