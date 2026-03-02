@@ -126,6 +126,20 @@ pub fn enable_raw_disk_privileges() -> Result<()> {
             });
         }
 
+        // Enable SeManageVolumePrivilege (required for volume management operations)
+        let manage_vol_name: Vec<u16> = "SeManageVolumePrivilege"
+            .encode_utf16()
+            .chain(std::iter::once(0))
+            .collect();
+        let mut manage_vol_luid = LUID::default();
+        if LookupPrivilegeValueW(None, PCWSTR(manage_vol_name.as_ptr()), &mut manage_vol_luid).is_err()
+        {
+            let _ = CloseHandle(token);
+            return Err(DriveWipeError::InsufficientPrivileges {
+                message: "Failed to lookup SeManageVolumePrivilege".to_string(),
+            });
+        }
+
         // Enable SeBackupPrivilege
         let mut tp_backup = TOKEN_PRIVILEGES {
             PrivilegeCount: 1,
@@ -178,9 +192,35 @@ pub fn enable_raw_disk_privileges() -> Result<()> {
             });
         }
 
+        // Enable SeManageVolumePrivilege
+        let mut tp_manage_vol = TOKEN_PRIVILEGES {
+            PrivilegeCount: 1,
+            Privileges: [LUID_AND_ATTRIBUTES {
+                Luid: manage_vol_luid,
+                Attributes: SE_PRIVILEGE_ENABLED,
+            }],
+        };
+
+        if AdjustTokenPrivileges(
+            token,
+            false,
+            Some(&mut tp_manage_vol),
+            0,
+            None,
+            None,
+        )
+        .is_err()
+        {
+            let _ = CloseHandle(token);
+            return Err(DriveWipeError::InsufficientPrivileges {
+                message: "Failed to enable SeManageVolumePrivilege. Ensure you are running as Administrator."
+                    .to_string(),
+            });
+        }
+
         let _ = CloseHandle(token);
 
-        log::info!("Successfully enabled SeBackupPrivilege and SeRestorePrivilege");
+        log::info!("Successfully enabled SeBackupPrivilege, SeRestorePrivilege, and SeManageVolumePrivilege");
         Ok(())
     }
 }
