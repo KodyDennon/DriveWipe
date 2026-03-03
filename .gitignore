@@ -24,8 +24,7 @@ Thumbs.db
 # DriveWipe session data (local only)
 sessions/
 
-# Local release script and artifacts
-release.sh
+# Release build artifacts (script is committed, artifacts are not)
 drivewipe-v*.tar.gz
 drivewipe-v*.zip
 drivewipe-v*.sha256
