@@ -13,13 +13,13 @@ pub mod partition_screen;
 pub mod settings_screen;
 pub mod wipe_dashboard;
 
-#[cfg(feature = "live")]
+#[cfg(all(feature = "live", target_os = "linux"))]
 pub mod ata_security_screen;
-#[cfg(feature = "live")]
+#[cfg(all(feature = "live", target_os = "linux"))]
 pub mod hpa_dco_screen;
-#[cfg(feature = "live")]
+#[cfg(all(feature = "live", target_os = "linux"))]
 pub mod kernel_status_screen;
-#[cfg(feature = "live")]
+#[cfg(all(feature = "live", target_os = "linux"))]
 pub mod live_dashboard;
 
 use ratatui::prelude::*;
@@ -55,13 +55,13 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
         AppScreen::PartitionManager => partition_screen::draw(frame, app),
         AppScreen::ForensicAnalysis => forensic_screen::draw(frame, app),
         AppScreen::Settings => settings_screen::draw(frame, app),
-        #[cfg(feature = "live")]
+        #[cfg(all(feature = "live", target_os = "linux"))]
         AppScreen::LiveDashboard => live_dashboard::draw(frame, app),
-        #[cfg(feature = "live")]
+        #[cfg(all(feature = "live", target_os = "linux"))]
         AppScreen::HpaDcoManager => hpa_dco_screen::draw(frame, app),
-        #[cfg(feature = "live")]
+        #[cfg(all(feature = "live", target_os = "linux"))]
         AppScreen::AtaSecurityManager => ata_security_screen::draw(frame, app),
-        #[cfg(feature = "live")]
+        #[cfg(all(feature = "live", target_os = "linux"))]
         AppScreen::KernelModuleStatus => kernel_status_screen::draw(frame, app),
     }
 

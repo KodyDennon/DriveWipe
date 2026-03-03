@@ -79,7 +79,7 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
 
     let mut all_items: Vec<(&str, &str, &str)> = MENU_ITEMS.to_vec();
 
-    #[cfg(feature = "live")]
+    #[cfg(all(feature = "live", target_os = "linux"))]
     if app.live_mode {
         // In live mode, replace "Quit" position with live items, then add Quit at end
         all_items.extend_from_slice(LIVE_MENU_ITEMS);
@@ -109,9 +109,9 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
             };
 
             // Live-specific items get amber accent
-            #[cfg(feature = "live")]
+            #[cfg(all(feature = "live", target_os = "linux"))]
             let is_live_item = app.live_mode && i >= MENU_ITEMS.len() && i < all_items.len() - 1;
-            #[cfg(not(feature = "live"))]
+            #[cfg(not(all(feature = "live", target_os = "linux")))]
             let is_live_item = false;
 
             let key_style = if is_live_item {
@@ -278,11 +278,11 @@ fn draw_logo(frame: &mut Frame, area: Rect, app: &App) {
 
 /// Check if live mode is active.
 fn is_live_mode(_app: &App) -> bool {
-    #[cfg(feature = "live")]
+    #[cfg(all(feature = "live", target_os = "linux"))]
     {
         _app.live_mode
     }
-    #[cfg(not(feature = "live"))]
+    #[cfg(not(all(feature = "live", target_os = "linux")))]
     {
         false
     }

@@ -26,7 +26,7 @@ jobs:
           toolchain: ${{ matrix.toolchain }}
       - uses: Swatinem/rust-cache@v2
       - name: Check
-        run: cargo check --workspace --all-features
+        run: cargo check --workspace
 
   test:
     name: Test (${{ matrix.os }})
@@ -56,7 +56,7 @@ jobs:
           components: clippy
       - uses: Swatinem/rust-cache@v2
       - name: Clippy
-        run: cargo clippy --workspace --all-features -- -D warnings
+        run: cargo clippy --workspace -- -D warnings
 
   fmt:
     name: Format

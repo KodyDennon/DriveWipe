@@ -232,7 +232,7 @@ pub struct App {
     #[cfg(all(feature = "live", target_os = "linux"))]
     pub live_drive_index: usize,
     /// Live mode action confirmation state.
-    #[cfg(feature = "live")]
+    #[cfg(all(feature = "live", target_os = "linux"))]
     pub live_confirm_action: Option<String>,
 }
 

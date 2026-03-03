@@ -6,7 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
-1.1.2
+
+## [1.1.3] - 2026-03-02
+
+### Fixed
+- **Comprehensive Cross-Platform Guards** — Applied `#[cfg(all(feature = "live", target_os = "linux"))]` to all live feature usages in `app.rs`, `ui/mod.rs`, and `ui/main_menu.rs`, permanently preventing compile failures on macOS and Windows.
+- **CI Fix** — Removed `--all-features` from `ci.yml` checks and clippy so the `live` feature is never activated on non-Linux CI runners.
+
 ## [1.1.2] - 2026-03-02
 
 ### Fixed
