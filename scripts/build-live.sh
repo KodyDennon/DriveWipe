@@ -136,7 +136,6 @@ RUN apk add --no-cache \
     nvme-cli \
     smartmontools \
     hdparm \
-    sdparm \
     sg3_utils \
     lsscsi \
     e2fsprogs \

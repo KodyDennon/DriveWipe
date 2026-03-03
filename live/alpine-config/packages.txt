@@ -10,7 +10,6 @@ musl
 nvme-cli
 smartmontools
 hdparm
-sdparm
 sg3_utils
 lsscsi
 multipath-tools
