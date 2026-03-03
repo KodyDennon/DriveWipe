@@ -264,7 +264,13 @@ if [ -f "$LIVE_DIR/pxe/dnsmasq.conf" ]; then
     cp "$LIVE_DIR/pxe/dnsmasq.conf" "$PXE_DIR/"
 fi
 
-echo "  [OK] PXE artifacts: $PXE_DIR"
+# Package PXE artifacts for release
+TAG="${DRIVEWIPE_LIVE_VERSION:-latest}"
+cd "$PXE_DIR"
+tar czf "$ROOT_DIR/drivewipe-live-v${TAG}-pxe.tar.gz" .
+cd "$ROOT_DIR"
+
+echo "  [OK] PXE artifacts prepared"
 echo ""
 
 # ── Done ─────────────────────────────────────────────────────────────────────
