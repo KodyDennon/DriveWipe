@@ -14,7 +14,7 @@
 use drivewipe_core::error::{DriveWipeError, Result};
 use log;
 
-use crate::kernel_module::{set_device_path, DwHpaInfo, KernelModule};
+use crate::kernel_module::{DwHpaInfo, KernelModule, set_device_path};
 
 /// HPA detection result.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]

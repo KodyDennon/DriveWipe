@@ -244,7 +244,7 @@ mod linux_ata {
         let mut cdb = [0u8; 16];
         cdb[0] = ATA_16;
         cdb[1] = protocol; // Protocol
-                           // cdb[2]: t_length, t_dir, byte_block, ck_cond
+        // cdb[2]: t_length, t_dir, byte_block, ck_cond
         if data.is_some() {
             cdb[2] = 0x06; // t_length=SECTOR_COUNT, t_dir=TO_DEV, byte_block=BLOCKS
         }
@@ -387,12 +387,12 @@ mod windows_ata {
     use std::mem;
     use std::os::windows::ffi::OsStrExt;
 
-    use windows::core::PCWSTR;
     use windows::Win32::Foundation::{CloseHandle, HANDLE, INVALID_HANDLE_VALUE};
     use windows::Win32::Storage::FileSystem::{
         CreateFileW, FILE_SHARE_READ, FILE_SHARE_WRITE, OPEN_EXISTING,
     };
     use windows::Win32::System::IO::DeviceIoControl;
+    use windows::core::PCWSTR;
 
     /// IOCTL_ATA_PASS_THROUGH
     const IOCTL_ATA_PASS_THROUGH: u32 = 0x0004D02C;

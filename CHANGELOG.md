@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.13] - 2026-03-03
+
+### Fixed
+- **Code Style** — Applied `cargo fmt` to resolve CI formatting failures.
+- **Maintenance** — Re-synchronized workspace versions after v1.1.12 CI failure.
+
 ## [1.1.12] - 2026-03-03
 
 ### Fixed

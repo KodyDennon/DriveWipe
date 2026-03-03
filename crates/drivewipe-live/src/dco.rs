@@ -12,7 +12,7 @@
 use drivewipe_core::error::{DriveWipeError, Result};
 use log;
 
-use crate::kernel_module::{set_device_path, DwDcoInfo, KernelModule};
+use crate::kernel_module::{DwDcoInfo, KernelModule, set_device_path};
 
 /// ATA command: DEVICE CONFIGURATION (0xB1).
 const ATA_CMD_DEVICE_CONFIG: u8 = 0xB1;

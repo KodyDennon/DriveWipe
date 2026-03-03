@@ -21,7 +21,7 @@
 use drivewipe_core::error::{DriveWipeError, Result};
 use log;
 
-use crate::kernel_module::{set_device_path, DwAtaSecurityState, KernelModule};
+use crate::kernel_module::{DwAtaSecurityState, KernelModule, set_device_path};
 
 /// Detailed ATA security state for a drive.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
