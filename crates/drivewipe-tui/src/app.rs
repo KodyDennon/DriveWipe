@@ -27,6 +27,7 @@ use crate::ui;
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[allow(dead_code)]
 pub enum AppScreen {
+    MainMenu,
     DriveSelection,
     MethodSelect,
     Confirm,
@@ -34,6 +35,13 @@ pub enum AppScreen {
     Done,
     Error(String),
     Help,
+    DriveHealth,
+    HealthComparison,
+    CloneSetup,
+    CloneProgress,
+    PartitionManager,
+    ForensicAnalysis,
+    Settings,
 }
 
 // ── Per-session wipe progress ───────────────────────────────────────────────
@@ -176,6 +184,36 @@ pub struct App {
     pub log_scroll: usize,
     /// Whether we are showing a quit confirmation overlay during a wipe.
     pub quit_confirm: bool,
+    /// Index of the selected drive for health/forensic/partition screens.
+    pub focused_drive_index: Option<usize>,
+    /// Main menu cursor position.
+    pub main_menu_index: usize,
+    /// Clone source drive index.
+    pub clone_source_index: Option<usize>,
+    /// Clone target drive index.
+    pub clone_target_index: Option<usize>,
+    /// Clone mode: "block" or "partition".
+    pub clone_mode: String,
+    /// Whether keyboard lock is active.
+    pub keyboard_locked: bool,
+    /// Keyboard lock unlock sequence buffer.
+    pub keyboard_lock_buffer: Vec<char>,
+    /// Settings screen cursor position.
+    pub settings_index: usize,
+    /// Forensic scan progress percent (0..100).
+    pub forensic_progress_pct: f32,
+    /// Forensic scan result summary lines.
+    pub forensic_result_lines: Vec<String>,
+    /// Health data lines for display.
+    pub health_display_lines: Vec<String>,
+    /// Previous screen to return to (for sub-screens like health, forensic).
+    pub previous_screen: Option<Box<AppScreen>>,
+    /// Clone progress fraction (0.0..1.0).
+    pub clone_progress_fraction: f64,
+    /// Clone throughput string.
+    pub clone_throughput: String,
+    /// Partition display lines.
+    pub partition_lines: Vec<String>,
 }
 
 impl App {
@@ -198,7 +236,7 @@ impl App {
         }
 
         let mut app = Self {
-            screen: AppScreen::DriveSelection,
+            screen: AppScreen::MainMenu,
             config,
             drives: Vec::new(),
             selected_drives: Vec::new(),
@@ -219,6 +257,21 @@ impl App {
             method_assign_index: 0,
             log_scroll: 0,
             quit_confirm: false,
+            focused_drive_index: None,
+            main_menu_index: 0,
+            clone_source_index: None,
+            clone_target_index: None,
+            clone_mode: "block".to_string(),
+            keyboard_locked: false,
+            keyboard_lock_buffer: Vec::new(),
+            settings_index: 0,
+            forensic_progress_pct: 0.0,
+            forensic_result_lines: Vec::new(),
+            health_display_lines: Vec::new(),
+            previous_screen: None,
+            clone_progress_fraction: 0.0,
+            clone_throughput: String::new(),
+            partition_lines: Vec::new(),
         };
 
         // Populate the drive list. Errors are logged into the TUI rather
@@ -320,13 +373,34 @@ impl App {
     // ── Key handling dispatch ────────────────────────────────────────────
 
     fn handle_key(&mut self, key: KeyEvent) {
+        // Keyboard lock: when locked, only buffer keys for unlock sequence.
+        if self.keyboard_locked {
+            if let KeyCode::Char(c) = key.code {
+                self.keyboard_lock_buffer.push(c);
+                let unlock_seq: Vec<char> = self.config.keyboard_lock_sequence.chars().collect();
+                if self.keyboard_lock_buffer.len() > unlock_seq.len() {
+                    let start = self.keyboard_lock_buffer.len() - unlock_seq.len();
+                    if self.keyboard_lock_buffer[start..] == unlock_seq[..] {
+                        self.keyboard_locked = false;
+                        self.keyboard_lock_buffer.clear();
+                        self.log_push("Keyboard unlocked".into());
+                    }
+                }
+                // Trim buffer to prevent unbounded growth.
+                if self.keyboard_lock_buffer.len() > 100 {
+                    self.keyboard_lock_buffer.drain(0..50);
+                }
+            }
+            return;
+        }
+
         // Global quit confirmation overlay.
         if self.quit_confirm {
             match key.code {
                 KeyCode::Char('y') | KeyCode::Char('Y') => {
-                    if self.screen == AppScreen::Wiping {
+                    if self.screen == AppScreen::Wiping || self.screen == AppScreen::CloneProgress {
                         self.cancel_token.cancel();
-                        self.log_push("Cancelling active wipes...".into());
+                        self.log_push("Cancelling active operations...".into());
                     }
                     self.should_quit = true;
                 }
@@ -339,7 +413,7 @@ impl App {
 
         // Ctrl-C always triggers quit or cancel.
         if key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::Char('c') {
-            if self.screen == AppScreen::Wiping {
+            if self.screen == AppScreen::Wiping || self.screen == AppScreen::CloneProgress {
                 self.quit_confirm = true;
             } else {
                 self.should_quit = true;
@@ -347,10 +421,18 @@ impl App {
             return;
         }
 
+        // Ctrl-L toggles keyboard lock from any screen.
+        if key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::Char('l') {
+            self.keyboard_locked = true;
+            self.keyboard_lock_buffer.clear();
+            self.log_push("Keyboard locked (type unlock sequence to unlock)".into());
+            return;
+        }
+
         // '?' key shows help from any screen except Confirm input.
         if key.code == KeyCode::Char('?') && self.screen != AppScreen::Confirm {
             if self.screen == AppScreen::Help {
-                self.screen = AppScreen::DriveSelection; // toggle off
+                self.screen = AppScreen::MainMenu;
             } else {
                 self.screen = AppScreen::Help;
             }
@@ -358,6 +440,7 @@ impl App {
         }
 
         match &self.screen.clone() {
+            AppScreen::MainMenu => self.handle_main_menu_key(key),
             AppScreen::DriveSelection => self.handle_drive_selection_key(key),
             AppScreen::MethodSelect => self.handle_method_select_key(key),
             AppScreen::Confirm => self.handle_confirm_key(key),
@@ -365,6 +448,13 @@ impl App {
             AppScreen::Done => self.handle_done_key(key),
             AppScreen::Error(_) => self.handle_error_key(key),
             AppScreen::Help => self.handle_help_key(key),
+            AppScreen::DriveHealth => self.handle_health_key(key),
+            AppScreen::HealthComparison => self.handle_health_key(key),
+            AppScreen::CloneSetup => self.handle_clone_setup_key(key),
+            AppScreen::CloneProgress => self.handle_wiping_key(key),
+            AppScreen::PartitionManager => self.handle_partition_key(key),
+            AppScreen::ForensicAnalysis => self.handle_forensic_key(key),
+            AppScreen::Settings => self.handle_settings_key(key),
         }
     }
 
@@ -459,7 +549,7 @@ impl App {
                 if self.show_info_popup {
                     self.show_info_popup = false;
                 } else {
-                    self.should_quit = true;
+                    self.screen = AppScreen::MainMenu;
                 }
             }
             _ => {}
@@ -625,7 +715,7 @@ impl App {
                 self.progress_rx = Some(prx);
 
                 self.refresh_drives();
-                self.screen = AppScreen::DriveSelection;
+                self.screen = AppScreen::MainMenu;
             }
             _ => {}
         }
@@ -636,7 +726,7 @@ impl App {
     fn handle_error_key(&mut self, key: KeyEvent) {
         match key.code {
             KeyCode::Char('q') | KeyCode::Esc | KeyCode::Enter => {
-                self.screen = AppScreen::DriveSelection;
+                self.screen = AppScreen::MainMenu;
             }
             _ => {}
         }
@@ -647,7 +737,342 @@ impl App {
     fn handle_help_key(&mut self, key: KeyEvent) {
         match key.code {
             KeyCode::Char('q') | KeyCode::Esc | KeyCode::Char('?') => {
+                self.screen = AppScreen::MainMenu;
+            }
+            _ => {}
+        }
+    }
+
+    // ── Main menu keys ─────────────────────────────────────────────────
+
+    fn handle_main_menu_key(&mut self, key: KeyEvent) {
+        const MENU_ITEMS: usize = 7;
+        match key.code {
+            KeyCode::Char('q') | KeyCode::Esc => {
+                self.should_quit = true;
+            }
+            KeyCode::Up | KeyCode::Char('k') => {
+                if self.main_menu_index > 0 {
+                    self.main_menu_index -= 1;
+                }
+            }
+            KeyCode::Down | KeyCode::Char('j') => {
+                if self.main_menu_index < MENU_ITEMS - 1 {
+                    self.main_menu_index += 1;
+                }
+            }
+            KeyCode::Enter => {
+                match self.main_menu_index {
+                    0 => {
+                        // Secure Wipe
+                        self.refresh_drives();
+                        self.screen = AppScreen::DriveSelection;
+                    }
+                    1 => {
+                        // Drive Health
+                        self.refresh_drives();
+                        self.screen = AppScreen::DriveHealth;
+                    }
+                    2 => {
+                        // Drive Clone
+                        self.refresh_drives();
+                        self.clone_source_index = None;
+                        self.clone_target_index = None;
+                        self.clone_mode = "block".to_string();
+                        self.screen = AppScreen::CloneSetup;
+                    }
+                    3 => {
+                        // Partition Manager
+                        self.refresh_drives();
+                        self.screen = AppScreen::PartitionManager;
+                    }
+                    4 => {
+                        // Forensic Analysis
+                        self.refresh_drives();
+                        self.forensic_result_lines.clear();
+                        self.forensic_progress_pct = 0.0;
+                        self.screen = AppScreen::ForensicAnalysis;
+                    }
+                    5 => {
+                        // Settings
+                        self.settings_index = 0;
+                        self.screen = AppScreen::Settings;
+                    }
+                    6 => {
+                        // Quit
+                        self.should_quit = true;
+                    }
+                    _ => {}
+                }
+            }
+            // Quick access keys
+            KeyCode::Char('w') | KeyCode::Char('1') => {
+                self.refresh_drives();
                 self.screen = AppScreen::DriveSelection;
+            }
+            KeyCode::Char('h') | KeyCode::Char('2') => {
+                self.refresh_drives();
+                self.screen = AppScreen::DriveHealth;
+            }
+            KeyCode::Char('c') | KeyCode::Char('3') => {
+                self.refresh_drives();
+                self.clone_source_index = None;
+                self.clone_target_index = None;
+                self.screen = AppScreen::CloneSetup;
+            }
+            KeyCode::Char('p') | KeyCode::Char('4') => {
+                self.refresh_drives();
+                self.screen = AppScreen::PartitionManager;
+            }
+            KeyCode::Char('f') | KeyCode::Char('5') => {
+                self.refresh_drives();
+                self.forensic_result_lines.clear();
+                self.screen = AppScreen::ForensicAnalysis;
+            }
+            KeyCode::Char('s') | KeyCode::Char('6') => {
+                self.settings_index = 0;
+                self.screen = AppScreen::Settings;
+            }
+            _ => {}
+        }
+    }
+
+    // ── Health keys ────────────────────────────────────────────────────
+
+    fn handle_health_key(&mut self, key: KeyEvent) {
+        match key.code {
+            KeyCode::Char('q') | KeyCode::Esc => {
+                self.screen = AppScreen::MainMenu;
+            }
+            KeyCode::Up | KeyCode::Char('k') => {
+                let max = self.drives.len().saturating_sub(1);
+                let i = match self.table_state.selected() {
+                    Some(i) if i > 0 => i - 1,
+                    Some(i) => i,
+                    None => 0,
+                };
+                self.table_state.select(Some(i.min(max)));
+            }
+            KeyCode::Down | KeyCode::Char('j') => {
+                let max = self.drives.len().saturating_sub(1);
+                let i = match self.table_state.selected() {
+                    Some(i) if i < max => i + 1,
+                    Some(i) => i,
+                    None => 0,
+                };
+                self.table_state.select(Some(i));
+            }
+            KeyCode::Enter => {
+                // Show health details for selected drive
+                if let Some(i) = self.table_state.selected() {
+                    self.focused_drive_index = Some(i);
+                    self.health_display_lines = self.build_health_display(i);
+                }
+            }
+            KeyCode::Char('r') => {
+                self.refresh_drives();
+            }
+            _ => {}
+        }
+    }
+
+    fn build_health_display(&self, drive_idx: usize) -> Vec<String> {
+        let mut lines = Vec::new();
+        if drive_idx >= self.drives.len() {
+            return lines;
+        }
+        let drive = &self.drives[drive_idx];
+        lines.push(format!("Drive: {} ({})", drive.model, drive.path.display()));
+        lines.push(format!("Serial: {}", if drive.serial.is_empty() { "N/A" } else { &drive.serial }));
+        lines.push(format!("Type: {} / {}", drive.drive_type, drive.transport));
+        lines.push(format!("Capacity: {}", drive.capacity_display()));
+        lines.push(String::new());
+        match drive.smart_healthy {
+            Some(true) => lines.push("SMART Status: HEALTHY".to_string()),
+            Some(false) => lines.push("SMART Status: UNHEALTHY".to_string()),
+            None => lines.push("SMART Status: Not available".to_string()),
+        }
+        lines.push(format!("Block size: {} bytes", drive.block_size));
+        lines.push(format!("Supports TRIM: {}", if drive.supports_trim { "Yes" } else { "No" }));
+        lines.push(format!("Self-encrypting: {}", if drive.is_sed { "Yes" } else { "No" }));
+        if let Some(ref pt) = drive.partition_table {
+            lines.push(format!("Partition table: {} ({} partitions)", pt, drive.partition_count));
+        }
+        if drive.hidden_areas.hpa_enabled || drive.hidden_areas.dco_enabled {
+            let hpa = drive.hidden_areas.hpa_size.map(|s| format_bytes(s)).unwrap_or_default();
+            let dco = drive.hidden_areas.dco_size.map(|s| format_bytes(s)).unwrap_or_default();
+            lines.push(format!("Hidden areas: HPA={}, DCO={}", hpa, dco));
+        }
+        lines
+    }
+
+    // ── Clone setup keys ───────────────────────────────────────────────
+
+    fn handle_clone_setup_key(&mut self, key: KeyEvent) {
+        match key.code {
+            KeyCode::Char('q') | KeyCode::Esc => {
+                self.screen = AppScreen::MainMenu;
+            }
+            KeyCode::Up | KeyCode::Char('k') => {
+                let max = self.drives.len().saturating_sub(1);
+                let i = match self.table_state.selected() {
+                    Some(i) if i > 0 => i - 1,
+                    Some(i) => i,
+                    None => 0,
+                };
+                self.table_state.select(Some(i.min(max)));
+            }
+            KeyCode::Down | KeyCode::Char('j') => {
+                let max = self.drives.len().saturating_sub(1);
+                let i = match self.table_state.selected() {
+                    Some(i) if i < max => i + 1,
+                    Some(i) => i,
+                    None => 0,
+                };
+                self.table_state.select(Some(i));
+            }
+            KeyCode::Char('s') => {
+                // Set source drive
+                if let Some(i) = self.table_state.selected() {
+                    self.clone_source_index = Some(i);
+                    self.log_push(format!("Clone source: {}", self.drives[i].path.display()));
+                }
+            }
+            KeyCode::Char('t') => {
+                // Set target drive
+                if let Some(i) = self.table_state.selected() {
+                    self.clone_target_index = Some(i);
+                    self.log_push(format!("Clone target: {}", self.drives[i].path.display()));
+                }
+            }
+            KeyCode::Char('m') => {
+                // Toggle clone mode
+                self.clone_mode = if self.clone_mode == "block" {
+                    "partition".to_string()
+                } else {
+                    "block".to_string()
+                };
+                self.log_push(format!("Clone mode: {}", self.clone_mode));
+            }
+            KeyCode::Enter => {
+                if self.clone_source_index.is_some() && self.clone_target_index.is_some() {
+                    if self.clone_source_index == self.clone_target_index {
+                        self.log_push("Source and target cannot be the same drive".into());
+                    } else {
+                        self.clone_progress_fraction = 0.0;
+                        self.clone_throughput = String::new();
+                        self.start_clone();
+                    }
+                } else {
+                    self.log_push("Select both source (s) and target (t) drives first".into());
+                }
+            }
+            _ => {}
+        }
+    }
+
+    // ── Partition keys ─────────────────────────────────────────────────
+
+    fn handle_partition_key(&mut self, key: KeyEvent) {
+        match key.code {
+            KeyCode::Char('q') | KeyCode::Esc => {
+                self.screen = AppScreen::MainMenu;
+            }
+            KeyCode::Up | KeyCode::Char('k') => {
+                let max = self.drives.len().saturating_sub(1);
+                let i = match self.table_state.selected() {
+                    Some(i) if i > 0 => i - 1,
+                    Some(i) => i,
+                    None => 0,
+                };
+                self.table_state.select(Some(i.min(max)));
+            }
+            KeyCode::Down | KeyCode::Char('j') => {
+                let max = self.drives.len().saturating_sub(1);
+                let i = match self.table_state.selected() {
+                    Some(i) if i < max => i + 1,
+                    Some(i) => i,
+                    None => 0,
+                };
+                self.table_state.select(Some(i));
+            }
+            KeyCode::Enter => {
+                if let Some(i) = self.table_state.selected() {
+                    self.focused_drive_index = Some(i);
+                    self.read_partition_table(i);
+                }
+            }
+            KeyCode::Char('r') => {
+                self.refresh_drives();
+            }
+            _ => {}
+        }
+    }
+
+    // ── Forensic keys ──────────────────────────────────────────────────
+
+    fn handle_forensic_key(&mut self, key: KeyEvent) {
+        match key.code {
+            KeyCode::Char('q') | KeyCode::Esc => {
+                self.screen = AppScreen::MainMenu;
+            }
+            KeyCode::Up | KeyCode::Char('k') => {
+                let max = self.drives.len().saturating_sub(1);
+                let i = match self.table_state.selected() {
+                    Some(i) if i > 0 => i - 1,
+                    Some(i) => i,
+                    None => 0,
+                };
+                self.table_state.select(Some(i.min(max)));
+            }
+            KeyCode::Down | KeyCode::Char('j') => {
+                let max = self.drives.len().saturating_sub(1);
+                let i = match self.table_state.selected() {
+                    Some(i) if i < max => i + 1,
+                    Some(i) => i,
+                    None => 0,
+                };
+                self.table_state.select(Some(i));
+            }
+            KeyCode::Enter => {
+                if let Some(i) = self.table_state.selected() {
+                    self.focused_drive_index = Some(i);
+                    self.start_forensic_scan(i);
+                }
+            }
+            KeyCode::Char('r') => {
+                self.refresh_drives();
+            }
+            _ => {}
+        }
+    }
+
+    // ── Settings keys ──────────────────────────────────────────────────
+
+    fn handle_settings_key(&mut self, key: KeyEvent) {
+        match key.code {
+            KeyCode::Char('q') | KeyCode::Esc => {
+                self.screen = AppScreen::MainMenu;
+            }
+            KeyCode::Up | KeyCode::Char('k') => {
+                if self.settings_index > 0 {
+                    self.settings_index -= 1;
+                }
+            }
+            KeyCode::Down | KeyCode::Char('j') => {
+                if self.settings_index < 7 {
+                    self.settings_index += 1;
+                }
+            }
+            KeyCode::Enter | KeyCode::Char(' ') => {
+                // Toggle boolean settings
+                match self.settings_index {
+                    0 => self.config.auto_report_json = !self.config.auto_report_json,
+                    1 => self.config.notifications_enabled = !self.config.notifications_enabled,
+                    2 => self.config.sleep_prevention_enabled = !self.config.sleep_prevention_enabled,
+                    3 => self.config.auto_health_pre_wipe = !self.config.auto_health_pre_wipe,
+                    _ => {}
+                }
             }
             _ => {}
         }
@@ -847,6 +1272,69 @@ impl App {
                 }
                 // Check if all sessions are done.
                 self.check_all_done();
+            }
+            // Health events
+            ProgressEvent::HealthCheckStarted { .. } => {
+                self.log_push("Health check started".into());
+            }
+            ProgressEvent::HealthCheckCompleted { .. } => {
+                self.log_push("Health check completed".into());
+            }
+            ProgressEvent::HealthSnapshotSaved { .. } => {
+                self.log_push("Health snapshot saved".into());
+            }
+
+            // Clone events
+            ProgressEvent::CloneStarted { .. } => {
+                self.log_push("Clone operation started".into());
+            }
+            ProgressEvent::CloneProgress {
+                bytes_copied,
+                total_bytes,
+                throughput_bps,
+                ..
+            } => {
+                if total_bytes > 0 {
+                    self.clone_progress_fraction = bytes_copied as f64 / total_bytes as f64;
+                }
+                self.clone_throughput = format_throughput(throughput_bps);
+            }
+            ProgressEvent::CloneCompleted { duration_secs, .. } => {
+                self.log_push(format!("Clone completed in {duration_secs:.1}s"));
+                self.clone_progress_fraction = 1.0;
+            }
+
+            // Partition events
+            ProgressEvent::PartitionOperationStarted { operation, .. } => {
+                self.log_push(format!("Partition operation started: {operation}"));
+            }
+            ProgressEvent::PartitionOperationCompleted { operation, .. } => {
+                self.log_push(format!("Partition operation completed: {operation}"));
+            }
+
+            // Forensic events
+            ProgressEvent::ForensicScanStarted { .. } => {
+                self.log_push("Forensic scan started".into());
+                self.forensic_progress_pct = 0.0;
+            }
+            ProgressEvent::ForensicScanProgress {
+                bytes_scanned,
+                total_bytes,
+                ..
+            } => {
+                if total_bytes > 0 {
+                    self.forensic_progress_pct = (bytes_scanned as f64 / total_bytes as f64 * 100.0) as f32;
+                }
+            }
+            ProgressEvent::ForensicScanCompleted { duration_secs, .. } => {
+                self.log_push(format!("Forensic scan completed in {duration_secs:.1}s"));
+                self.forensic_progress_pct = 100.0;
+            }
+
+            // Catch any future new events
+            #[allow(unreachable_patterns)]
+            _ => {
+                log::debug!("Unhandled progress event: {:?}", event);
             }
         }
     }
@@ -1100,5 +1588,277 @@ impl App {
                 write_debug("=== WIPE THREAD ENDING ===");
             });
         }
+    }
+
+    // ── Start clone operation ────────────────────────────────────────────
+
+    fn start_clone(&mut self) {
+        let source_idx = match self.clone_source_index {
+            Some(i) => i,
+            None => return,
+        };
+        let target_idx = match self.clone_target_index {
+            Some(i) => i,
+            None => return,
+        };
+
+        if source_idx >= self.drives.len() || target_idx >= self.drives.len() {
+            self.log_push("Invalid drive selection".into());
+            return;
+        }
+
+        let source_info = self.drives[source_idx].clone();
+        let target_info = self.drives[target_idx].clone();
+        let clone_mode = self.clone_mode.clone();
+        let cancel_token = self.cancel_token.clone();
+
+        let progress_tx = match &self.progress_tx {
+            Some(tx) => tx.clone(),
+            None => {
+                self.log_push("No progress channel available".into());
+                return;
+            }
+        };
+
+        self.screen = AppScreen::CloneProgress;
+        self.log_push(format!(
+            "Starting {} clone: {} -> {}",
+            clone_mode,
+            source_info.path.display(),
+            target_info.path.display(),
+        ));
+
+        std::thread::spawn(move || {
+            use drivewipe_core::clone::{CloneConfig, CloneMode, CompressionMode};
+
+            let mode = if clone_mode == "partition" {
+                CloneMode::Partition
+            } else {
+                CloneMode::Block
+            };
+
+            let config = CloneConfig {
+                source: source_info.path.clone(),
+                target: target_info.path.clone(),
+                mode,
+                compression: CompressionMode::None,
+                encrypt: false,
+                verify: true,
+                block_size: 4 * 1024 * 1024,
+            };
+
+            // Open source (read-only) and target (read-write)
+            let source_result = drivewipe_core::io::open_device(&source_info.path, false);
+            let target_result = drivewipe_core::io::open_device(&target_info.path, true);
+
+            let mut source = match source_result {
+                Ok(d) => d,
+                Err(e) => {
+                    let _ = progress_tx.send(ProgressEvent::Error {
+                        session_id: Uuid::new_v4(),
+                        message: format!("Failed to open source: {}", e),
+                    });
+                    return;
+                }
+            };
+
+            let mut target = match target_result {
+                Ok(d) => d,
+                Err(e) => {
+                    let _ = progress_tx.send(ProgressEvent::Error {
+                        session_id: Uuid::new_v4(),
+                        message: format!("Failed to open target: {}", e),
+                    });
+                    return;
+                }
+            };
+
+            let result = match mode {
+                CloneMode::Block => drivewipe_core::clone::block::clone_block(
+                    source.as_mut(),
+                    target.as_mut(),
+                    &config,
+                    &progress_tx,
+                    &cancel_token,
+                ),
+                CloneMode::Partition => {
+                    drivewipe_core::clone::partition_aware::clone_partition_aware(
+                        source.as_mut(),
+                        target.as_mut(),
+                        &config,
+                        &progress_tx,
+                        &cancel_token,
+                    )
+                }
+            };
+
+            match result {
+                Ok(clone_result) => {
+                    let _ = progress_tx.send(ProgressEvent::CloneCompleted {
+                        session_id: clone_result.session_id,
+                        duration_secs: clone_result.duration_secs,
+                        verified: clone_result.verification_passed.unwrap_or(false),
+                    });
+                }
+                Err(e) => {
+                    let _ = progress_tx.send(ProgressEvent::Error {
+                        session_id: Uuid::new_v4(),
+                        message: format!("Clone failed: {}", e),
+                    });
+                }
+            }
+        });
+    }
+
+    // ── Start forensic scan ─────────────────────────────────────────────
+
+    fn start_forensic_scan(&mut self, drive_idx: usize) {
+        if drive_idx >= self.drives.len() {
+            return;
+        }
+
+        let drive_info = self.drives[drive_idx].clone();
+        let cancel_token = self.cancel_token.clone();
+
+        let progress_tx = match &self.progress_tx {
+            Some(tx) => tx.clone(),
+            None => {
+                self.log_push("No progress channel available".into());
+                return;
+            }
+        };
+
+        self.forensic_result_lines = vec![
+            format!("Scanning {}...", drive_info.path.display()),
+        ];
+        self.forensic_progress_pct = 0.0;
+
+        self.log_push(format!(
+            "Starting forensic scan on {}",
+            drive_info.path.display()
+        ));
+
+        std::thread::spawn(move || {
+            use drivewipe_core::forensic::{ForensicConfig, ForensicSession};
+
+            let config = ForensicConfig::default();
+            let session = ForensicSession::new(config);
+
+            let device_result = drivewipe_core::io::open_device(&drive_info.path, false);
+            let mut device = match device_result {
+                Ok(d) => d,
+                Err(e) => {
+                    let _ = progress_tx.send(ProgressEvent::Error {
+                        session_id: Uuid::new_v4(),
+                        message: format!("Failed to open device for forensic scan: {}", e),
+                    });
+                    return;
+                }
+            };
+
+            match session.execute(
+                device.as_mut(),
+                &drive_info.path.display().to_string(),
+                &drive_info.serial,
+                &progress_tx,
+                &cancel_token,
+            ) {
+                Ok(result) => {
+                    let _ = progress_tx.send(ProgressEvent::ForensicScanCompleted {
+                        session_id: Uuid::new_v4(),
+                        duration_secs: result.duration_secs,
+                        total_findings: result.signature_hits.len() as u32,
+                    });
+                }
+                Err(e) => {
+                    let _ = progress_tx.send(ProgressEvent::Error {
+                        session_id: Uuid::new_v4(),
+                        message: format!("Forensic scan failed: {}", e),
+                    });
+                }
+            }
+        });
+    }
+
+    // ── Read partition table ────────────────────────────────────────────
+
+    fn read_partition_table(&mut self, drive_idx: usize) {
+        if drive_idx >= self.drives.len() {
+            return;
+        }
+
+        let drive = &self.drives[drive_idx];
+        self.partition_lines = vec![
+            format!("Partition table for: {}", drive.path.display()),
+            format!("Model: {}", drive.model),
+            format!("Capacity: {}", drive.capacity_display()),
+        ];
+
+        let pt_type = drive.partition_table.as_deref().unwrap_or("Unknown");
+        self.partition_lines.push(format!("Table type: {}", pt_type));
+        self.partition_lines.push(format!("Partition count: {}", drive.partition_count));
+        self.partition_lines.push(String::new());
+
+        // Try to read the actual partition table from the device
+        match drivewipe_core::io::open_device(&drive.path, false) {
+            Ok(mut device) => {
+                // Read first 34 sectors (enough for GPT header + entries)
+                let read_size = 34 * 512;
+                let mut buf = vec![0u8; read_size];
+                match device.read_at(0, &mut buf) {
+                    Ok(bytes_read) => {
+                        match drivewipe_core::partition::PartitionTable::parse(&buf[..bytes_read]) {
+                            Ok(table) => {
+                                let partitions = table.partitions();
+                                if partitions.is_empty() {
+                                    self.partition_lines.push("No partitions found.".to_string());
+                                } else {
+                                    for p in partitions {
+                                        self.partition_lines.push(format!(
+                                            "  #{}: {} (LBA {}-{}, {})",
+                                            p.index,
+                                            if p.name.is_empty() {
+                                                &p.type_id
+                                            } else {
+                                                &p.name
+                                            },
+                                            p.start_lba,
+                                            p.end_lba,
+                                            format_partition_size(p.size_bytes),
+                                        ));
+                                    }
+                                }
+                            }
+                            Err(e) => {
+                                self.partition_lines.push(format!("Parse error: {}", e));
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        self.partition_lines.push(format!("Read error: {}", e));
+                    }
+                }
+            }
+            Err(e) => {
+                self.partition_lines.push(format!("Cannot open device: {}", e));
+                self.partition_lines.push("Use CLI with elevated privileges:".to_string());
+                self.partition_lines.push(format!(
+                    "  drivewipe partition list -d {}",
+                    drive.path.display()
+                ));
+            }
+        }
+    }
+}
+
+fn format_partition_size(bytes: u64) -> String {
+    if bytes >= 1_000_000_000_000 {
+        format!("{:.1} TB", bytes as f64 / 1_000_000_000_000.0)
+    } else if bytes >= 1_000_000_000 {
+        format!("{:.1} GB", bytes as f64 / 1_000_000_000.0)
+    } else if bytes >= 1_000_000 {
+        format!("{:.1} MB", bytes as f64 / 1_000_000.0)
+    } else {
+        format!("{} B", bytes)
     }
 }

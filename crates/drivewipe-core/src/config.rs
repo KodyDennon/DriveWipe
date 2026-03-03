@@ -40,6 +40,33 @@ pub struct DriveWipeConfig {
 
     /// Optional operator name recorded in reports and session metadata.
     pub operator_name: Option<String>,
+
+    // ── New overhaul fields ──────────────────────────────────────────
+
+    /// Directory containing drive profile TOML files.
+    pub profiles_dir: PathBuf,
+
+    /// Whether desktop notifications are enabled.
+    #[serde(default = "default_true")]
+    pub notifications_enabled: bool,
+
+    /// Whether sleep prevention is enabled during operations.
+    #[serde(default = "default_true")]
+    pub sleep_prevention_enabled: bool,
+
+    /// Key sequence to unlock keyboard lock mode (e.g. "UNLOCK").
+    #[serde(default = "default_keyboard_lock_sequence")]
+    pub keyboard_lock_sequence: String,
+
+    /// Automatically run a health check before each wipe.
+    #[serde(default)]
+    pub auto_health_pre_wipe: bool,
+
+    /// Directory for audit log output.
+    pub audit_dir: PathBuf,
+
+    /// Directory for historical performance data.
+    pub performance_history_dir: PathBuf,
 }
 
 /// A user-defined wipe method declared in the configuration file.
@@ -82,9 +109,36 @@ fn default_state_save_interval() -> u64 {
     10
 }
 
+fn default_true() -> bool {
+    true
+}
+
+fn default_keyboard_lock_sequence() -> String {
+    "UNLOCK".to_string()
+}
+
 /// Return the default sessions directory:
 /// `~/.local/share/drivewipe/sessions/`
 fn default_sessions_dir() -> PathBuf {
+    drivewipe_data_dir().join("sessions")
+}
+
+fn default_profiles_dir() -> PathBuf {
+    dirs::config_dir()
+        .unwrap_or_else(|| PathBuf::from("/tmp"))
+        .join("drivewipe")
+        .join("profiles")
+}
+
+fn default_audit_dir() -> PathBuf {
+    drivewipe_data_dir().join("audit")
+}
+
+fn default_performance_history_dir() -> PathBuf {
+    drivewipe_data_dir().join("performance")
+}
+
+fn drivewipe_data_dir() -> PathBuf {
     dirs::data_local_dir()
         .unwrap_or_else(|| {
             log::warn!(
@@ -93,7 +147,6 @@ fn default_sessions_dir() -> PathBuf {
             PathBuf::from("/tmp")
         })
         .join("drivewipe")
-        .join("sessions")
 }
 
 impl Default for DriveWipeConfig {
@@ -108,6 +161,13 @@ impl Default for DriveWipeConfig {
             custom_methods: Vec::new(),
             state_save_interval_secs: default_state_save_interval(),
             operator_name: None,
+            profiles_dir: default_profiles_dir(),
+            notifications_enabled: true,
+            sleep_prevention_enabled: true,
+            keyboard_lock_sequence: default_keyboard_lock_sequence(),
+            auto_health_pre_wipe: false,
+            audit_dir: default_audit_dir(),
+            performance_history_dir: default_performance_history_dir(),
         }
     }
 }

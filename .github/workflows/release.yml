@@ -93,6 +93,11 @@ jobs:
         env:
           CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
 
+      - name: Build GUI
+        run: cargo build --release --target ${{ matrix.target }} --package drivewipe-gui
+        env:
+          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
+
       - name: Package artifacts
         shell: bash
         run: |
@@ -102,6 +107,7 @@ jobs:
 
           cp target/${{ matrix.target }}/release/drivewipe${{ matrix.suffix }} dist/
           cp target/${{ matrix.target }}/release/drivewipe-tui${{ matrix.suffix }} dist/
+          cp target/${{ matrix.target }}/release/drivewipe-gui${{ matrix.suffix }} dist/ 2>/dev/null || true
           cp LICENSE.md dist/
           cp README.md dist/
 

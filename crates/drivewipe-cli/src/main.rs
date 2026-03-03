@@ -109,6 +109,52 @@ enum Commands {
         #[arg(long)]
         auto: bool,
     },
+    /// Check drive health (SMART/NVMe data)
+    Health {
+        /// Device path
+        #[arg(short, long)]
+        device: String,
+        /// Save a health snapshot
+        #[arg(long)]
+        save: bool,
+        /// Compare with a previous snapshot file
+        #[arg(long)]
+        compare: Option<String>,
+    },
+    /// Show matched drive profile
+    Profile {
+        /// Device path
+        #[arg(short, long)]
+        device: String,
+    },
+    /// Clone a drive
+    Clone {
+        /// Source device path
+        #[arg(short, long)]
+        source: String,
+        /// Target device path or image file
+        #[arg(short, long)]
+        target: String,
+        /// Clone mode (block, partition)
+        #[arg(long, default_value = "block")]
+        mode: String,
+        /// Enable compression
+        #[arg(long)]
+        compress: bool,
+        /// Enable encryption
+        #[arg(long)]
+        encrypt: bool,
+    },
+    /// Manage partitions
+    Partition {
+        #[command(subcommand)]
+        action: PartitionAction,
+    },
+    /// Forensic analysis
+    Forensic {
+        #[command(subcommand)]
+        action: ForensicAction,
+    },
 }
 
 #[derive(Subcommand)]
@@ -130,6 +176,31 @@ enum QueueAction {
     Status,
     /// Cancel all queued operations
     Cancel,
+}
+
+#[derive(Subcommand)]
+enum PartitionAction {
+    /// List partitions on a device
+    List {
+        #[arg(short, long)]
+        device: String,
+    },
+}
+
+#[derive(Subcommand)]
+enum ForensicAction {
+    /// Run a forensic scan
+    Scan {
+        #[arg(short, long)]
+        device: String,
+    },
+    /// Generate a forensic report
+    Report {
+        #[arg(short, long)]
+        device: String,
+        #[arg(short, long)]
+        output: Option<String>,
+    },
 }
 
 // ── Entry point ─────────────────────────────────────────────────────────────
@@ -174,7 +245,11 @@ fn run(cli: Cli) -> Result<()> {
     // Privilege check -- warn for read-only commands, hard-fail for destructive ones.
     let needs_privilege = matches!(
         &cli.command,
-        Commands::Wipe { .. } | Commands::Queue { .. } | Commands::Resume { .. }
+        Commands::Wipe { .. }
+            | Commands::Queue { .. }
+            | Commands::Resume { .. }
+            | Commands::Clone { .. }
+            | Commands::Partition { .. }
     );
     if let Err(e) = privilege::check_privileges() {
         if needs_privilege {
@@ -241,5 +316,27 @@ fn run(cli: Cli) -> Result<()> {
             session,
             auto,
         } => commands::resume::run(&config, &cancel_token, list, session.as_deref(), auto),
+        Commands::Health {
+            device,
+            save,
+            compare,
+        } => commands::health::run(&config, &device, save, compare.as_deref()),
+        Commands::Profile { device } => commands::profile::run(&config, &device),
+        Commands::Clone {
+            source,
+            target,
+            mode,
+            compress,
+            encrypt,
+        } => commands::clone::run(&config, &cancel_token, &source, &target, &mode, compress, encrypt),
+        Commands::Partition { action } => match action {
+            PartitionAction::List { device } => commands::partition::list(&config, &device),
+        },
+        Commands::Forensic { action } => match action {
+            ForensicAction::Scan { device } => commands::forensic::scan(&config, &cancel_token, &device),
+            ForensicAction::Report { device, output } => {
+                commands::forensic::report(&config, &cancel_token, &device, output.as_deref())
+            }
+        },
     }
 }

@@ -1,9 +1,16 @@
+pub mod clone_progress;
+pub mod clone_setup;
 pub mod confirm_dialog;
 pub mod drive_list;
+pub mod forensic_screen;
+pub mod health_screen;
 pub mod help;
 pub mod info_panel;
 pub mod log_viewer;
+pub mod main_menu;
 pub mod method_select;
+pub mod partition_screen;
+pub mod settings_screen;
 pub mod wipe_dashboard;
 
 use ratatui::prelude::*;
@@ -13,7 +20,14 @@ use crate::app::{App, AppScreen};
 
 /// Top-level draw dispatch: renders the active screen and any overlays.
 pub fn draw(frame: &mut Frame, app: &mut App) {
+    // Draw keyboard lock overlay if active.
+    if app.keyboard_locked {
+        draw_keyboard_lock(frame);
+        return;
+    }
+
     match &app.screen.clone() {
+        AppScreen::MainMenu => main_menu::draw(frame, app),
         AppScreen::DriveSelection => {
             drive_list::draw(frame, app);
             if app.show_info_popup {
@@ -26,6 +40,12 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
         AppScreen::Done => wipe_dashboard::draw_completed(frame, app),
         AppScreen::Error(msg) => draw_error(frame, &msg.clone()),
         AppScreen::Help => help::draw(frame, app),
+        AppScreen::DriveHealth | AppScreen::HealthComparison => health_screen::draw(frame, app),
+        AppScreen::CloneSetup => clone_setup::draw(frame, app),
+        AppScreen::CloneProgress => clone_progress::draw(frame, app),
+        AppScreen::PartitionManager => partition_screen::draw(frame, app),
+        AppScreen::ForensicAnalysis => forensic_screen::draw(frame, app),
+        AppScreen::Settings => settings_screen::draw(frame, app),
     }
 
     // Draw quit confirmation overlay if active.
@@ -74,7 +94,7 @@ fn draw_quit_confirm(frame: &mut Frame) {
 
     let text = vec![
         Line::from(""),
-        Line::from("Active wipes are in progress."),
+        Line::from("Active operations are in progress."),
         Line::from("Press 'y' to cancel and quit, any other key to continue."),
     ];
 
@@ -83,6 +103,42 @@ fn draw_quit_confirm(frame: &mut Frame) {
         .alignment(Alignment::Center);
 
     frame.render_widget(paragraph, area);
+}
+
+/// Render the keyboard lock overlay.
+fn draw_keyboard_lock(frame: &mut Frame) {
+    let area = frame.area();
+
+    // Fill the background
+    let bg = Block::default().style(Style::default().bg(Color::Black));
+    frame.render_widget(bg, area);
+
+    let popup = centered_rect(50, 7, area);
+
+    let block = Block::default()
+        .title(" KEYBOARD LOCKED ")
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(Color::Red).bold())
+        .title_style(Style::default().fg(Color::Red).bold());
+
+    let text = vec![
+        Line::from(""),
+        Line::from(Span::styled(
+            "Keyboard input is locked.",
+            Style::default().fg(Color::Yellow).bold(),
+        )),
+        Line::from(Span::styled(
+            "Type the unlock sequence to resume.",
+            Style::default().fg(Color::Gray),
+        )),
+        Line::from(""),
+    ];
+
+    let paragraph = Paragraph::new(text)
+        .block(block)
+        .alignment(Alignment::Center);
+
+    frame.render_widget(paragraph, popup);
 }
 
 /// Create a centered `Rect` within `area` with the given width (columns) and

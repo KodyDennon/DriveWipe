@@ -1,0 +1,13 @@
+manufacturer = "Seagate"
+name = "Seagate Barracuda"
+model_patterns = ["ST[0-9]+DM", "ST[0-9]+LM", "Seagate Barracuda"]
+controller_type = "Seagate"
+over_provisioning_ratio = 0.0
+sanitize_support = false
+recommended_method = "dod-short"
+quirks = ["HDD zone speed varies — outer tracks are faster than inner tracks"]
+
+[performance]
+sequential_write_mbps = 190.0
+sequential_read_mbps = 210.0
+has_slc_cache = false

@@ -155,6 +155,30 @@ impl DerefMut for AlignedBuffer {
 
 // ── Utilities ───────────────────────────────────────────────────────────────
 
+/// Open a device for raw I/O, returning a platform-appropriate implementation.
+///
+/// * `writable` - If true, opens for read-write; if false, read-only.
+pub fn open_device(path: &std::path::Path, _writable: bool) -> Result<Box<dyn RawDeviceIo>> {
+    #[cfg(target_os = "linux")]
+    {
+        Ok(Box::new(linux::LinuxDeviceIo::open(path)?))
+    }
+    #[cfg(target_os = "macos")]
+    {
+        Ok(Box::new(macos::MacosDeviceIo::open(path)?))
+    }
+    #[cfg(target_os = "windows")]
+    {
+        Ok(Box::new(windows::WindowsDeviceIo::open(path)?))
+    }
+    #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
+    {
+        Err(crate::error::DriveWipeError::PlatformNotSupported(
+            format!("No device I/O implementation for this platform: {}", path.display()),
+        ))
+    }
+}
+
 /// Allocate a zeroed, properly aligned buffer suitable for direct device I/O.
 ///
 /// The returned [`AlignedBuffer`] is guaranteed to be aligned to `alignment`

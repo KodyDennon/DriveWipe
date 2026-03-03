@@ -1,0 +1,13 @@
+manufacturer = "Western Digital"
+name = "WD Blue"
+model_patterns = ["WDC WD.+EZEX", "WDC WD.+AAKX", "WD Blue SA510", "WDS.+BLU"]
+controller_type = "WD in-house"
+over_provisioning_ratio = 0.07
+sanitize_support = false
+recommended_method = "dod-short"
+quirks = []
+
+[performance]
+sequential_write_mbps = 150.0
+sequential_read_mbps = 175.0
+has_slc_cache = false

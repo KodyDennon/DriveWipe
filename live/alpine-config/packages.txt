@@ -1,0 +1,31 @@
+# Core Alpine packages for DriveWipe Live USB
+alpine-base
+linux-lts
+linux-firmware-none
+busybox
+musl
+
+# Storage drivers
+nvme-cli
+smartmontools
+hdparm
+sdparm
+sg3_utils
+
+# Filesystem tools (for partition management)
+e2fsprogs
+dosfstools
+ntfs-3g-progs
+xfsprogs
+btrfs-progs
+
+# System utilities
+eudev
+util-linux
+lsblk
+blkid
+udev-init-scripts
+
+# Terminal
+ncurses
+ncurses-terminfo-base

@@ -1,0 +1,15 @@
+manufacturer = "Generic"
+name = "Generic SSD"
+model_patterns = [".*"]
+controller_type = "Unknown"
+over_provisioning_ratio = 0.07
+sanitize_support = false
+recommended_method = "random"
+quirks = ["Fallback profile for unrecognized SSDs"]
+
+[performance]
+sequential_write_mbps = 400.0
+sequential_read_mbps = 500.0
+has_slc_cache = true
+slc_cache_bytes = 5368709120
+post_cache_write_mbps = 100.0

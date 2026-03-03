@@ -30,8 +30,8 @@ fn registry_contains_firmware_methods() {
 #[test]
 fn registry_total_count() {
     let reg = WipeMethodRegistry::new();
-    // 9 software + 8 firmware = 17
-    assert_eq!(reg.list().len(), 17);
+    // 9 software + 8 firmware + 4 DriveWipe Secure = 21
+    assert_eq!(reg.list().len(), 21);
 }
 
 #[test]

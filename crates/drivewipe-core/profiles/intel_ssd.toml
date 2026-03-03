@@ -1,0 +1,13 @@
+manufacturer = "Intel"
+name = "Intel SSD"
+model_patterns = ["INTEL SSD", "SSDSC2", "SSDPE"]
+controller_type = "Intel"
+over_provisioning_ratio = 0.07
+sanitize_support = true
+recommended_method = "ata-erase-enhanced"
+quirks = []
+
+[performance]
+sequential_write_mbps = 500.0
+sequential_read_mbps = 560.0
+has_slc_cache = false

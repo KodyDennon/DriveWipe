@@ -46,6 +46,27 @@ cipher = "0.4"
 rand = "0.9"
 zeroize = { version = "1", features = ["derive"] }
 
+# Hashing
+sha2 = "0.10"
+blake3 = "1"
+
+# Data formats
+regex = "1"
+quick-xml = "0.37"
+byteorder = "1"
+crc32fast = "1"
+bitflags = "2"
+
+# Compression
+flate2 = "1"
+zstd = "0.13"
+
+# Desktop notifications
+notify-rust = "4"
+
+# GUI
+iced = "0.13"
+
 # Platform - Unix
 nix = { version = "0.29", features = ["fs", "ioctl"] }
 libc = "0.2"

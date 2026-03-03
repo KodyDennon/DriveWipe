@@ -1,0 +1,13 @@
+manufacturer = "Generic"
+name = "Generic HDD"
+model_patterns = [".*"]
+controller_type = "Unknown"
+over_provisioning_ratio = 0.0
+sanitize_support = false
+recommended_method = "dod-short"
+quirks = ["Fallback profile for unrecognized HDDs"]
+
+[performance]
+sequential_write_mbps = 100.0
+sequential_read_mbps = 120.0
+has_slc_cache = false

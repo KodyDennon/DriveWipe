@@ -1,0 +1,13 @@
+manufacturer = "Samsung"
+name = "Samsung PRO"
+model_patterns = ["Samsung SSD 8[5-7]0 PRO", "Samsung SSD 860 PRO", "Samsung SSD 870 PRO"]
+controller_type = "Samsung MKX"
+over_provisioning_ratio = 0.07
+sanitize_support = true
+recommended_method = "ata-erase-enhanced"
+quirks = []
+
+[performance]
+sequential_write_mbps = 530.0
+sequential_read_mbps = 560.0
+has_slc_cache = false

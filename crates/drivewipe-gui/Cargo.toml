@@ -13,3 +13,4 @@ path = "src/main.rs"
 
 [dependencies]
 drivewipe-core = { path = "../drivewipe-core" }
+iced.workspace = true

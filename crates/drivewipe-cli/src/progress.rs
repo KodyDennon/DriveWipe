@@ -228,6 +228,9 @@ impl WipeProgressDisplay {
                     .pass_bar
                     .set_message(format!("{outcome} -- total time: {:.1}s", duration_secs,));
             }
+            // New progress event types (health, clone, partition, forensic)
+            // are logged but not displayed in the wipe progress bars.
+            _ => {}
         }
     }
 

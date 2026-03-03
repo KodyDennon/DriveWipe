@@ -103,6 +103,62 @@ pub enum DriveWipeError {
     // ── Serialization ────────────────────────────────────────────────
     #[error("JSON error: {0}")]
     Json(#[from] serde_json::Error),
+
+    // ── Health ───────────────────────────────────────────────────────
+    #[error("Health check error: {0}")]
+    Health(String),
+
+    #[error("SMART data unavailable: {0}")]
+    SmartUnavailable(String),
+
+    // ── Profile ──────────────────────────────────────────────────────
+    #[error("Profile error: {0}")]
+    Profile(String),
+
+    // ── Clone ────────────────────────────────────────────────────────
+    #[error("Clone error: {0}")]
+    Clone(String),
+
+    #[error("Clone source and target are the same device: {0}")]
+    CloneSameDevice(PathBuf),
+
+    #[error("Target device too small: need {needed} bytes, have {available}")]
+    CloneTargetTooSmall { needed: u64, available: u64 },
+
+    // ── Partition ────────────────────────────────────────────────────
+    #[error("Partition error: {0}")]
+    Partition(String),
+
+    #[error("Invalid partition table: {0}")]
+    InvalidPartitionTable(String),
+
+    // ── Forensic ─────────────────────────────────────────────────────
+    #[error("Forensic analysis error: {0}")]
+    Forensic(String),
+
+    // ── Notification ─────────────────────────────────────────────────
+    #[error("Notification error: {0}")]
+    Notification(String),
+
+    // ── Sleep Inhibit ────────────────────────────────────────────────
+    #[error("Sleep inhibit error: {0}")]
+    SleepInhibit(String),
+
+    // ── Encryption ───────────────────────────────────────────────────
+    #[error("Encryption error: {0}")]
+    Encryption(String),
+
+    // ── Compression ──────────────────────────────────────────────────
+    #[error("Compression error: {0}")]
+    Compression(String),
+
+    // ── Audit ────────────────────────────────────────────────────────
+    #[error("Audit log error: {0}")]
+    Audit(String),
+
+    // ── Keyboard Lock ────────────────────────────────────────────────
+    #[error("Keyboard lock error: {0}")]
+    KeyboardLock(String),
 }
 
 pub type Result<T> = std::result::Result<T, DriveWipeError>;

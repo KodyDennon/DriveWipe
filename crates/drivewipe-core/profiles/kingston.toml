@@ -1,0 +1,15 @@
+manufacturer = "Kingston"
+name = "Kingston"
+model_patterns = ["KINGSTON", "Kingston", "SA400", "SNV2S", "SKC3000"]
+controller_type = "Phison"
+over_provisioning_ratio = 0.07
+sanitize_support = false
+recommended_method = "dod-short"
+quirks = ["Some models have limited TRIM support over USB"]
+
+[performance]
+sequential_write_mbps = 450.0
+sequential_read_mbps = 500.0
+has_slc_cache = true
+slc_cache_bytes = 5368709120
+post_cache_write_mbps = 150.0

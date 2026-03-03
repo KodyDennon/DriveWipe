@@ -1,0 +1,15 @@
+manufacturer = "Crucial"
+name = "Crucial MX"
+model_patterns = ["CT.+MX500", "Crucial_CT.+MX", "CT.+BX500"]
+controller_type = "Silicon Motion SM2259"
+over_provisioning_ratio = 0.07
+sanitize_support = true
+recommended_method = "ata-erase-enhanced"
+quirks = []
+
+[performance]
+sequential_write_mbps = 510.0
+sequential_read_mbps = 560.0
+has_slc_cache = true
+slc_cache_bytes = 10737418240
+post_cache_write_mbps = 200.0

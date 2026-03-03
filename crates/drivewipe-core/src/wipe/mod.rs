@@ -2,6 +2,7 @@
 
 pub mod crypto_erase;
 pub mod custom;
+pub mod drivewipe_secure;
 pub mod firmware;
 pub mod patterns;
 pub mod software;
@@ -150,6 +151,7 @@ impl WipeMethodRegistry {
             methods: software::all_software_methods(),
         };
         registry.register_firmware_methods();
+        registry.register_drivewipe_secure_methods();
         registry
     }
 
@@ -174,6 +176,14 @@ impl WipeMethodRegistry {
         for fw in firmware_methods {
             self.methods.push(Box::new(FirmwareMethodAdapter::new(fw)));
         }
+    }
+
+    /// Register the DriveWipe Secure wipe methods for each drive type.
+    pub fn register_drivewipe_secure_methods(&mut self) {
+        self.methods.push(Box::new(drivewipe_secure::DriveWipeSecureHdd));
+        self.methods.push(Box::new(drivewipe_secure::DriveWipeSecureSataSsd));
+        self.methods.push(Box::new(drivewipe_secure::DriveWipeSecureNvme));
+        self.methods.push(Box::new(drivewipe_secure::DriveWipeSecureUsb));
     }
 
     /// Register user-defined custom wipe methods from the application
