@@ -297,17 +297,17 @@ DriveWipe/
 # Build the live image
 cargo xtask live-build
 
-# Write to USB (replace v1.1.1 and /dev/sdX with your version and device)
-sudo dd if=drivewipe-live-v1.1.2.iso of=/dev/sdX bs=4M status=progress
+# Write to USB (replace v1.1.7 and /dev/sdX with your version and device)
+sudo dd if=drivewipe-live-v1.1.7.iso of=/dev/sdX bs=4M status=progress
 ```
 
 ### PXE Network Boot
 
-DriveWipe Live can be network-booted for wiping entire racks. The PXE artifact (`drivewipe-live-v1.1.2-pxe.tar.gz`) contains everything needed to seed a TFTP/HTTP server.
+DriveWipe Live can be network-booted for wiping entire racks. The PXE artifact (`drivewipe-live-v1.1.7-pxe.tar.gz`) contains everything needed to seed a TFTP/HTTP server.
 
 ```bash
 # Extract PXE artifacts from a built image
-tar -xzvf DriveWipe-v1.1.2-Live-PXE.tar.gz -C /var/lib/tftpboot/
+tar -xzvf DriveWipe-v1.1.7-Live-PXE.tar.gz -C /var/lib/tftpboot/
 
 # Configure dnsmasq with the included config
 sudo cp /var/lib/tftpboot/dnsmasq.conf /etc/dnsmasq.d/drivewipe.conf
