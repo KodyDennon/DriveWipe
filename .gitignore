@@ -23,3 +23,10 @@ Thumbs.db
 
 # DriveWipe session data (local only)
 sessions/
+
+# Local release script and artifacts
+release.sh
+drivewipe-v*.tar.gz
+drivewipe-v*.zip
+drivewipe-v*.sha256
+target/dist/
