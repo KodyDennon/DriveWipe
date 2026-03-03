@@ -25,7 +25,7 @@ const MENU_ITEMS: &[(&str, &str, &str)] = &[
     ("6", "Settings", "Configure application preferences"),
 ];
 
-#[cfg(feature = "live")]
+#[cfg(all(feature = "live", target_os = "linux"))]
 const LIVE_MENU_ITEMS: &[(&str, &str, &str)] = &[
     (
         "7",
