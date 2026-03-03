@@ -358,29 +358,36 @@ impl DriveWipeApp {
     fn view_menu(&self) -> Element<'_, Message> {
         use iced::widget::button;
 
-        let title = text("DriveWipe").size(theme::FONT_SIZE_TITLE);
-        let subtitle =
-            text("Secure Drive Management").size(theme::FONT_SIZE_LG);
+        let title = text("DriveWipe")
+            .size(theme::FONT_SIZE_TITLE)
+            .color(theme::PRIMARY);
+        let subtitle = text("Secure Drive Management")
+            .size(theme::FONT_SIZE_LG)
+            .color(theme::PRIMARY_DARK);
 
-        let menu_items = vec![
-            ("Secure Wipe", Screen::DriveSelect),
-            ("Drive Health", Screen::Health),
-            ("Drive Clone", Screen::Clone),
-            ("Partition Manager", Screen::Partition),
-            ("Forensic Analysis", Screen::Forensic),
-            ("Settings", Screen::Settings),
+        let version_text = text(format!("v{}", env!("CARGO_PKG_VERSION")))
+            .size(theme::FONT_SIZE_SM)
+            .color(theme::TEXT_MUTED);
+
+        let menu_items: Vec<(&str, Screen, iced::Color)> = vec![
+            ("Secure Wipe", Screen::DriveSelect, theme::DANGER),
+            ("Drive Health", Screen::Health, theme::STATUS_HEALTHY),
+            ("Drive Clone", Screen::Clone, theme::STATUS_INFO),
+            ("Partition Manager", Screen::Partition, theme::SECONDARY),
+            ("Forensic Analysis", Screen::Forensic, theme::STATUS_WARNING),
+            ("Settings", Screen::Settings, theme::TEXT_SECONDARY),
         ];
 
         let mut menu_col = column![].spacing(theme::SPACING_MD);
-        for (label, screen) in menu_items {
+        for (label, screen, color) in menu_items {
             menu_col = menu_col.push(
-                button(text(label).size(theme::FONT_SIZE_LG))
+                button(text(label).size(theme::FONT_SIZE_LG).color(color))
                     .on_press(Message::Navigate(screen))
                     .width(Length::Fixed(300.0)),
             );
         }
 
-        let content = column![title, subtitle, menu_col]
+        let content = column![title, subtitle, version_text, menu_col]
             .spacing(theme::SPACING_LG)
             .padding(theme::SPACING_XL)
             .align_x(iced::Alignment::Center);
@@ -390,6 +397,10 @@ impl DriveWipeApp {
             .height(Length::Fill)
             .center_x(Length::Fill)
             .center_y(Length::Fill)
+            .style(|_theme| container::Style {
+                background: Some(iced::Background::Color(theme::BG_DARK)),
+                ..Default::default()
+            })
             .into()
     }
 }

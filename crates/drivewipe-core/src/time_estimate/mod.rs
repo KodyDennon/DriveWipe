@@ -138,6 +138,11 @@ impl TimeEstimator {
         self.samples.push_back(throughput_bps);
     }
 
+    /// Get elapsed time since estimation started.
+    pub fn elapsed_secs(&self) -> f64 {
+        self.start_time.elapsed().as_secs_f64()
+    }
+
     /// Get the current time estimate with confidence intervals.
     pub fn estimate(&self) -> TimeEstimate {
         let calibrated = self.update_count >= self.calibration_threshold;

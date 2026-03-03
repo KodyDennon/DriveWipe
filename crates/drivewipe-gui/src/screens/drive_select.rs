@@ -10,14 +10,17 @@ pub fn view<'a>(
     selected: &[bool],
 ) -> Element<'a, Message> {
     let title = text("Select Drives")
-        .size(theme::FONT_SIZE_XL);
+        .size(theme::FONT_SIZE_XL)
+        .color(theme::TEXT_PRIMARY);
 
     let subtitle = text("Choose one or more drives to wipe")
-        .size(theme::FONT_SIZE_MD);
+        .size(theme::FONT_SIZE_MD)
+        .color(theme::TEXT_SECONDARY);
 
     let drive_list = if drives.is_empty() {
         column![text("No drives detected. Check permissions or connect a drive.")
-            .size(theme::FONT_SIZE_MD)]
+            .size(theme::FONT_SIZE_MD)
+            .color(theme::TEXT_MUTED)]
         .spacing(theme::SPACING_MD)
     } else {
         let mut col = column![].spacing(theme::SPACING_SM);

@@ -14,27 +14,37 @@ pub fn view<'a>(
     is_complete: bool,
 ) -> Element<'a, Message> {
     let title = if is_complete {
-        text("Wipe Complete").size(theme::FONT_SIZE_XL)
+        text("Wipe Complete")
+            .size(theme::FONT_SIZE_XL)
+            .color(theme::STATUS_HEALTHY)
     } else {
-        text("Wipe in Progress...").size(theme::FONT_SIZE_XL)
+        text("Wipe in Progress...")
+            .size(theme::FONT_SIZE_XL)
+            .color(theme::WARNING)
     };
 
     let device_info = text(format!("Device: {}", device))
-        .size(theme::FONT_SIZE_MD);
+        .size(theme::FONT_SIZE_MD)
+        .color(theme::TEXT_PRIMARY);
 
     let method_info = text(format!("Method: {}", method))
-        .size(theme::FONT_SIZE_MD);
+        .size(theme::FONT_SIZE_MD)
+        .color(theme::TEXT_SECONDARY);
 
-    let pass_text = text(pass_info).size(theme::FONT_SIZE_MD);
+    let pass_text = text(pass_info)
+        .size(theme::FONT_SIZE_MD)
+        .color(theme::TEXT_SECONDARY);
 
     let bar = progress_bar(0.0..=1.0, fraction)
         .height(20);
 
     let pct_text = text(format!("{:.1}%", fraction * 100.0))
-        .size(theme::FONT_SIZE_LG);
+        .size(theme::FONT_SIZE_LG)
+        .color(theme::PRIMARY);
 
     let throughput_text = text(format!("Throughput: {}", throughput))
-        .size(theme::FONT_SIZE_MD);
+        .size(theme::FONT_SIZE_MD)
+        .color(theme::STATUS_INFO);
 
     let content = column![
         title,
@@ -51,5 +61,9 @@ pub fn view<'a>(
     container(content)
         .width(Length::Fill)
         .height(Length::Fill)
+        .style(|_theme| container::Style {
+            background: Some(iced::Background::Color(theme::BG_MEDIUM)),
+            ..Default::default()
+        })
         .into()
 }

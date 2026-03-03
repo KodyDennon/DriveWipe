@@ -10,7 +10,8 @@ pub fn view<'a>(
     partition_info: &'a [String],
 ) -> Element<'a, Message> {
     let title = text("Partition Manager")
-        .size(theme::FONT_SIZE_XL);
+        .size(theme::FONT_SIZE_XL)
+        .color(theme::TEXT_PRIMARY);
 
     let mut drive_buttons = column![].spacing(theme::SPACING_SM);
     for (i, drive) in drives.iter().enumerate() {
@@ -23,7 +24,7 @@ pub fn view<'a>(
             drive.partition_count,
         );
         drive_buttons = drive_buttons.push(
-            button(text(label).size(theme::FONT_SIZE_MD))
+            button(text(label).size(theme::FONT_SIZE_MD).color(theme::TEXT_PRIMARY))
                 .on_press(Message::ViewPartitions(i))
                 .width(Length::Fill),
         );
@@ -31,7 +32,11 @@ pub fn view<'a>(
 
     let mut info_col = column![].spacing(theme::SPACING_SM);
     for line in partition_info {
-        info_col = info_col.push(text(line.as_str()).size(theme::FONT_SIZE_MD));
+        info_col = info_col.push(
+            text(line.as_str())
+                .size(theme::FONT_SIZE_MD)
+                .color(theme::TEXT_SECONDARY),
+        );
     }
 
     let back_btn = button(text("Back").size(theme::FONT_SIZE_MD))

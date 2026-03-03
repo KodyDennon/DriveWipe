@@ -11,20 +11,24 @@ pub fn view<'a>(
     confirm_text: &'a str,
 ) -> Element<'a, Message> {
     let title = text("Confirm Operation")
-        .size(theme::FONT_SIZE_XL);
+        .size(theme::FONT_SIZE_XL)
+        .color(theme::TEXT_PRIMARY);
 
     let warning = text(format!(
         "WARNING: This will permanently destroy all data on {} drive{}!",
         drive_count,
         if drive_count == 1 { "" } else { "s" }
     ))
-    .size(theme::FONT_SIZE_LG);
+    .size(theme::FONT_SIZE_LG)
+    .color(theme::DANGER);
 
     let method_info = text(format!("Method: {}", method_name))
-        .size(theme::FONT_SIZE_MD);
+        .size(theme::FONT_SIZE_MD)
+        .color(theme::TEXT_SECONDARY);
 
     let instruction = text("Type YES to confirm:")
-        .size(theme::FONT_SIZE_MD);
+        .size(theme::FONT_SIZE_MD)
+        .color(theme::TEXT_PRIMARY);
 
     let input = text_input("Type YES", confirm_text)
         .on_input(Message::ConfirmInput)
@@ -55,5 +59,9 @@ pub fn view<'a>(
     container(content)
         .width(Length::Fill)
         .height(Length::Fill)
+        .style(|_theme| container::Style {
+            background: Some(iced::Background::Color(theme::BG_LIGHT)),
+            ..Default::default()
+        })
         .into()
 }

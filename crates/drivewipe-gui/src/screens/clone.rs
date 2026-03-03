@@ -12,7 +12,8 @@ pub fn view<'a>(
     mode: &'a str,
 ) -> Element<'a, Message> {
     let title = text("Drive Clone")
-        .size(theme::FONT_SIZE_XL);
+        .size(theme::FONT_SIZE_XL)
+        .color(theme::TEXT_PRIMARY);
 
     let source_str = match source {
         Some(i) if i < drives.len() => format!("Source: {} ({})", drives[i].path.display(), drives[i].model),
@@ -24,12 +25,19 @@ pub fn view<'a>(
         _ => "Target: Not selected".to_string(),
     };
 
-    let source_text = text(source_str).size(theme::FONT_SIZE_MD);
-    let target_text = text(target_str).size(theme::FONT_SIZE_MD);
-    let mode_text = text(format!("Mode: {}", mode)).size(theme::FONT_SIZE_MD);
+    let source_text = text(source_str)
+        .size(theme::FONT_SIZE_MD)
+        .color(if source.is_some() { theme::STATUS_HEALTHY } else { theme::TEXT_MUTED });
+    let target_text = text(target_str)
+        .size(theme::FONT_SIZE_MD)
+        .color(if target.is_some() { theme::STATUS_INFO } else { theme::TEXT_MUTED });
+    let mode_text = text(format!("Mode: {}", mode))
+        .size(theme::FONT_SIZE_MD)
+        .color(theme::TEXT_SECONDARY);
 
     let info = text("Select source and target drives from the list below.")
-        .size(theme::FONT_SIZE_SM);
+        .size(theme::FONT_SIZE_SM)
+        .color(theme::TEXT_MUTED);
 
     let mut drive_col = column![].spacing(theme::SPACING_SM);
     for (i, drive) in drives.iter().enumerate() {

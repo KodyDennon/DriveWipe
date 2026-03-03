@@ -10,7 +10,8 @@ pub fn view<'a>(
     selected_method: Option<usize>,
 ) -> Element<'a, Message> {
     let title = text("Select Wipe Method")
-        .size(theme::FONT_SIZE_XL);
+        .size(theme::FONT_SIZE_XL)
+        .color(theme::TEXT_PRIMARY);
 
     let mut method_list = column![].spacing(theme::SPACING_SM);
     for (i, (id, name, passes)) in methods.iter().enumerate() {
@@ -21,7 +22,7 @@ pub fn view<'a>(
     }
 
     let buttons_row = column![
-        button(text("Continue").size(theme::FONT_SIZE_MD))
+        button(text("Continue").size(theme::FONT_SIZE_MD).color(theme::SECONDARY))
             .on_press(Message::ProceedToConfirm),
         button(text("Back").size(theme::FONT_SIZE_MD))
             .on_press(Message::NavigateBack),

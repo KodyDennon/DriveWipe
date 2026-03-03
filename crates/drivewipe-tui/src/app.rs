@@ -206,8 +206,6 @@ pub struct App {
     pub forensic_result_lines: Vec<String>,
     /// Health data lines for display.
     pub health_display_lines: Vec<String>,
-    /// Previous screen to return to (for sub-screens like health, forensic).
-    pub previous_screen: Option<Box<AppScreen>>,
     /// Clone progress fraction (0.0..1.0).
     pub clone_progress_fraction: f64,
     /// Clone throughput string.
@@ -268,7 +266,6 @@ impl App {
             forensic_progress_pct: 0.0,
             forensic_result_lines: Vec::new(),
             health_display_lines: Vec::new(),
-            previous_screen: None,
             clone_progress_fraction: 0.0,
             clone_throughput: String::new(),
             partition_lines: Vec::new(),

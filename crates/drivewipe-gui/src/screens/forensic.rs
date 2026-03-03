@@ -10,7 +10,8 @@ pub fn view<'a>(
     forensic_results: &'a [String],
 ) -> Element<'a, Message> {
     let title = text("Forensic Analysis")
-        .size(theme::FONT_SIZE_XL);
+        .size(theme::FONT_SIZE_XL)
+        .color(theme::TEXT_PRIMARY);
 
     let mut drive_buttons = column![].spacing(theme::SPACING_SM);
     for (i, drive) in drives.iter().enumerate() {
@@ -21,7 +22,7 @@ pub fn view<'a>(
             drive.capacity_display(),
         );
         drive_buttons = drive_buttons.push(
-            button(text(label).size(theme::FONT_SIZE_MD))
+            button(text(label).size(theme::FONT_SIZE_MD).color(theme::TEXT_PRIMARY))
                 .on_press(Message::RunForensicScan(i))
                 .width(Length::Fill),
         );
@@ -30,11 +31,17 @@ pub fn view<'a>(
     let mut results_col = column![].spacing(theme::SPACING_SM);
     if forensic_results.is_empty() {
         results_col = results_col.push(
-            text("Select a drive to start forensic analysis.").size(theme::FONT_SIZE_MD),
+            text("Select a drive to start forensic analysis.")
+                .size(theme::FONT_SIZE_MD)
+                .color(theme::TEXT_MUTED),
         );
     } else {
         for line in forensic_results {
-            results_col = results_col.push(text(line.as_str()).size(theme::FONT_SIZE_MD));
+            results_col = results_col.push(
+                text(line.as_str())
+                    .size(theme::FONT_SIZE_MD)
+                    .color(theme::TEXT_SECONDARY),
+            );
         }
     }
 

@@ -12,7 +12,8 @@ pub fn view<'a>(
     auto_health: bool,
 ) -> Element<'a, Message> {
     let title = text("Settings")
-        .size(theme::FONT_SIZE_XL);
+        .size(theme::FONT_SIZE_XL)
+        .color(theme::TEXT_PRIMARY);
 
     let auto_report_cb = checkbox("Auto JSON Reports", auto_report)
         .on_toggle(|v| Message::ToggleSetting("auto_report".into(), v));
