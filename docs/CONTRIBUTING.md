@@ -5,7 +5,7 @@ Contributions are welcome from all individuals and organizations.
 ## Getting Started
 
 1. Fork the repository
-2. Clone your fork: `git clone https://github.com/YOUR_USERNAME/DriveWipe.git`
+2. Clone your fork: `git clone https://github.com/KodyDennon/DriveWipe.git`
 3. Create a feature branch: `git checkout -b feature/my-feature`
 4. Make your changes
 5. Run checks: `cargo fmt && cargo clippy --workspace --all-features -- -D warnings && cargo test --workspace`
