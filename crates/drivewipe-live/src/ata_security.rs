@@ -21,7 +21,7 @@
 use drivewipe_core::error::{DriveWipeError, Result};
 use log;
 
-use crate::kernel_module::{DwAtaSecurityState, KernelModule, set_device_path};
+use crate::kernel_module::{set_device_path, DwAtaSecurityState, KernelModule};
 
 /// Detailed ATA security state for a drive.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -189,7 +189,7 @@ fn query_via_sg_io(device_path: &str) -> Result<AtaSecurityInfo> {
         ..Default::default()
     };
 
-    let ret = unsafe { libc::ioctl(fd, SG_IO.into(), &mut hdr as *mut _) };
+    let ret = unsafe { libc::ioctl(fd, SG_IO as _, &mut hdr as *mut _) };
     if ret < 0 {
         return Err(DriveWipeError::Ioctl {
             operation: "IDENTIFY DEVICE for ATA security".to_string(),

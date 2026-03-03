@@ -14,7 +14,7 @@
 use drivewipe_core::error::{DriveWipeError, Result};
 use log;
 
-use crate::kernel_module::{DwHpaInfo, KernelModule, set_device_path};
+use crate::kernel_module::{set_device_path, DwHpaInfo, KernelModule};
 
 /// HPA detection result.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -184,7 +184,7 @@ fn sg_io_ata16_non_data(
         ..Default::default()
     };
 
-    let ret = unsafe { libc::ioctl(fd, SG_IO.into(), &mut hdr as *mut _) };
+    let ret = unsafe { libc::ioctl(fd, SG_IO as _, &mut hdr as *mut _) };
     if ret < 0 {
         return Err(DriveWipeError::Ioctl {
             operation: format!("SG_IO READ NATIVE MAX ({:#04x})", command),
@@ -228,7 +228,7 @@ fn sg_io_identify_device(fd: std::os::unix::io::RawFd) -> Result<[u8; 512]> {
         ..Default::default()
     };
 
-    let ret = unsafe { libc::ioctl(fd, SG_IO.into(), &mut hdr as *mut _) };
+    let ret = unsafe { libc::ioctl(fd, SG_IO as _, &mut hdr as *mut _) };
     if ret < 0 {
         return Err(DriveWipeError::Ioctl {
             operation: "SG_IO IDENTIFY DEVICE".to_string(),
@@ -398,7 +398,7 @@ fn remove_hpa_sg_io(device_path: &str) -> Result<HpaStatus> {
         ..Default::default()
     };
 
-    let ret = unsafe { libc::ioctl(fd, SG_IO.into(), &mut hdr as *mut _) };
+    let ret = unsafe { libc::ioctl(fd, SG_IO as _, &mut hdr as *mut _) };
     if ret < 0 {
         return Err(DriveWipeError::HiddenAreaRemovalFailed {
             reason: format!(

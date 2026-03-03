@@ -211,7 +211,7 @@ impl KernelModule {
 
     /// Execute a raw ioctl, returning an error on failure.
     unsafe fn ioctl<T>(&self, request: u64, arg: &mut T) -> Result<()> {
-        let ret = unsafe { libc::ioctl(self.fd(), request, arg as *mut T) };
+        let ret = unsafe { libc::ioctl(self.fd(), request as _, arg as *mut T) };
         if ret < 0 {
             return Err(DriveWipeError::KernelModuleError(format!(
                 "ioctl {:#x} failed: {}",

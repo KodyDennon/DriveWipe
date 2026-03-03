@@ -12,7 +12,7 @@
 use drivewipe_core::error::{DriveWipeError, Result};
 use log;
 
-use crate::kernel_module::{DwDcoInfo, KernelModule, set_device_path};
+use crate::kernel_module::{set_device_path, DwDcoInfo, KernelModule};
 
 /// ATA command: DEVICE CONFIGURATION (0xB1).
 const ATA_CMD_DEVICE_CONFIG: u8 = 0xB1;
@@ -190,7 +190,7 @@ fn detect_dco_sg_io(device_path: &str) -> Result<DcoStatus> {
         ..Default::default()
     };
 
-    let ret = unsafe { libc::ioctl(fd, SG_IO.into(), &mut hdr as *mut _) };
+    let ret = unsafe { libc::ioctl(fd, SG_IO as _, &mut hdr as *mut _) };
     if ret < 0 {
         return Err(DriveWipeError::DcoError(format!(
             "DCO IDENTIFY SG_IO failed: {}",
@@ -275,7 +275,7 @@ fn restore_dco_sg_io(device_path: &str) -> Result<DcoStatus> {
         ..Default::default()
     };
 
-    let ret = unsafe { libc::ioctl(fd, SG_IO.into(), &mut hdr as *mut _) };
+    let ret = unsafe { libc::ioctl(fd, SG_IO as _, &mut hdr as *mut _) };
     if ret < 0 {
         return Err(DriveWipeError::HiddenAreaRemovalFailed {
             reason: format!(
@@ -328,7 +328,7 @@ fn freeze_dco_sg_io(device_path: &str) -> Result<()> {
         ..Default::default()
     };
 
-    let ret = unsafe { libc::ioctl(fd, SG_IO.into(), &mut hdr as *mut _) };
+    let ret = unsafe { libc::ioctl(fd, SG_IO as _, &mut hdr as *mut _) };
     if ret < 0 {
         return Err(DriveWipeError::DcoFrozen);
     }
@@ -361,7 +361,7 @@ fn get_current_max_lba(fd: std::os::unix::io::RawFd) -> Result<u64> {
         ..Default::default()
     };
 
-    let ret = unsafe { libc::ioctl(fd, SG_IO.into(), &mut hdr as *mut _) };
+    let ret = unsafe { libc::ioctl(fd, SG_IO as _, &mut hdr as *mut _) };
     if ret < 0 {
         return Err(DriveWipeError::DcoError(format!(
             "IDENTIFY DEVICE failed: {}",
