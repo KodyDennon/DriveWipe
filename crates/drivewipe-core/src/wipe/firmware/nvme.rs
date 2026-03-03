@@ -499,7 +499,7 @@ mod linux_nvme {
                 ..Default::default()
             };
 
-            let ret = unsafe { libc::ioctl(fd, NVME_IOCTL_ADMIN_CMD, &mut cmd as *mut _) };
+            let ret = unsafe { libc::ioctl(fd, NVME_IOCTL_ADMIN_CMD as _, &mut cmd as *mut _) };
             if ret < 0 {
                 // If we can't read the log, assume it completed
                 break;
@@ -721,12 +721,12 @@ mod windows_nvme {
     use std::mem;
     use std::os::windows::ffi::OsStrExt;
 
+    use windows::core::PCWSTR;
     use windows::Win32::Foundation::{CloseHandle, HANDLE, INVALID_HANDLE_VALUE};
     use windows::Win32::Storage::FileSystem::{
         CreateFileW, FILE_SHARE_READ, FILE_SHARE_WRITE, OPEN_EXISTING,
     };
     use windows::Win32::System::IO::DeviceIoControl;
-    use windows::core::PCWSTR;
 
     /// IOCTL_STORAGE_PROTOCOL_COMMAND
     const IOCTL_STORAGE_PROTOCOL_COMMAND: u32 = 0x002D1400;

@@ -140,7 +140,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: drivewipe-${{ matrix.target }}
-          path: drivewipe-*.*
+          path: DriveWipe-*.*
 
   # ── Live ISO Build ──────────────────────────────────────────────────────
   build-live:

@@ -169,7 +169,7 @@ mod linux_opal {
         });
 
         let msid_key = OpalKey::new(DEFAULT_MSID);
-        let ret = unsafe { libc::ioctl(fd, IOC_OPAL_TAKE_OWNERSHIP, &msid_key as *const _) };
+        let ret = unsafe { libc::ioctl(fd, IOC_OPAL_TAKE_OWNERSHIP as _, &msid_key as *const _) };
         if ret < 0 {
             let err = std::io::Error::last_os_error();
             // EPERM typically means the drive is already owned with a
@@ -199,7 +199,7 @@ mod linux_opal {
         lr_act.num_lrs = 1;
         lr_act.lr[0] = 0; // Locking range 0 (global)
 
-        let ret = unsafe { libc::ioctl(fd, IOC_OPAL_ACTIVATE_LSP, &lr_act as *const _) };
+        let ret = unsafe { libc::ioctl(fd, IOC_OPAL_ACTIVATE_LSP as _, &lr_act as *const _) };
         if ret < 0 {
             let err = std::io::Error::last_os_error();
             // EALREADY means the Locking SP is already active — that's OK.
@@ -218,7 +218,7 @@ mod linux_opal {
         });
 
         let revert_key = OpalKey::new(DEFAULT_MSID);
-        let ret = unsafe { libc::ioctl(fd, IOC_OPAL_REVERT_TPR, &revert_key as *const _) };
+        let ret = unsafe { libc::ioctl(fd, IOC_OPAL_REVERT_TPR as _, &revert_key as *const _) };
         if ret < 0 {
             return Err(DriveWipeError::Ioctl {
                 operation: "IOC_OPAL_REVERT_TPR".into(),

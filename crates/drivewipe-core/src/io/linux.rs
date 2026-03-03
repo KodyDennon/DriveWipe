@@ -101,13 +101,7 @@ impl LinuxDeviceIo {
         // Query the device's logical block size via ioctl(BLKSSZGET).
         // Falls back to 512 bytes if the ioctl fails.
         let mut block_size: u32 = 512;
-        let ret = unsafe {
-            libc::ioctl(
-                file.as_raw_fd(),
-                libc::BLKSSZGET as libc::c_ulong,
-                &mut block_size,
-            )
-        };
+        let ret = unsafe { libc::ioctl(file.as_raw_fd(), libc::BLKSSZGET as _, &mut block_size) };
         if ret == -1 {
             log::warn!(
                 "BLKSSZGET ioctl failed on {}: {}, using default 512-byte sectors",
