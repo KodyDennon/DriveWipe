@@ -67,13 +67,13 @@ echo ""
 
 echo "Stage 2: Building DriveWipe kernel module..."
 
+mkdir -p "$BUILD_DIR"
+
 if [ "${SKIP_KERNEL_MODULE:-0}" = "1" ]; then
     echo "  [INFO] Skipping kernel module build as requested (SKIP_KERNEL_MODULE=1)"
     HAS_KMOD=0
 else
-    mkdir -p "$BUILD_DIR"
-
-# Build kernel module inside Docker (needs Linux kernel headers)
+    # Build kernel module inside Docker (needs Linux kernel headers)
 cat > "$BUILD_DIR/Dockerfile.kmod" << 'KMOD_DOCKERFILE'
 FROM alpine:3.21
 
