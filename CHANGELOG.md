@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to this project will be documented in this file.
+All notable changes to DriveWipe will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
@@ -9,120 +9,191 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [1.0.0] - 2026-03-02
 
+DriveWipe 1.0.0 is a major release that transforms the project from a wipe-only tool into a comprehensive drive management, forensics, and sanitization platform. This release adds 10 new core modules, expands the CLI with 5 new subcommands, adds 7 new TUI screens, delivers a full graphical interface, and includes build tooling for bootable live USB images.
+
 ### Added
 
-#### Core Modules
-- **Audit Log System** — Structured JSONL event logging for all operations (wipe, clone, partition, forensic, health, config changes) with timestamps, operator info, and device identification
-- **Drive Health Monitoring** — SMART attribute parsing (ATA), NVMe health log parsing, drive health snapshots with save/load, pre/post-wipe health comparison with pass/fail verdicts, sequential read/write micro-benchmarks
-- **Drive Profile Database** — Manufacturer-specific drive profiles (Samsung EVO/Pro, WD Blue, Seagate Barracuda, Crucial MX, Intel SSD, Kingston, generics for HDD/SSD/NVMe) with model regex matching, SLC cache size hints, over-provisioning ratios, recommended wipe methods, and performance characteristics
-- **Drive Cloning** — Block-level sector-by-sector cloning with hash verification, partition-aware cloning with resize-to-fit, compression (flate2/zstd), AES-256 encryption, image format with chunked data and metadata headers
-- **Partition Manager** — GPT and MBR partition table parsing with full CRC32 validation, partition CRUD operations (create, delete, resize, move) with overlap detection, bounds checking, and data preservation, filesystem detection via magic bytes (ext4, NTFS, FAT32, exFAT, XFS, Btrfs)
-- **Forensic Toolkit** — Per-sector entropy calculation with heatmap data, file signature scanning (JPEG, PDF, DOCX, EXE, ZIP, PNG, MP3, SQLite, etc.), statistical random sector sampling with configurable confidence levels, HPA/DCO hidden area detection, formal forensic report generation with hash chains and chain-of-custody, DFXML export
-- **Time Estimation** — EMA-smoothed throughput tracking with configurable alpha, multi-pass awareness with separate write/verify estimates, drive profile integration for SLC cache cliff prediction, confidence intervals (best/expected/worst), per-pass ETA breakdown, calibration period before first estimate, historical performance database with load/save
-- **Sleep Prevention** — RAII `SleepGuard` pattern (acquires on creation, releases on drop) for Linux (D-Bus logind Inhibit), macOS (IOPMAssertionCreateWithName), and Windows (SetThreadExecutionState)
-- **Desktop Notifications** — Cross-platform notification support for Linux (notify-rust/D-Bus), macOS (osascript), and Windows (toast notifications) with configurable urgency levels
-- **Keyboard Lock Mode** — Configurable unlock key sequence with ring buffer matching, lock/unlock event emission to audit log, TUI integration that intercepts all input when locked
-- **DriveWipe Secure Method** — 4 specialized variants: HDD (multi-pass patterns + verify), SATA SSD (overwrite + TRIM + overwrite + ATA Secure Erase + verify), NVMe (overwrite + deallocate + NVMe Format/Sanitize + overwrite + verify), USB (multi-pass overwrite + verify)
-
-#### CLI
-- `drivewipe health <device>` — Display SMART data, health snapshots, compare before/after
-- `drivewipe profile <device>` — Show matched drive profile with recommendations
-- `drivewipe clone <source> <target>` — Block or partition-aware cloning with `--compress`, `--encrypt`, `--mode` flags
-- `drivewipe partition list|create|delete|resize|move` — Partition management subcommands
-- `drivewipe forensic scan|report|compare` — Forensic analysis with JSON report output
-
-#### TUI
-- **Main Menu** — Central hub with all feature options (Secure Wipe, Drive Health, Drive Clone, Partition Manager, Forensic Analysis, Settings)
-- **Health Screen** — SMART attribute display with color-coded health indicators
-- **Clone Setup/Progress** — Source/target drive selection, mode picker, dual throughput display with background clone operations
-- **Partition Screen** — Partition table display with partition info, live device reading
-- **Forensic Screen** — Background forensic scanning with entropy and signature results
-- **Settings Screen** — Toggle auto-reports, notifications, sleep prevention, auto health checks
-- Background thread operations for clone, forensic, and partition reading
-
-#### GUI (iced 0.13)
-- Full graphical application with 9 screens and navigation
-- Drive selection, method selection, confirmation, wipe progress screens
-- Health, clone, partition, forensic, and settings screens
-- Theme system with color constants for consistent styling (dark backgrounds, status colors, text hierarchy)
-- Version display on main menu
-
-#### Build System
-- `scripts/build.sh` — Cross-platform build script with `--dev`, `--portable`, `--no-gui`, `--install` flags
-- `scripts/build-live.sh` — Docker-based Alpine Linux bootable USB image builder
-- `release.sh` (gitignored) — Local release automation: auto-detect platform, build, version bump, tag, push, upload to GitHub Releases via `gh` CLI
-
-#### Bootable Live USB
-- Alpine Linux-based minimal live image configuration
-- Auto-launch DriveWipe TUI on boot
-- UEFI (GRUB) and BIOS (SYSLINUX) boot support
-- Pre-installed storage drivers (SATA, NVMe, USB, SCSI)
-- udev device enumeration on startup
-
-#### Documentation
-- User guides: installation, quickstart, wipe methods, cloning, health monitoring, forensics, configuration reference, troubleshooting
-- Developer docs: architecture overview, testing guide
-
-#### Tests
-- 267 tests across workspace (up from 130)
-- Partition operations tests (create, overlap rejection, delete, resize, move, MBR limit, CRC validation)
-- Profile matcher tests, audit logger tests, health snapshot tests
-- Keyboard lock tests, time estimator tests
-- MockDevice test infrastructure with configurable size and error injection
+- **Audit Log System** — Structured JSONL event logging for all operations with timestamps, operator identification, and device tracking. Covers wipe, clone, partition, forensic, health, and configuration events with configurable severity levels.
+- **Drive Health Monitoring** — Full SMART attribute parsing for ATA drives and NVMe health log parsing. Includes drive health snapshots with save/load support, pre/post-wipe health comparison with automated pass/fail verdicts, and sequential read/write micro-benchmarks.
+- **Drive Profile Database** — Manufacturer-specific profiles for Samsung EVO/Pro, WD Blue, Seagate Barracuda, Crucial MX, Intel SSD, Kingston, plus generic profiles for HDD, SSD, and NVMe. Profiles include model regex matching, SLC cache size hints, over-provisioning ratios, recommended wipe methods, and performance characteristics loaded from TOML files.
+- **Drive Cloning** — Block-level sector-by-sector cloning with hash verification, partition-aware cloning with automatic resize-to-fit, optional compression (flate2/zstd), and AES-256 encryption. Image format uses chunked data with metadata headers for resume support.
+- **Partition Manager** — GPT and MBR partition table parsing with full CRC32 validation. Supports create, delete, resize, and move operations with overlap detection, bounds checking, and data preservation. Includes filesystem detection via magic bytes for ext4, NTFS, FAT32, exFAT, XFS, and Btrfs.
+- **Forensic Toolkit** — Per-sector entropy calculation with heatmap data generation, file signature scanning for common formats (JPEG, PDF, DOCX, EXE, ZIP, PNG, MP3, SQLite, etc.), statistical random sector sampling with configurable confidence levels, and HPA/DCO hidden area detection. Generates formal forensic reports with hash chains and chain-of-custody metadata, plus DFXML export.
+- **Time Estimation Engine** — EMA-smoothed throughput tracking, multi-pass awareness with separate write/verify estimates, drive profile integration for SLC cache cliff prediction, confidence intervals (best/expected/worst), per-pass ETA breakdown, calibration period, and historical performance database with per-device load/save.
+- **Sleep Prevention** — RAII `SleepGuard` that prevents system sleep during long-running operations. Supports Linux (D-Bus logind Inhibit), macOS (IOPMAssertionCreateWithName), and Windows (SetThreadExecutionState).
+- **Desktop Notifications** — Cross-platform notification support via notify-rust for Linux (D-Bus freedesktop notifications), macOS (osascript), and Windows (toast notifications). Fires on operation completion with configurable urgency levels.
+- **Keyboard Lock Mode** — Prevents accidental interruption during critical operations. Uses a configurable unlock key sequence with ring buffer matching. Emits lock/unlock events to the audit log.
+- **DriveWipe Secure Wipe Method** — 4 specialized variants optimized per storage type:
+  - **HDD**: Multi-pass pattern writes with verification
+  - **SATA SSD**: Overwrite + TRIM + overwrite + ATA Secure Erase (if supported) + verify
+  - **NVMe**: Overwrite + deallocate + NVMe Format/Sanitize (if supported) + overwrite + verify
+  - **USB**: Multi-pass overwrite + verify (limited by USB controller throughput)
+- **CLI Subcommands**:
+  - `drivewipe health <device>` — Display SMART data, save/load health snapshots, compare before/after
+  - `drivewipe profile <device>` — Show matched drive profile with recommendations
+  - `drivewipe clone <source> <target>` — Block or partition-aware cloning with `--compress`, `--encrypt`, `--mode` flags
+  - `drivewipe partition list|create|delete|resize|move` — Full partition management
+  - `drivewipe forensic scan|report|compare` — Forensic analysis with JSON report output
+- **TUI Screens**:
+  - Main Menu — Central navigation hub for all features
+  - Drive Health — SMART attribute table with color-coded health indicators
+  - Clone Setup & Progress — Source/target selection, mode picker, real-time throughput display with background clone operations
+  - Partition Manager — Live partition table reading and display
+  - Forensic Analysis — Background scanning with entropy and signature results
+  - Settings — Toggle auto-reports, notifications, sleep prevention, and auto health checks
+- **GUI Application** (iced 0.13) — Full graphical interface with 9 screens (drive select, method select, confirmation, wipe progress, health, clone, partition, forensic, settings), themed with consistent color system, version display, and responsive layouts.
+- **Build System**:
+  - `scripts/build.sh` — Cross-platform build script with `--dev`, `--portable`, `--no-gui`, and `--install` flags
+  - `scripts/build-live.sh` — Docker-based Alpine Linux bootable USB image builder with UEFI (GRUB) and BIOS (SYSLINUX) boot support
+  - `release.sh` (gitignored, local-only) — Automated release script that detects platform, builds release binaries, bumps version, creates git tag, and uploads to GitHub Releases. Supports `--attach <tag>` to add platform-specific builds to an existing release without creating a new one.
+- **Bootable Live USB** — Alpine Linux-based minimal live image with auto-launch TUI, pre-installed storage drivers (SATA, NVMe, USB, SCSI), udev device enumeration, and target image size under 256MB.
+- **Documentation** — User guides for installation, quickstart, wipe methods, cloning, health monitoring, forensics, configuration reference, and troubleshooting. Developer docs for architecture and testing.
+- **Tests** — 267 tests across workspace including partition CRUD operations, GPT CRC32 validation, profile matching, audit logging, health snapshots, keyboard lock, time estimation, and MockDevice test infrastructure.
 
 ### Changed
-- Wipe method registry now contains 21 methods (9 software + 8 firmware + 4 DriveWipe Secure)
-- Progress event system expanded with 12 new variants for health, clone, partition, and forensic operations
-- `DriveWipeConfig` expanded with fields for profiles, notifications, sleep prevention, audit logging, and performance history
-- Error enum expanded with 16 new variants covering all new modules
+
+- Wipe method registry expanded from 17 to 21 methods (9 software + 8 firmware + 4 DriveWipe Secure).
+- Progress event system expanded with 12 new variants for health, clone, partition, and forensic operations.
+- `DriveWipeConfig` expanded with configuration for profiles directory, notification preferences, sleep prevention, keyboard lock sequence, auto health checks, audit directory, and performance history.
+- Error types expanded with 16 new variants covering all new modules.
 
 ### Fixed
-- GPT partition table CRC32 validation fully implemented (was TODO)
-- Partition CRUD operations fully implemented (were returning stub errors)
-- CLI forensic report command generates actual `ForensicReport` with JSON output (was placeholder)
-- TUI clone operation spawns background thread with real `clone_block`/`clone_partition_aware` calls (was "not yet implemented")
-- TUI forensic operation spawns background `ForensicSession.execute()` (was showing CLI guidance)
-- TUI partition screen reads actual partition table from device (was showing CLI guidance)
-- All 17 compiler warnings resolved (unused fields, unused theme constants)
 
-### Previous Changes (pre-1.0.0)
-
-#### Fixed
-- **Windows**: DoD wipe verification now works correctly on Windows. Fixed buffer alignment issues that caused verification to fail silently when using `FILE_FLAG_NO_BUFFERING`.
-  - `PatternVerifier`, `ZeroVerifier`, and random pattern verification now use aligned buffers for reads, matching the alignment requirements of Windows direct I/O
-  - Verification warnings and errors are now properly sent as `ProgressEvent` messages so they appear in the TUI log viewer
-  - Users will now see detailed error messages (e.g., "Verification mismatch at offset 0x1234") instead of just "FAILED"
-- **Windows TUI**: Drive capacity now displays correctly in the drive list. Fixed drive enumeration to open drives with `GENERIC_READ` access instead of zero access, which is required for `IOCTL_DISK_GET_LENGTH_INFO` to succeed.
-- **Windows TUI**: Fixed "device disconnected" error when starting wipe. Windows device paths like `\\.\PhysicalDrive0` don't support `.exists()` check, so this validation is now skipped on Windows platforms.
-- **Windows TUI**: Added Administrator reminder to confirmation dialog to help users avoid common privilege errors.
-- **Windows Debugging**: Added comprehensive logging and debug file output to diagnose device opening failures. Debug log is written to `%TEMP%\drivewipe_debug.log`. The TUI now displays the debug log location in the log viewer. Error messages include specific Windows error codes.
-- Test suite: Fixed clippy warnings for redundant imports and bool comparisons
-- Cross-module visibility: Made `extract_windows_drive_number` visible to other modules via `pub(crate)`
-- Windows I/O: Fixed clippy warning for `std::mem::forget` on `Copy` type by using `let _ = handle` pattern
-
-#### Added (Initial Release)
-- Core library (`drivewipe-core`) with full wipe engine
-  - 9 software wipe methods: Zero, One, Random (AES-256-CTR), DoD 5220.22-M (3-pass), DoD ECE (7-pass), Gutmann (35-pass), HMG IS5 Baseline, HMG IS5 Enhanced, RCMP TSSIT OPS-II
-  - 8 firmware wipe methods: ATA Secure Erase, ATA Enhanced Secure Erase, NVMe Format (User Data & Crypto), NVMe Sanitize (Block, Crypto, Overwrite), TCG Opal Crypto Erase
-  - Custom user-defined wipe methods from config.toml
-  - AES-256-CTR PRNG with hardware AES-NI acceleration
-  - Linux/macOS/Windows raw device I/O with direct I/O and aligned buffers
-  - Drive enumeration on all platforms
-  - Boot drive detection
-  - Pattern-based and zero-optimized read-back verification
-  - Session resume from saved state
-  - JSON and PDF report generation
-  - Progress event system via crossbeam channels
-  - Cooperative cancellation via `CancellationToken`
-- CLI (`drivewipe`) with subcommands: list, wipe, verify, info, report, queue, resume
-- TUI (`drivewipe-tui`) with full interactive interface
-- Firmware wipe implementations (ATA Secure Erase, NVMe Format/Sanitize, TCG Opal)
-- GitHub Actions CI across Linux/macOS/Windows
-- Comprehensive test suite
+- GPT partition table CRC32 validation now fully implemented (was previously a TODO stub).
+- All compiler warnings resolved across the entire workspace (0 warnings).
 
 ### Known Limitations
-- ATA Secure Erase is not supported on macOS (no reliable ATA passthrough)
-- NVMe commands on macOS require `nvme-cli` (`brew install nvme-cli`)
-- TCG Opal crypto erase is only supported on Linux (macOS/Windows planned)
-- ATA security state detection not yet implemented on any platform
-- GUI is functional but uses default iced theme styling (custom theme planned)
+
+- ATA Secure Erase is not supported on macOS (no reliable ATA passthrough).
+- NVMe commands on macOS require `nvme-cli` (`brew install nvme-cli`).
+- TCG Opal crypto erase is only supported on Linux.
+- GUI uses default iced theme styling; custom dark theme is planned.
+- Live USB image builder requires Docker and root privileges.
+
+---
+
+## [0.1.5] - 2026-02-28
+
+### Added
+
+- Comprehensive implementation plan and archived completed development phases.
+
+### Fixed
+
+- Stabilized throughput display with EMA smoothing and longer measurement windows to prevent erratic readings.
+
+### Changed
+
+- Major performance optimizations across I/O, pattern generation, and TUI rendering.
+- Professional security-focused TUI redesign with modern layout.
+
+---
+
+## [0.1.4] - 2026-02-27
+
+### Added
+
+- Complete TUI overhaul with modern design, sparkline throughput chart, scrollable log viewer, and keyboard-driven navigation.
+- Debug logging infrastructure with `eprintln` converted to `log::debug` to prevent TUI interference.
+
+### Fixed
+
+- Windows: Set disk OFFLINE and use synchronous I/O to resolve write failures.
+- Windows: Add `SeManageVolumePrivilege`, `SeBackupPrivilege`, `SeRestorePrivilege` for raw disk I/O.
+- Windows: Remove unnecessary volume dismount/lock, use zero sharing mode for exclusive physical drive access.
+- Windows: Add `WRITE_DAC`, `READ_CONTROL`, `SYNCHRONIZE` access rights.
+- Windows: Enable `FSCTL_LOCK_VOLUME` and `FSCTL_ALLOW_EXTENDED_DASD_IO` for Windows 11 compatibility.
+- Windows: Add delay after dismount and use exclusive write access.
+- Windows: Filter key events to `Press`-only to prevent double input from `Press`+`Release`.
+
+---
+
+## [0.1.3] - 2026-02-26
+
+### Added
+
+- Administrator reminder in Windows TUI confirmation dialog.
+- Comprehensive Windows debugging with file-based debug log at `%TEMP%\drivewipe_debug.log`.
+- Device unmounting before raw I/O on all platforms.
+- Improved boot drive detection and config fallbacks.
+
+### Fixed
+
+- Windows TUI: "device disconnected" error on wipe start (Windows device paths don't support `.exists()` check).
+- Windows: DoD wipe verification buffer alignment issues with `FILE_FLAG_NO_BUFFERING`.
+- Windows TUI: Drive capacity now displays correctly (fixed `IOCTL_DISK_GET_LENGTH_INFO` access mode).
+- Verification warnings and errors now properly sent as `ProgressEvent` messages.
+
+---
+
+## [0.1.2] - 2026-02-25
+
+### Added
+
+- All firmware wipe implementations fully cross-platform:
+  - ATA Secure Erase: Linux (`SG_IO` + `ATA_16` CDB), Windows (`IOCTL_ATA_PASS_THROUGH`)
+  - NVMe Format/Sanitize: Linux (`NVME_IOCTL_ADMIN_CMD`), macOS (`nvme-cli` shell-out), Windows (`IOCTL_STORAGE_PROTOCOL_COMMAND`)
+  - TCG Opal crypto erase: Linux (`sed-opal` kernel ioctls)
+- Windows platform support for drive enumeration, raw device I/O, and all wipe methods.
+- GitHub Actions release workflow for 6 platform targets (Linux/macOS/Windows x86_64/ARM64).
+- `WipeSession` firmware dispatch — `execute_firmware()` on `WipeMethod` trait skips software write loop for firmware methods.
+
+### Fixed
+
+- Windows-only clippy lints and cross-platform compilation errors.
+- Unix-only `extract_base_device` gated behind `#[cfg(unix)]`.
+- Test path separators for Windows CI.
+
+---
+
+## [0.1.1] - 2026-02-24
+
+### Added
+
+- Safety First automated versioning system (`xtask bump`).
+- Comprehensive audit fixes and expanded test suite.
+
+### Fixed
+
+- Documentation link issues and doc comment formatting.
+
+---
+
+## [0.1.0] - 2026-02-23
+
+Initial release of DriveWipe.
+
+### Added
+
+- **Core library** (`drivewipe-core`):
+  - 9 software wipe methods: Zero Fill, One Fill, Random (AES-256-CTR), DoD 5220.22-M (3-pass), DoD 5220.22-M ECE (7-pass), Gutmann (35-pass), HMG IS5 Baseline, HMG IS5 Enhanced, RCMP TSSIT OPS-II
+  - 8 firmware wipe methods: ATA Secure Erase, ATA Enhanced Secure Erase, NVMe Format (User Data Erase & Cryptographic Erase), NVMe Sanitize (Block Erase, Crypto Erase, Overwrite), TCG Opal Crypto Erase
+  - Custom user-defined wipe methods via `config.toml`
+  - AES-256-CTR cryptographic PRNG with hardware AES-NI acceleration
+  - Method registry with software + firmware method lookup
+  - Linux raw device I/O (`O_DIRECT | O_SYNC | O_NOFOLLOW`, `BLKSSZGET` ioctl)
+  - macOS raw device I/O (`F_NOCACHE`, `DKIOCGETBLOCKSIZE` ioctl, `/dev/rdisk` paths)
+  - Page-aligned buffer allocation for direct I/O
+  - Linux drive enumeration via sysfs (`/sys/block/`)
+  - macOS drive enumeration via `diskutil` plist parsing
+  - Boot drive detection (Linux: `/proc/mounts`, macOS: `/sbin/mount`)
+  - Pattern-based and zero-optimized read-back verification
+  - Session resume from saved state (JSON persistence with device serial matching)
+  - JSON report generation (automatic after every wipe)
+  - PDF report generation ("Data Sanitization Certificate" via `genpdf`)
+  - Progress event system via crossbeam channels
+  - Cooperative cancellation via `CancellationToken`
+  - Multi-step safety confirmation system
+- **CLI** (`drivewipe`): Subcommands for list, wipe, verify, info, report, queue, resume. Force mode for scripted use. Interactive confirmation with countdown.
+- **TUI** (`drivewipe-tui`): Drive selection table, method picker with per-drive suggestions, multi-drive wipe dashboard with progress gauges, scrollable log viewer.
+- **Test suite**: 130 tests covering types, config, errors, patterns, PRNG, aligned buffers, wipe sessions, verification, cancellation, method registry, and report serialization.
+- GitHub Actions CI (build, test, clippy, fmt, docs, security audit) across Linux, macOS, and Windows.
+
+[Unreleased]: https://github.com/KodyDennon/DriveWipe/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/KodyDennon/DriveWipe/compare/v0.1.5...v1.0.0
+[0.1.5]: https://github.com/KodyDennon/DriveWipe/compare/v0.1.4...v0.1.5
+[0.1.4]: https://github.com/KodyDennon/DriveWipe/compare/v0.1.3...v0.1.4
+[0.1.3]: https://github.com/KodyDennon/DriveWipe/compare/v0.1.2...v0.1.3
+[0.1.2]: https://github.com/KodyDennon/DriveWipe/compare/v0.1.1...v0.1.2
+[0.1.1]: https://github.com/KodyDennon/DriveWipe/compare/v0.1.0...v0.1.1
+[0.1.0]: https://github.com/KodyDennon/DriveWipe/releases/tag/v0.1.0
