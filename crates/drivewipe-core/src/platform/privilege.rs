@@ -16,7 +16,7 @@ pub fn is_elevated() -> bool {
 
     use windows::Win32::Foundation::{CloseHandle, HANDLE};
     use windows::Win32::Security::{
-        GetTokenInformation, TOKEN_ELEVATION, TOKEN_QUERY, TokenElevation,
+        GetTokenInformation, TokenElevation, TOKEN_ELEVATION, TOKEN_QUERY,
     };
     use windows::Win32::System::Threading::{GetCurrentProcess, OpenProcessToken};
 
@@ -77,13 +77,13 @@ pub fn elevation_hint() -> String {
 /// ERROR_ACCESS_DENIED.
 #[cfg(windows)]
 pub fn enable_raw_disk_privileges() -> Result<()> {
+    use windows::core::PCWSTR;
     use windows::Win32::Foundation::{CloseHandle, HANDLE, LUID};
     use windows::Win32::Security::{
-        AdjustTokenPrivileges, LUID_AND_ATTRIBUTES, LookupPrivilegeValueW, SE_PRIVILEGE_ENABLED,
+        AdjustTokenPrivileges, LookupPrivilegeValueW, LUID_AND_ATTRIBUTES, SE_PRIVILEGE_ENABLED,
         TOKEN_ADJUST_PRIVILEGES, TOKEN_PRIVILEGES, TOKEN_QUERY,
     };
     use windows::Win32::System::Threading::{GetCurrentProcess, OpenProcessToken};
-    use windows::core::PCWSTR;
 
     unsafe {
         let mut token = HANDLE::default();
@@ -149,7 +149,7 @@ pub fn enable_raw_disk_privileges() -> Result<()> {
             }],
         };
 
-        if AdjustTokenPrivileges(token, false, Some(&mut tp_backup), 0, None, None).is_err() {
+        if AdjustTokenPrivileges(token, false, Some(&tp_backup), 0, None, None).is_err() {
             let _ = CloseHandle(token);
             return Err(DriveWipeError::InsufficientPrivileges {
                 message:
@@ -167,7 +167,7 @@ pub fn enable_raw_disk_privileges() -> Result<()> {
             }],
         };
 
-        if AdjustTokenPrivileges(token, false, Some(&mut tp_restore), 0, None, None).is_err() {
+        if AdjustTokenPrivileges(token, false, Some(&tp_restore), 0, None, None).is_err() {
             let _ = CloseHandle(token);
             return Err(DriveWipeError::InsufficientPrivileges {
                 message:
@@ -185,7 +185,7 @@ pub fn enable_raw_disk_privileges() -> Result<()> {
             }],
         };
 
-        if AdjustTokenPrivileges(token, false, Some(&mut tp_manage_vol), 0, None, None).is_err() {
+        if AdjustTokenPrivileges(token, false, Some(&tp_manage_vol), 0, None, None).is_err() {
             let _ = CloseHandle(token);
             return Err(DriveWipeError::InsufficientPrivileges {
                 message: "Failed to enable SeManageVolumePrivilege. Ensure you are running as Administrator."
