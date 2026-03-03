@@ -42,13 +42,13 @@ pub enum AppScreen {
     PartitionManager,
     ForensicAnalysis,
     Settings,
-    #[cfg(feature = "live")]
+    #[cfg(all(feature = "live", target_os = "linux"))]
     LiveDashboard,
-    #[cfg(feature = "live")]
+    #[cfg(all(feature = "live", target_os = "linux"))]
     HpaDcoManager,
-    #[cfg(feature = "live")]
+    #[cfg(all(feature = "live", target_os = "linux"))]
     AtaSecurityManager,
-    #[cfg(feature = "live")]
+    #[cfg(all(feature = "live", target_os = "linux"))]
     KernelModuleStatus,
 }
 
@@ -223,13 +223,13 @@ pub struct App {
 
     // ── Live mode state ─────────────────────────────────────────────────
     /// Whether live mode is active.
-    #[cfg(feature = "live")]
+    #[cfg(all(feature = "live", target_os = "linux"))]
     pub live_mode: bool,
     /// Live mode status lines for the dashboard.
-    #[cfg(feature = "live")]
+    #[cfg(all(feature = "live", target_os = "linux"))]
     pub live_status_lines: Vec<String>,
     /// Live mode selected drive index (for HPA/DCO/ATA security screens).
-    #[cfg(feature = "live")]
+    #[cfg(all(feature = "live", target_os = "linux"))]
     pub live_drive_index: usize,
     /// Live mode action confirmation state.
     #[cfg(feature = "live")]
@@ -291,18 +291,18 @@ impl App {
             clone_progress_fraction: 0.0,
             clone_throughput: String::new(),
             partition_lines: Vec::new(),
-            #[cfg(feature = "live")]
+            #[cfg(all(feature = "live", target_os = "linux"))]
             live_mode: false,
-            #[cfg(feature = "live")]
+            #[cfg(all(feature = "live", target_os = "linux"))]
             live_status_lines: Vec::new(),
-            #[cfg(feature = "live")]
+            #[cfg(all(feature = "live", target_os = "linux"))]
             live_drive_index: 0,
-            #[cfg(feature = "live")]
+            #[cfg(all(feature = "live", target_os = "linux"))]
             live_confirm_action: None,
         };
 
-        // Detect live environment if compiled with live feature.
-        #[cfg(feature = "live")]
+        // Detect live environment if compiled with live feature on Linux.
+        #[cfg(all(feature = "live", target_os = "linux"))]
         {
             let detection = drivewipe_live::detect::detect_live_environment();
             app.live_mode = detection.is_live;
@@ -331,9 +331,9 @@ impl App {
         match enumerator.enumerate() {
             #[allow(unused_mut)]
             Ok(mut drives) => {
-                // When running in live mode, probe each SATA drive for hidden
+                // When running in live mode on Linux, probe each SATA drive for hidden
                 // areas and ATA security state using drivewipe-live.
-                #[cfg(feature = "live")]
+                #[cfg(all(feature = "live", target_os = "linux"))]
                 if self.live_mode {
                     for drive in &mut drives {
                         if drive.transport == drivewipe_core::types::Transport::Sata {
@@ -538,7 +538,7 @@ impl App {
             AppScreen::PartitionManager => self.handle_partition_key(key),
             AppScreen::ForensicAnalysis => self.handle_forensic_key(key),
             AppScreen::Settings => self.handle_settings_key(key),
-            #[cfg(feature = "live")]
+            #[cfg(all(feature = "live", target_os = "linux"))]
             AppScreen::LiveDashboard
             | AppScreen::HpaDcoManager
             | AppScreen::AtaSecurityManager
@@ -546,7 +546,7 @@ impl App {
         }
     }
 
-    #[cfg(feature = "live")]
+    #[cfg(all(feature = "live", target_os = "linux"))]
     fn handle_live_screen_key(&mut self, key: KeyEvent) {
         // Handle confirmation flow first — if a destructive action is pending,
         // 'y' confirms and anything else cancels.
@@ -626,7 +626,7 @@ impl App {
 
     /// Detect HPA and DCO on the currently selected drive and update the
     /// drive's `hidden_areas` field with the results.
-    #[cfg(feature = "live")]
+    #[cfg(all(feature = "live", target_os = "linux"))]
     fn live_detect_hidden_areas(&mut self) {
         if self.drives.is_empty() {
             self.log_push("No drives available".into());
@@ -703,7 +703,7 @@ impl App {
     }
 
     /// Execute a confirmed destructive live action.
-    #[cfg(feature = "live")]
+    #[cfg(all(feature = "live", target_os = "linux"))]
     fn execute_live_confirmed_action(&mut self, action: &str) {
         if self.drives.is_empty() {
             self.log_push("No drives available".into());
@@ -765,7 +765,7 @@ impl App {
     }
 
     /// Freeze DCO on the currently selected drive.
-    #[cfg(feature = "live")]
+    #[cfg(all(feature = "live", target_os = "linux"))]
     fn live_freeze_dco(&mut self) {
         if self.drives.is_empty() {
             self.log_push("No drives available".into());
@@ -786,7 +786,7 @@ impl App {
     }
 
     /// Unfreeze all SATA drives via suspend/resume cycle.
-    #[cfg(feature = "live")]
+    #[cfg(all(feature = "live", target_os = "linux"))]
     fn live_unfreeze_drives(&mut self) {
         self.log_push("Checking for frozen drives...".into());
 
@@ -821,7 +821,7 @@ impl App {
     }
 
     /// Refresh live capabilities (kernel module status, system info).
-    #[cfg(feature = "live")]
+    #[cfg(all(feature = "live", target_os = "linux"))]
     fn live_refresh_capabilities(&mut self) {
         self.log_push("Refreshing kernel module status...".into());
         let caps = drivewipe_live::capabilities::LiveCapabilities::probe();
@@ -1200,7 +1200,7 @@ impl App {
 
     /// Number of items in the main menu (varies if live mode is active).
     pub fn main_menu_item_count(&self) -> usize {
-        #[cfg(feature = "live")]
+        #[cfg(all(feature = "live", target_os = "linux"))]
         if self.live_mode {
             return 11; // 7 base + 4 live items
         }
@@ -1240,7 +1240,7 @@ impl App {
                 self.screen = AppScreen::Settings;
             }
             6 => {
-                #[cfg(feature = "live")]
+                #[cfg(all(feature = "live", target_os = "linux"))]
                 if self.live_mode {
                     // In live mode, index 6 = Live Dashboard
                     self.screen = AppScreen::LiveDashboard;
@@ -1248,19 +1248,19 @@ impl App {
                 }
                 self.should_quit = true;
             }
-            #[cfg(feature = "live")]
+            #[cfg(all(feature = "live", target_os = "linux"))]
             7 => {
                 self.refresh_drives();
                 self.live_drive_index = 0;
                 self.screen = AppScreen::HpaDcoManager;
             }
-            #[cfg(feature = "live")]
+            #[cfg(all(feature = "live", target_os = "linux"))]
             8 => {
                 self.refresh_drives();
                 self.live_drive_index = 0;
                 self.screen = AppScreen::AtaSecurityManager;
             }
-            #[cfg(feature = "live")]
+            #[cfg(all(feature = "live", target_os = "linux"))]
             9 => {
                 self.screen = AppScreen::KernelModuleStatus;
             }

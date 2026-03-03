@@ -232,7 +232,7 @@ DriveWipe/
     alpine-config/     # Live USB boot configuration and init scripts
     pxe/               # PXE network boot infrastructure
   profiles/            # Drive profile TOML files
-  scripts/             # Build scripts (build-live.sh)
+  scripts/             # Build scripts (DRIVEWIPE_LIVE_VERSION=1.1.2 ./scripts/build-live.sh)
   docs/                # Documentation
 ```
 
@@ -298,16 +298,16 @@ DriveWipe/
 cargo xtask live-build
 
 # Write to USB (replace v1.1.1 and /dev/sdX with your version and device)
-sudo dd if=drivewipe-live-v1.1.1.iso of=/dev/sdX bs=4M status=progress
+sudo dd if=drivewipe-live-v1.1.2.iso of=/dev/sdX bs=4M status=progress
 ```
 
 ### PXE Network Boot
 
-DriveWipe Live can be network-booted for wiping entire racks. The PXE artifact (`drivewipe-live-[VERSION]-pxe.tar.gz`) contains everything needed to seed a TFTP/HTTP server.
+DriveWipe Live can be network-booted for wiping entire racks. The PXE artifact (`drivewipe-live-v1.1.2-pxe.tar.gz`) contains everything needed to seed a TFTP/HTTP server.
 
 ```bash
 # Extract PXE artifacts from a built image
-tar -xzvf DriveWipe-v1.1.1-Live-PXE.tar.gz -C /var/lib/tftpboot/
+tar -xzvf DriveWipe-v1.1.2-Live-PXE.tar.gz -C /var/lib/tftpboot/
 
 # Configure dnsmasq with the included config
 sudo cp /var/lib/tftpboot/dnsmasq.conf /etc/dnsmasq.d/drivewipe.conf
@@ -412,7 +412,8 @@ All six crates (`drivewipe-core`, `drivewipe-cli`, `drivewipe-tui`, `drivewipe-g
 ```bash
 cargo xtask bump          # Automated version bumps based on git history
 cargo xtask release       # Interactive release wizard
-cargo xtask live-build    # Build the live USB image + PXE artifacts
+cargo xtask live-build    # Build the live USB image
+DRIVEWIPE_LIVE_VERSION=1.1.2 ./scripts/build-live.sh
 ```
 
 ### Testing

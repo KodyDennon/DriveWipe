@@ -1,4 +1,4 @@
-# DriveWipe — Implementation Plan (v1.1.1)
+# DriveWipe — Implementation Plan (v1.1.2)
 
 ## Context
 
@@ -240,6 +240,7 @@ DriveWipe/
 ### Report Generation
 
 - **JSON**: Auto-generated after every wipe to `~/.local/share/drivewipe/sessions/<uuid>.report.json`. Always available as an audit trail with zero user effort.
+- **v1.1.2** (Current) — Production Certification & Performance Overhaul
 - **PDF**: "Data Sanitization Certificate" — generated on request via `drivewipe report --format pdf --input <json>` or `--report-pdf <path>` flag during wipe. Contains drive info, method, pass details table, verification result, timestamps, operator name, hostname, session UUID.
 - CLI `drivewipe report` subcommand can also regenerate PDF from any saved JSON report after the fact.
 
