@@ -384,7 +384,7 @@ mod linux_nvme {
             ..Default::default()
         };
 
-        let ret = unsafe { libc::ioctl(fd, NVME_IOCTL_ADMIN_CMD, &mut cmd as *mut _) };
+        let ret = unsafe { libc::ioctl(fd, NVME_IOCTL_ADMIN_CMD as _, &mut cmd as *mut _) };
         if ret < 0 {
             return Err(DriveWipeError::Ioctl {
                 operation: format!("NVMe Format NVM (SES={})", ses),
@@ -448,7 +448,7 @@ mod linux_nvme {
             ..Default::default()
         };
 
-        let ret = unsafe { libc::ioctl(fd, NVME_IOCTL_ADMIN_CMD, &mut cmd as *mut _) };
+        let ret = unsafe { libc::ioctl(fd, NVME_IOCTL_ADMIN_CMD as _, &mut cmd as *mut _) };
         if ret < 0 {
             return Err(DriveWipeError::Ioctl {
                 operation: format!("NVMe Sanitize (action={})", sanact),
