@@ -141,7 +141,7 @@ pub fn enable_raw_disk_privileges() -> Result<()> {
         }
 
         // Enable SeBackupPrivilege
-        let mut tp_backup = TOKEN_PRIVILEGES {
+        let tp_backup = TOKEN_PRIVILEGES {
             PrivilegeCount: 1,
             Privileges: [LUID_AND_ATTRIBUTES {
                 Luid: backup_luid,
@@ -159,7 +159,7 @@ pub fn enable_raw_disk_privileges() -> Result<()> {
         }
 
         // Enable SeRestorePrivilege
-        let mut tp_restore = TOKEN_PRIVILEGES {
+        let tp_restore = TOKEN_PRIVILEGES {
             PrivilegeCount: 1,
             Privileges: [LUID_AND_ATTRIBUTES {
                 Luid: restore_luid,
@@ -177,7 +177,7 @@ pub fn enable_raw_disk_privileges() -> Result<()> {
         }
 
         // Enable SeManageVolumePrivilege
-        let mut tp_manage_vol = TOKEN_PRIVILEGES {
+        let tp_manage_vol = TOKEN_PRIVILEGES {
             PrivilegeCount: 1,
             Privileges: [LUID_AND_ATTRIBUTES {
                 Luid: manage_vol_luid,
