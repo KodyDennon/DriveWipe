@@ -1905,53 +1905,21 @@ impl App {
                 write_debug(&format!("Device: {}", drive_info.path.display()));
                 write_debug(&format!("Method: {}", method));
                 // Build a fresh registry that contains ALL methods (software +
-                // firmware). We then find our method by id and consume the
+                // firmware + custom). We then find our method by id and consume the
                 // registry to extract the owned Box<dyn WipeMethod>.
                 write_debug("Building method registry...");
-                let registry = WipeMethodRegistry::new();
-                if registry.get(&method).is_none() {
-                    write_debug(&format!("ERROR: Method not found: {}", method));
-                    let _ = progress_tx.send(ProgressEvent::Error {
-                        session_id: Uuid::new_v4(),
-                        message: format!("Method not found for session: {method}"),
-                    });
-                    return;
-                }
-                write_debug("Method found in registry");
+                let mut registry = WipeMethodRegistry::new();
+                registry.register_custom_methods(&config);
 
-                // Re-create owned method instances. Try software first, then firmware.
-                let all_software = drivewipe_core::wipe::software::all_software_methods();
-                let boxed_method: Box<dyn drivewipe_core::wipe::WipeMethod> = match all_software
-                    .into_iter()
-                    .find(|m| m.id() == method)
-                {
+                let boxed_method = match registry.into_method(&method) {
                     Some(m) => m,
                     None => {
-                        // Firmware method — create fresh instances and wrap in adapter
-                        let fw_instances: Vec<
-                            Box<dyn drivewipe_core::wipe::firmware::FirmwareWipe>,
-                        > = vec![
-                            Box::new(drivewipe_core::wipe::firmware::ata::AtaSecureErase),
-                            Box::new(drivewipe_core::wipe::firmware::ata::AtaEnhancedSecureErase),
-                            Box::new(drivewipe_core::wipe::firmware::nvme::NvmeFormatUserData),
-                            Box::new(drivewipe_core::wipe::firmware::nvme::NvmeFormatCrypto),
-                            Box::new(drivewipe_core::wipe::firmware::nvme::NvmeSanitizeBlock),
-                            Box::new(drivewipe_core::wipe::firmware::nvme::NvmeSanitizeCrypto),
-                            Box::new(drivewipe_core::wipe::firmware::nvme::NvmeSanitizeOverwrite),
-                            Box::new(drivewipe_core::wipe::crypto_erase::TcgOpalCryptoErase),
-                        ];
-                        match fw_instances.into_iter().find(|fw| fw.id() == method) {
-                            Some(fw) => {
-                                Box::new(drivewipe_core::wipe::FirmwareMethodAdapter::new(fw))
-                            }
-                            None => {
-                                let _ = progress_tx.send(ProgressEvent::Error {
-                                    session_id: Uuid::new_v4(),
-                                    message: format!("Method not found for session: {method}"),
-                                });
-                                return;
-                            }
-                        }
+                        write_debug(&format!("ERROR: Method not found: {}", method));
+                        let _ = progress_tx.send(ProgressEvent::Error {
+                            session_id: Uuid::new_v4(),
+                            message: format!("Method not found for session: {method}"),
+                        });
+                        return;
                     }
                 };
 

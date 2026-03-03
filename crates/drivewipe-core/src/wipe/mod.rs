@@ -211,6 +211,11 @@ impl WipeMethodRegistry {
     pub fn list(&self) -> &[Box<dyn WipeMethod>] {
         &self.methods
     }
+
+    /// Consume the registry and return a specific method by its identifier string.
+    pub fn into_method(self, id: &str) -> Option<Box<dyn WipeMethod>> {
+        self.methods.into_iter().find(|m| m.id() == id)
+    }
 }
 
 impl Default for WipeMethodRegistry {
