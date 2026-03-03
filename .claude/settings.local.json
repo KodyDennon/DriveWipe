@@ -22,7 +22,15 @@
       "Bash(git checkout:*)",
       "Bash(perl -i -pe:*)",
       "Bash(cargo check:*)",
-      "mcp__ide__getDiagnostics"
+      "mcp__ide__getDiagnostics",
+      "Bash(wc:*)",
+      "Bash(python3:*)",
+      "Bash(grep:*)",
+      "Bash(done)",
+      "Bash(chmod +x:*)",
+      "Bash(git status:*)",
+      "Bash(./release.sh:*)",
+      "Bash(xargs cat:*)"
     ]
   }
 }
