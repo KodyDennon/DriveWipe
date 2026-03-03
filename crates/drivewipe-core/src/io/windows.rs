@@ -16,20 +16,20 @@ use std::mem;
 #[cfg(target_os = "windows")]
 use std::os::windows::ffi::OsStrExt;
 #[cfg(target_os = "windows")]
-use windows::core::PCWSTR;
-#[cfg(target_os = "windows")]
 use windows::Win32::Foundation::{CloseHandle, HANDLE, INVALID_HANDLE_VALUE};
 #[cfg(target_os = "windows")]
 use windows::Win32::Storage::FileSystem::{
-    CreateFileW, FlushFileBuffers, ReadFile, SetFilePointerEx, WriteFile, FILE_BEGIN,
-    FILE_FLAG_NO_BUFFERING, FILE_FLAG_WRITE_THROUGH, OPEN_EXISTING,
+    CreateFileW, FILE_BEGIN, FILE_FLAG_NO_BUFFERING, FILE_FLAG_WRITE_THROUGH, FlushFileBuffers,
+    OPEN_EXISTING, ReadFile, SetFilePointerEx, WriteFile,
 };
+#[cfg(target_os = "windows")]
+use windows::Win32::System::IO::DeviceIoControl;
 #[cfg(target_os = "windows")]
 use windows::Win32::System::Ioctl::{
     DISK_GEOMETRY_EX, IOCTL_DISK_GET_DRIVE_GEOMETRY_EX, IOCTL_DISK_GET_LENGTH_INFO,
 };
 #[cfg(target_os = "windows")]
-use windows::Win32::System::IO::DeviceIoControl;
+use windows::core::PCWSTR;
 
 /// Raw device I/O handle for Windows physical drives.
 ///
