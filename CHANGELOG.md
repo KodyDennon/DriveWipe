@@ -7,6 +7,51 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.12] - 2026-03-03
+
+### Fixed
+- **Maintenance Update** — Synchronized workspace versions and updated changelog for consistency across all crates.
+
+## [1.1.11] - 2026-03-02
+
+### Fixed
+- **Live Environment** — Removed missing `sdparm` package in Alpine 3.21 to resolve build failures.
+
+## [1.1.10] - 2026-03-02
+
+### Fixed
+- **Build Tooling** — Ensured build directory exists in `build-live.sh` before writing artifacts.
+
+## [1.1.9] - 2026-03-02
+
+### Fixed
+- **CI Stability** — Applied exhaustive ioctl type casts to resolve platform-specific compilation errors on Linux runners.
+
+## [1.1.8] - 2026-03-02
+
+### Fixed
+- **Cross-Compilation** — Fixed `linux-musl` target builds by resolving dependency conflicts in `drivewipe-core`.
+
+## [1.1.7] - 2026-03-02
+
+### Fixed
+- **Style Consistency** — Applied `cargo fmt` canonical import ordering across the entire workspace.
+
+## [1.1.6] - 2026-03-02
+
+### Fixed
+- **Windows Safety** — Removed unused `mut` from `privilege.rs` `TOKEN_PRIVILEGES` variables to satisfy strict clippy lints.
+
+## [1.1.5] - 2026-03-02
+
+### Fixed
+- **Production Windows I/O** — Removed debug logging from production builds and resolved all remaining clippy errors for Windows targets.
+
+## [1.1.4] - 2026-03-02
+
+### Fixed
+- **Feature Gating** — Correctly gated `LIVE_MENU_ITEMS` and fixed release CI `--all-features` issues.
+
 ## [1.1.3] - 2026-03-02
 
 ### Fixed
@@ -208,7 +253,19 @@ Initial release of DriveWipe.
 - **Test suite**: 130 tests covering types, config, errors, patterns, PRNG, aligned buffers, wipe sessions, verification, cancellation, method registry, and report serialization.
 - GitHub Actions CI (build, test, clippy, fmt, docs, security audit) across Linux, macOS, and Windows.
 
-[Unreleased]: https://github.com/KodyDennon/DriveWipe/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/KodyDennon/DriveWipe/compare/v1.1.12...HEAD
+[1.1.12]: https://github.com/KodyDennon/DriveWipe/compare/v1.1.11...v1.1.12
+[1.1.11]: https://github.com/KodyDennon/DriveWipe/compare/v1.1.10...v1.1.11
+[1.1.10]: https://github.com/KodyDennon/DriveWipe/compare/v1.1.9...v1.1.10
+[1.1.9]: https://github.com/KodyDennon/DriveWipe/compare/v1.1.8...v1.1.9
+[1.1.8]: https://github.com/KodyDennon/DriveWipe/compare/v1.1.7...v1.1.8
+[1.1.7]: https://github.com/KodyDennon/DriveWipe/compare/v1.1.6...v1.1.7
+[1.1.6]: https://github.com/KodyDennon/DriveWipe/compare/v1.1.5...v1.1.6
+[1.1.5]: https://github.com/KodyDennon/DriveWipe/compare/v1.1.4...v1.1.5
+[1.1.4]: https://github.com/KodyDennon/DriveWipe/compare/v1.1.3...v1.1.4
+[1.1.3]: https://github.com/KodyDennon/DriveWipe/compare/v1.1.2...v1.1.3
+[1.1.2]: https://github.com/KodyDennon/DriveWipe/compare/v1.1.1...v1.1.2
+[1.1.1]: https://github.com/KodyDennon/DriveWipe/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/KodyDennon/DriveWipe/compare/v0.1.5...v1.1.0
 [0.1.5]: https://github.com/KodyDennon/DriveWipe/compare/v0.1.4...v0.1.5
 [0.1.4]: https://github.com/KodyDennon/DriveWipe/compare/v0.1.3...v0.1.4
