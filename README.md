@@ -2,7 +2,20 @@
 
 **Cross-platform secure data sanitization and drive management tool** — NIST SP 800-88 Rev. 2 / IEEE 2883:2022 compliant.
 
-DriveWipe provides military/corporate-grade drive wiping with software overwrite for HDDs, firmware-level commands for SSDs, and cryptographic erasure for self-encrypting drives. Beyond sanitization, it includes drive health monitoring, forensic analysis, drive cloning, and partition management — all in a single tool with CLI, TUI, and GUI interfaces.
+DriveWipe provides military/corporate-grade drive wiping with software overwrite for HDDs, firmware-level commands for SSDs, and cryptographic erasure for self-encrypting drives. Beyond sanitization, it includes drive health monitoring, forensic analysis, drive cloning, partition management, and a bootable live environment for data sanitization labs — all in a single tool with CLI, TUI, and GUI interfaces.
+
+---
+
+## Why DriveWipe?
+
+- **21 wipe methods** — software, firmware, and hybrid — covering every drive type
+- **Live environment** — boot from USB or PXE network to wipe any drive, including the boot drive
+- **Direct hardware access** — custom kernel module for ATA/NVMe passthrough, HPA/DCO manipulation, and DMA I/O
+- **Full forensic toolkit** — entropy analysis, signature scanning, and formal chain-of-custody reports
+- **Cross-platform** — native Linux, macOS, and Windows support with platform-specific optimizations
+- **Three interfaces** — CLI for automation, TUI for interactive use, GUI for simplicity
+
+---
 
 ## Features
 
@@ -13,6 +26,14 @@ DriveWipe provides military/corporate-grade drive wiping with software overwrite
 - **Full read-back verification** after wipe
 - **Resume capability** — auto-save state every 10 seconds, resume after interruption
 - **Multi-drive parallel wipe** with live queue (add drives during active wipe)
+
+### Live Environment
+- **Bootable USB/ISO** — Alpine Linux-based live image (~200 MB) boots directly into DriveWipe TUI
+- **PXE network boot** — wipe entire racks without USB drives; iPXE menu with Normal, Safe Mode, and Serial Console options
+- **Custom kernel module** — direct ATA/NVMe command passthrough bypassing SCSI translation
+- **HPA/DCO detection & removal** — find and remove hidden areas that software overwrites can't reach
+- **Drive unfreezing** — automatic suspend/resume cycle to unfreeze ATA security-frozen drives
+- **DMA I/O** — zero-copy DMA-coherent buffer I/O for maximum throughput
 
 ### Drive Health Monitoring
 - **SMART data parsing** — ATA and NVMe health attributes
@@ -31,14 +52,14 @@ DriveWipe provides military/corporate-grade drive wiping with software overwrite
 - **GPT and MBR support** — full parsing and writing with CRC validation
 - **Create, delete, resize, move** partitions with data preservation
 - **Filesystem detection** — NTFS, ext4, FAT32, exFAT, XFS, Btrfs
-- **Alignment enforcement** — 4K/1MiB boundary alignment
+- **Alignment enforcement** — 4K/1 MiB boundary alignment
 - **Dry-run/preview mode** — preview changes before applying
 
 ### Forensic Analysis
 - **Entropy analysis** — per-sector entropy calculation and heatmap generation
 - **File signature scanning** — detect JPEG, PDF, DOCX, EXE, ZIP, and more
 - **Statistical sampling** — random sector sampling with confidence levels
-- **Hidden area detection** — HPA/DCO scanning
+- **Hidden area detection** — HPA/DCO scanning (enhanced in live mode with real ATA probing)
 - **Formal forensic reports** — timestamps, hash chains, chain-of-custody
 - **Export formats** — DFXML, NSRL-compatible hash sets
 
@@ -55,11 +76,14 @@ DriveWipe provides military/corporate-grade drive wiping with software overwrite
 - **Sleep prevention** — RAII-based system sleep inhibition during operations
 - **Keyboard lock** — configurable unlock sequence prevents accidental input
 - **Intelligent time estimates** — EMA-smoothed throughput with confidence intervals
+- **Automated versioning** — git-commit-driven version bumps with LOC safety triggers
 
 ### Three Interfaces
 - **CLI** (`drivewipe`) — full-featured command-line for scripting and automation
 - **TUI** (`drivewipe-tui`) — interactive terminal UI with ratatui
 - **GUI** (`drivewipe-gui`) — graphical desktop application with iced
+
+---
 
 ## Quick Start
 
@@ -71,10 +95,23 @@ DriveWipe provides military/corporate-grade drive wiping with software overwrite
 ### Build
 
 ```bash
+# Build all desktop binaries
 cargo build --release
+
+# Build TUI with live environment features (Linux only)
+cargo build --release --package drivewipe-tui --features live
+
+# Build the live USB image (requires Docker)
+cargo xtask live-build
 ```
 
 ### Install
+
+Download the pre-built binaries for your platform from the [Releases](https://github.com/KodyDennon/DriveWipe/releases) page. Archives are provided for **Linux**, **macOS**, and **Windows** (x86_64 and ARM64).
+
+*Note: DriveWipe requires **Administrative / Root** privileges to access raw disks.*
+
+To build from source:
 
 ```bash
 cargo install --path crates/drivewipe-cli
@@ -133,9 +170,14 @@ sudo drivewipe forensic scan /dev/sda
 # Launch the TUI
 sudo drivewipe-tui
 
+# Launch the TUI in live mode (auto-detected in live environment)
+sudo drivewipe-tui --live
+
 # Launch the GUI
 sudo drivewipe-gui
 ```
+
+---
 
 ## Wipe Methods
 
@@ -172,6 +214,8 @@ The DriveWipe Secure methods combine software overwrite with firmware commands f
 - **NVMe**: Overwrite + deallocate + NVMe Format/Sanitize (if available) + overwrite + verify
 - **USB**: Multi-pass overwrite + verify (limited by USB controller capabilities)
 
+---
+
 ## Architecture
 
 ```
@@ -181,8 +225,14 @@ DriveWipe/
     drivewipe-cli/     # CLI binary (drivewipe)
     drivewipe-tui/     # TUI binary (drivewipe-tui)
     drivewipe-gui/     # GUI binary (drivewipe-gui)
-    xtask/             # Build automation tasks
+    drivewipe-live/    # Live environment — HPA/DCO, ATA security, DMA I/O
+    xtask/             # Build automation (bump, release, live-build)
+  kernel/drivewipe/    # Custom Linux kernel module (/dev/drivewipe)
+  live/
+    alpine-config/     # Live USB boot configuration and init scripts
+    pxe/               # PXE network boot infrastructure
   profiles/            # Drive profile TOML files
+  scripts/             # Build scripts (build-live.sh)
   docs/                # Documentation
 ```
 
@@ -211,6 +261,71 @@ DriveWipe/
 | `time_estimate` | EMA-smoothed time estimation with confidence intervals |
 | `verify` | Read-back verification engine |
 | `wipe` | Wipe method registry and implementations |
+
+### Live Environment Crate (`drivewipe-live`)
+
+| Module | Purpose |
+|---|---|
+| `capabilities` | Probe and report live environment capabilities |
+| `detect` | Live environment detection (cmdline, markers, module) |
+| `kernel_module` | `/dev/drivewipe` ioctl wrapper with typed methods |
+| `hpa` | HPA detection & removal (kernel module + SG_IO fallback) |
+| `dco` | DCO detection, restore & freeze (kernel module + SG_IO) |
+| `ata_security` | ATA security state querying from IDENTIFY DEVICE |
+| `unfreeze` | Suspend/resume cycle to unfreeze drives |
+| `dma_io` | Zero-copy DMA I/O via kernel module |
+
+### Kernel Module (`kernel/drivewipe/`)
+
+| ioctl | Purpose |
+|---|---|
+| `DW_IOC_ATA_CMD` | Raw ATA command passthrough (bypasses SCSI) |
+| `DW_IOC_NVME_CMD` | Raw NVMe admin command passthrough |
+| `DW_IOC_HPA_DETECT` / `REMOVE` | READ NATIVE MAX ADDRESS / SET MAX ADDRESS |
+| `DW_IOC_DCO_DETECT` / `RESTORE` / `FREEZE` | Device Configuration Overlay commands |
+| `DW_IOC_DMA_IO` | Zero-copy DMA read/write |
+| `DW_IOC_ATA_SEC_STATE` | Query ATA security state |
+| `DW_IOC_MODULE_INFO` | Module version + capabilities bitmask |
+
+---
+
+## Live Environment
+
+### USB Boot
+
+```bash
+# Build the live image
+cargo xtask live-build
+
+# Write to USB (replace v1.1.0 and /dev/sdX with your version and device)
+sudo dd if=drivewipe-live-v1.1.0.iso of=/dev/sdX bs=4M status=progress
+```
+
+### PXE Network Boot
+
+DriveWipe Live can be network-booted for wiping entire racks. The PXE artifact (`drivewipe-live-[VERSION]-pxe.tar.gz`) contains everything needed to seed a TFTP/HTTP server.
+
+```bash
+# Extract PXE artifacts
+tar xzf drivewipe-live-v1.1.0-pxe.tar.gz -C /var/lib/tftpboot/
+
+# Configure dnsmasq with the included config
+sudo cp /var/lib/tftpboot/dnsmasq.conf /etc/dnsmasq.d/drivewipe.conf
+sudo systemctl restart dnsmasq
+```
+
+See [`live/pxe/README.md`](live/pxe/README.md) for full PXE setup instructions and QEMU testing.
+
+### Live TUI Features
+
+When running in the live environment, the TUI adds:
+
+- **Live Dashboard** — system overview with kernel module status, CPU/RAM, drive summary
+- **HPA/DCO Manager** — detect, remove HPA, restore DCO, freeze DCO with confirmation for destructive actions
+- **ATA Security Manager** — view frozen/locked/enabled state, one-click unfreeze via suspend/resume
+- **Kernel Module Status** — module version, capabilities bitmask, feature availability
+
+---
 
 ## Configuration
 
@@ -245,28 +360,24 @@ pattern_type = "random"
 pattern_type = "zero"
 ```
 
-## Session Data
-
-All session data is stored in `~/.local/share/drivewipe/sessions/`:
-
-- `<uuid>.state` — Resume checkpoint (saved every 10 seconds during wipe)
-- `<uuid>.log` — Audit log with per-second entries
-- `<uuid>.report.json` — Auto-generated JSON report after completion
+---
 
 ## Safety
 
 DriveWipe includes multiple safety mechanisms:
 
-1. **Boot drive detection** — Refuses to wipe the drive the OS is running from
-2. **Multi-step confirmation** — Shows drive details, requires typing device path, 3-second countdown
-3. **SSD software wipe warning** — Recommends firmware erase for SSDs (wear leveling makes software overwrite unreliable)
-4. **USB bridge warning** — Firmware commands may fail through USB adapters
-5. **ATA frozen warning** — Detects frozen security state, suggests suspend/resume
-6. **HPA/DCO detection** — Warns about hidden areas unreachable by software overwrite
-7. **Ctrl+C handling** — Graceful interruption with state save for resume
-8. **Keyboard lock mode** — Prevents accidental keystrokes during operations
-9. **Sleep prevention** — Keeps system awake during long operations
-10. **Pre-wipe health check** — Optional automatic SMART check before wiping
+1. **Boot drive detection** — refuses to wipe the drive the OS is running from
+2. **Multi-step confirmation** — shows drive details, requires typing device path, 3-second countdown
+3. **SSD software wipe warning** — recommends firmware erase for SSDs (wear leveling makes software overwrite unreliable)
+4. **USB bridge warning** — firmware commands may fail through USB adapters
+5. **ATA frozen warning** — detects frozen security state, suggests suspend/resume (automatic in live mode)
+6. **HPA/DCO detection** — warns about hidden areas unreachable by software overwrite; live mode can remove them
+7. **Ctrl+C handling** — graceful interruption with state save for resume
+8. **Keyboard lock mode** — prevents accidental keystrokes during operations
+9. **Sleep prevention** — keeps system awake during long operations
+10. **Pre-wipe health check** — optional automatic SMART check before wiping
+
+---
 
 ## Platform Support
 
@@ -274,34 +385,37 @@ DriveWipe includes multiple safety mechanisms:
 |---|---|---|---|
 | Drive enumeration | Full (sysfs) | Full (diskutil) | Full (DeviceIoControl) |
 | Raw device I/O | Full (O_DIRECT) | Full (F_NOCACHE) | Full (FILE_FLAG_NO_BUFFERING) |
-| Boot drive detection | Full (/proc/mounts) | Full (/sbin/mount) | Full (IOCTL_VOLUME_GET_VOLUME_DISK_EXTENTS) |
+| Boot drive detection | Full (/proc/mounts) | Full (/sbin/mount) | Full (IOCTL_VOLUME_GET_...) |
 | Software wipe methods | Full | Full | Full |
-| ATA Secure Erase | Full (SG_IO + ATA_16 CDB) | Not supported | Full (IOCTL_ATA_PASS_THROUGH) |
-| NVMe Format/Sanitize | Full (NVME_IOCTL_ADMIN_CMD) | Via nvme-cli | Full (IOCTL_STORAGE_PROTOCOL_COMMAND) |
-| TCG Opal crypto erase | Full (sed-opal ioctls) | Not supported | Not yet (future) |
-| SMART health | Full (ATA/NVMe ioctl) | Full (IOKit) | Full (IOCTL_STORAGE_QUERY_PROPERTY) |
-| Sleep prevention | Full (D-Bus logind) | Full (IOPMAssertion) | Full (SetThreadExecutionState) |
-| Desktop notifications | Full (D-Bus freedesktop) | Full (osascript) | Full (toast) |
+| ATA Secure Erase | Full (SG_IO) | Not supported | Full (IOCTL_ATA_PASS_THROUGH) |
+| NVMe Format/Sanitize | Full (nvme ioctl) | Via nvme-cli | Full (IOCTL_STORAGE_...) |
+| TCG Opal crypto erase | Full (sed-opal) | Not supported | Not yet |
+| SMART health | Full | Full (IOKit) | Full |
+| Sleep prevention | Full (D-Bus) | Full (IOPMAssertion) | Full (SetThreadExecutionState) |
+| Desktop notifications | Full (D-Bus) | Full (osascript) | Full (toast) |
+| **Live environment** | **Full** | N/A | N/A |
+| **Kernel module** | **Full** | N/A | N/A |
+| **PXE boot** | **Full** | N/A | N/A |
 
-### Linux
+---
 
-Best platform support. All software and firmware wipe methods fully operational. ATA Secure Erase uses SCSI ATA_16 CDB via the SG_IO ioctl. NVMe commands use the kernel's admin command ioctl. TCG Opal uses the kernel's `sed-opal` driver. Sleep prevention via D-Bus logind inhibit. Requires root privileges.
+## Development
 
-### macOS
+### Automated Versioning
 
-Software wipe methods fully operational. ATA Secure Erase is not supported (macOS lacks a reliable ATA passthrough). NVMe commands require `nvme-cli` (install with `brew install nvme-cli`). TCG Opal is not supported (no kernel SED driver). Sleep prevention via IOPMAssertionCreateWithName. Requires root privileges.
+DriveWipe uses a **"Safety First"** automated versioning system. See [DEVELOPMENT.md](DEVELOPMENT.md) for details.
 
-**Gatekeeper:** If macOS shows *"drivewipe-gui can't be opened because Apple cannot check it for malicious software"*, remove the quarantine attribute:
+All six crates (`drivewipe-core`, `drivewipe-cli`, `drivewipe-tui`, `drivewipe-gui`, `drivewipe-live`, `xtask`) are versioned independently based on scoped commit messages and LOC thresholds.
+
+### xtask Commands
 
 ```bash
-xattr -dr com.apple.quarantine drivewipe-gui
+cargo xtask bump          # Automated version bumps based on git history
+cargo xtask release       # Interactive release wizard
+cargo xtask live-build    # Build the live USB image + PXE artifacts
 ```
 
-### Windows
-
-Full support for software wipe methods, drive enumeration, and device I/O using `CreateFileW` with `FILE_FLAG_NO_BUFFERING | FILE_FLAG_WRITE_THROUGH`. ATA Secure Erase uses `IOCTL_ATA_PASS_THROUGH` with `ATA_PASS_THROUGH_EX`. NVMe commands use `IOCTL_STORAGE_PROTOCOL_COMMAND`. Sleep prevention via SetThreadExecutionState. Requires Administrator privileges.
-
-## Testing
+### Testing
 
 ```bash
 # Run all tests
@@ -310,9 +424,14 @@ cargo test --workspace
 # Run with verbose output
 cargo test --workspace -- --nocapture
 
+# Run live crate tests
+cargo test -p drivewipe-live
+
 # Run specific test suite
 cargo test -p drivewipe-core --test integration_tests
 ```
+
+---
 
 ## License
 

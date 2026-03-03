@@ -21,6 +21,8 @@ enum Commands {
     Bump,
     /// Interactive release wizard — build, tag, and publish releases
     Release,
+    /// Build the DriveWipe Live environment (ISO + PXE artifacts)
+    LiveBuild,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -51,6 +53,7 @@ fn main() -> Result<()> {
     match cli.command {
         Commands::Bump => bump_versions()?,
         Commands::Release => release::run()?,
+        Commands::LiveBuild => live_build()?,
     }
 
     Ok(())
@@ -64,6 +67,7 @@ fn bump_versions() -> Result<()> {
         "drivewipe-cli",
         "drivewipe-tui",
         "drivewipe-gui",
+        "drivewipe-live",
     ];
     let mut bumps = HashMap::new();
 
@@ -217,4 +221,59 @@ fn bump_semver(version: &str, level: BumpLevel) -> Result<String> {
     }
 
     Ok(format!("{}.{}.{}", major, minor, patch))
+}
+
+fn live_build() -> Result<()> {
+    println!("🔨 Building DriveWipe Live environment...");
+    println!();
+
+    // Locate the repository root (two levels up from crates/xtask/).
+    let workspace_root = std::env::current_dir().context("Failed to get current directory")?;
+
+    let build_script = workspace_root.join("scripts/build-live.sh");
+    if !build_script.exists() {
+        anyhow::bail!(
+            "Build script not found at {}\nRun this command from the repository root.",
+            build_script.display()
+        );
+    }
+
+    // Read the live crate version to stamp the ISO.
+    let live_cargo_toml = workspace_root.join("crates/drivewipe-live/Cargo.toml");
+    let live_version = if live_cargo_toml.exists() {
+        let content = fs::read_to_string(&live_cargo_toml)?;
+        let doc = content
+            .parse::<DocumentMut>()
+            .context("Failed to parse drivewipe-live Cargo.toml")?;
+        doc["package"]["version"]
+            .as_str()
+            .unwrap_or("unknown")
+            .to_string()
+    } else {
+        "unknown".to_string()
+    };
+
+    println!("  Live version: {}", live_version);
+    println!("  Script: {}", build_script.display());
+    println!();
+
+    let status = Command::new("bash")
+        .arg(&build_script)
+        .env("DRIVEWIPE_LIVE_VERSION", &live_version)
+        .current_dir(&workspace_root)
+        .status()
+        .context("Failed to execute build-live.sh")?;
+
+    if !status.success() {
+        let code = status
+            .code()
+            .map(|c| c.to_string())
+            .unwrap_or_else(|| "signal".to_string());
+        anyhow::bail!("build-live.sh exited with code {}", code);
+    }
+
+    println!();
+    println!("✅ DriveWipe Live v{} built successfully!", live_version);
+    println!("   Output: output/drivewipe-live-{}.iso", live_version);
+    Ok(())
 }

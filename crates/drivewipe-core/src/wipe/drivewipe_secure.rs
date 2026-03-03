@@ -19,12 +19,18 @@ fn boxed<P: PatternGenerator + Send + 'static>(p: P) -> Box<dyn PatternGenerator
 pub struct DriveWipeSecureHdd;
 
 impl WipeMethod for DriveWipeSecureHdd {
-    fn id(&self) -> &str { "drivewipe-secure-hdd" }
-    fn name(&self) -> &str { "DriveWipe Secure (HDD)" }
+    fn id(&self) -> &str {
+        "drivewipe-secure-hdd"
+    }
+    fn name(&self) -> &str {
+        "DriveWipe Secure (HDD)"
+    }
     fn description(&self) -> &str {
         "3-pass overwrite (zero, one, random) + verification. Optimized for spinning drives."
     }
-    fn pass_count(&self) -> u32 { 3 }
+    fn pass_count(&self) -> u32 {
+        3
+    }
     fn pattern_for_pass(&self, pass: u32) -> Box<dyn PatternGenerator + Send> {
         match pass {
             0 => boxed(ZeroFill),
@@ -32,7 +38,9 @@ impl WipeMethod for DriveWipeSecureHdd {
             _ => boxed(RandomFill::new()),
         }
     }
-    fn includes_verification(&self) -> bool { true }
+    fn includes_verification(&self) -> bool {
+        true
+    }
 }
 
 // ── DriveWipe Secure SATA SSD ───────────────────────────────────────────────
@@ -41,20 +49,28 @@ impl WipeMethod for DriveWipeSecureHdd {
 pub struct DriveWipeSecureSataSsd;
 
 impl WipeMethod for DriveWipeSecureSataSsd {
-    fn id(&self) -> &str { "drivewipe-secure-sata-ssd" }
-    fn name(&self) -> &str { "DriveWipe Secure (SATA SSD)" }
+    fn id(&self) -> &str {
+        "drivewipe-secure-sata-ssd"
+    }
+    fn name(&self) -> &str {
+        "DriveWipe Secure (SATA SSD)"
+    }
     fn description(&self) -> &str {
         "Overwrite + TRIM + second overwrite + ATA Secure Erase (if available) + verify. \
          Addresses SSD wear-leveling and spare area."
     }
-    fn pass_count(&self) -> u32 { 2 }
+    fn pass_count(&self) -> u32 {
+        2
+    }
     fn pattern_for_pass(&self, pass: u32) -> Box<dyn PatternGenerator + Send> {
         match pass {
             0 => boxed(RandomFill::new()),
             _ => boxed(ZeroFill),
         }
     }
-    fn includes_verification(&self) -> bool { true }
+    fn includes_verification(&self) -> bool {
+        true
+    }
 
     fn execute_firmware(
         &self,
@@ -84,20 +100,28 @@ impl WipeMethod for DriveWipeSecureSataSsd {
 pub struct DriveWipeSecureNvme;
 
 impl WipeMethod for DriveWipeSecureNvme {
-    fn id(&self) -> &str { "drivewipe-secure-nvme" }
-    fn name(&self) -> &str { "DriveWipe Secure (NVMe)" }
+    fn id(&self) -> &str {
+        "drivewipe-secure-nvme"
+    }
+    fn name(&self) -> &str {
+        "DriveWipe Secure (NVMe)"
+    }
     fn description(&self) -> &str {
         "Overwrite + deallocate + NVMe Format/Sanitize (if available) + overwrite + verify. \
          Addresses NVMe spare area and controller-level remapping."
     }
-    fn pass_count(&self) -> u32 { 2 }
+    fn pass_count(&self) -> u32 {
+        2
+    }
     fn pattern_for_pass(&self, pass: u32) -> Box<dyn PatternGenerator + Send> {
         match pass {
             0 => boxed(RandomFill::new()),
             _ => boxed(ZeroFill),
         }
     }
-    fn includes_verification(&self) -> bool { true }
+    fn includes_verification(&self) -> bool {
+        true
+    }
 }
 
 // ── DriveWipe Secure USB ────────────────────────────────────────────────────
@@ -106,13 +130,19 @@ impl WipeMethod for DriveWipeSecureNvme {
 pub struct DriveWipeSecureUsb;
 
 impl WipeMethod for DriveWipeSecureUsb {
-    fn id(&self) -> &str { "drivewipe-secure-usb" }
-    fn name(&self) -> &str { "DriveWipe Secure (USB)" }
+    fn id(&self) -> &str {
+        "drivewipe-secure-usb"
+    }
+    fn name(&self) -> &str {
+        "DriveWipe Secure (USB)"
+    }
     fn description(&self) -> &str {
         "3-pass overwrite (random, zero, random) + verification. USB controllers block firmware \
          commands, so this uses aggressive multi-pass overwrite."
     }
-    fn pass_count(&self) -> u32 { 3 }
+    fn pass_count(&self) -> u32 {
+        3
+    }
     fn pattern_for_pass(&self, pass: u32) -> Box<dyn PatternGenerator + Send> {
         match pass {
             0 => boxed(RandomFill::new()),
@@ -120,5 +150,7 @@ impl WipeMethod for DriveWipeSecureUsb {
             _ => boxed(RandomFill::new()),
         }
     }
-    fn includes_verification(&self) -> bool { true }
+    fn includes_verification(&self) -> bool {
+        true
+    }
 }

@@ -4,6 +4,7 @@ members = [
     "crates/drivewipe-cli",
     "crates/drivewipe-tui",
     "crates/drivewipe-gui",
+    "crates/drivewipe-live",
     "crates/xtask",
 ]
 resolver = "2"

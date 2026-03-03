@@ -1,3 +1,12 @@
+//! DriveWipe Terminal User Interface (TUI)
+//!
+//! The `drivewipe-tui` binary provides a modern, interactive terminal interface
+//! built on `ratatui`. It offers a dashboard-centric workflow for managing
+//! multiple wipes, viewing drive health, and performing forensic scans.
+//!
+//! Special features like HPA/DCO removal and drive unfreezing are automatically
+//! enabled when running in a supported Live environment.
+
 use std::io;
 
 use crossterm::{

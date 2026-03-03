@@ -173,9 +173,10 @@ pub fn open_device(path: &std::path::Path, _writable: bool) -> Result<Box<dyn Ra
     }
     #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
     {
-        Err(crate::error::DriveWipeError::PlatformNotSupported(
-            format!("No device I/O implementation for this platform: {}", path.display()),
-        ))
+        Err(crate::error::DriveWipeError::PlatformNotSupported(format!(
+            "No device I/O implementation for this platform: {}",
+            path.display()
+        )))
     }
 }
 

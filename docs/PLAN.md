@@ -284,6 +284,8 @@ Step 6: Verification (read-back) + Report generation (JSON + PDF)               
    +--- Step 8: TUI (state machine, all screens, multi-drive dashboard)            [DONE]
    |
 Step 9: Firmware wipe commands (ATA Secure Erase, NVMe Format/Sanitize, TCG Opal) [DONE]
+   |
+Step 10: Live environment (Kernel module + builders + PXE infrastructure)          [DONE]
 ```
 
 ### Verification Plan

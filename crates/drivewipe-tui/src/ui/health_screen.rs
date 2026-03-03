@@ -11,7 +11,7 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(3),  // Title
+            Constraint::Length(3), // Title
             Constraint::Min(10),   // Drive list or health detail
             Constraint::Length(1), // Status bar
         ])
@@ -138,15 +138,30 @@ fn draw_health_detail(frame: &mut Frame, area: Rect, app: &App) {
         .iter()
         .map(|line| {
             if line.starts_with("SMART Status: HEALTHY") {
-                Line::from(Span::styled(line.as_str(), Style::default().fg(Color::Green).bold()))
+                Line::from(Span::styled(
+                    line.as_str(),
+                    Style::default().fg(Color::Green).bold(),
+                ))
             } else if line.starts_with("SMART Status: UNHEALTHY") {
-                Line::from(Span::styled(line.as_str(), Style::default().fg(Color::Red).bold()))
+                Line::from(Span::styled(
+                    line.as_str(),
+                    Style::default().fg(Color::Red).bold(),
+                ))
             } else if line.starts_with("Drive:") || line.starts_with("Serial:") {
-                Line::from(Span::styled(line.as_str(), Style::default().fg(Color::Cyan)))
+                Line::from(Span::styled(
+                    line.as_str(),
+                    Style::default().fg(Color::Cyan),
+                ))
             } else if line.starts_with("Temperature:") {
-                Line::from(Span::styled(line.as_str(), Style::default().fg(Color::Yellow)))
+                Line::from(Span::styled(
+                    line.as_str(),
+                    Style::default().fg(Color::Yellow),
+                ))
             } else {
-                Line::from(Span::styled(line.as_str(), Style::default().fg(Color::Gray)))
+                Line::from(Span::styled(
+                    line.as_str(),
+                    Style::default().fg(Color::Gray),
+                ))
             }
         })
         .collect();

@@ -1,0 +1,78 @@
+#!ipxe
+#
+# DriveWipe Live — iPXE Boot Menu
+#
+# Interactive boot menu with multiple options. Chain to this script from
+# boot.ipxe or directly via DHCP filename for a user-friendly experience.
+
+# ── Configuration ───────────────────────────────────────────────────────
+set base-path drivewipe
+set menu-timeout 10000
+set submenu-timeout ${menu-timeout}
+
+# Ensure network is configured
+isset ${ip} || dhcp ||
+
+# ── Menu ────────────────────────────────────────────────────────────────
+:start
+menu DriveWipe Live - PXE Boot Menu
+item --gap --           ========================================
+item --gap --               DriveWipe Live Environment
+item --gap --           ========================================
+item --gap --
+item normal             Boot DriveWipe Live
+item safe               Boot DriveWipe Live (Safe Mode)
+item serial             Boot DriveWipe Live (Serial Console)
+item --gap --
+item --gap --           ── Advanced ──
+item shell              Drop to iPXE Shell
+item reboot             Reboot
+item exit               Exit to BIOS/UEFI
+choose --timeout ${menu-timeout} --default normal target || goto cancel
+goto ${target}
+
+# ── Normal boot ─────────────────────────────────────────────────────────
+:normal
+echo Booting DriveWipe Live...
+kernel tftp://${next-server}/${base-path}/vmlinuz drivewipe.live=1 ip=dhcp quiet || goto failed
+initrd tftp://${next-server}/${base-path}/initramfs.img || goto failed
+boot || goto failed
+
+# ── Safe mode ───────────────────────────────────────────────────────────
+# Boots with minimal drivers, no kernel module auto-load, single CPU.
+:safe
+echo Booting DriveWipe Live (Safe Mode)...
+kernel tftp://${next-server}/${base-path}/vmlinuz drivewipe.live=1 drivewipe.safemode=1 ip=dhcp nosmp acpi=off noapic nomodeset || goto failed
+initrd tftp://${next-server}/${base-path}/initramfs.img || goto failed
+boot || goto failed
+
+# ── Serial console ──────────────────────────────────────────────────────
+# Routes all output to the serial port for headless servers.
+:serial
+echo Booting DriveWipe Live (Serial Console)...
+kernel tftp://${next-server}/${base-path}/vmlinuz drivewipe.live=1 ip=dhcp console=ttyS0,115200n8 || goto failed
+initrd tftp://${next-server}/${base-path}/initramfs.img || goto failed
+boot || goto failed
+
+# ── Utilities ───────────────────────────────────────────────────────────
+:shell
+echo Type 'exit' to return to the menu.
+shell
+goto start
+
+:reboot
+reboot
+
+:exit
+exit
+
+:cancel
+goto start
+
+# ── Error handler ───────────────────────────────────────────────────────
+:failed
+echo
+echo !! Boot FAILED - press any key to return to menu !!
+echo
+prompt
+goto start

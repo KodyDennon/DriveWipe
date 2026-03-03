@@ -36,7 +36,8 @@ impl ForensicReport {
         // Derive conclusions from results
         if let Some(ref entropy) = results.entropy_stats {
             if entropy.zero_pct > 99.0 {
-                conclusions.push("Device appears to be fully wiped (>99% zero sectors)".to_string());
+                conclusions
+                    .push("Device appears to be fully wiped (>99% zero sectors)".to_string());
             } else if entropy.high_entropy_pct > 95.0 {
                 conclusions.push(
                     "Device shows high entropy consistent with random overwrite or encryption"

@@ -1,5 +1,5 @@
 use ratatui::prelude::*;
-use ratatui::widgets::{Block, Borders, Gauge, Paragraph, List, ListItem};
+use ratatui::widgets::{Block, Borders, Gauge, List, ListItem, Paragraph};
 use std::io::{self, Write};
 
 use drivewipe_core::types::{WipeOutcome, format_bytes, format_throughput};
@@ -59,7 +59,7 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
         } else {
             // Split into columns for multiple drives
             let cols = if drive_count <= 2 { 1 } else { 2 };
-            let rows = (drive_count + cols - 1) / cols;
+            let rows = drive_count.div_ceil(cols);
 
             let row_constraints: Vec<Constraint> = (0..rows)
                 .map(|_| Constraint::Ratio(1, rows as u32))
@@ -95,17 +95,22 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
 
     draw_system_stats(frame, bottom_chunks[0], &sorted_progress);
 
-    let history_vec: Vec<f64> = app.wipe_progress.values()
+    let history_vec: Vec<f64> = app
+        .wipe_progress
+        .values()
         .find(|p| p.outcome.is_none())
         .map(|p| p.throughput_history.iter().copied().collect())
         .unwrap_or_default();
 
-    throughput_sparkline::draw(frame, bottom_chunks[1],
+    throughput_sparkline::draw(
+        frame,
+        bottom_chunks[1],
         &history_vec,
-        app.wipe_progress.values()
+        app.wipe_progress
+            .values()
             .filter(|p| p.outcome.is_none())
             .map(|p| p.throughput_bps)
-            .sum()
+            .sum(),
     );
 
     // Log viewer
@@ -115,13 +120,21 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
     ui::status_bar(
         frame,
         main_chunks[4],
-        &[("PgUp/PgDn", "Scroll"), ("q", "Cancel & Quit"), ("?", "Help")],
+        &[
+            ("PgUp/PgDn", "Scroll"),
+            ("q", "Cancel & Quit"),
+            ("?", "Help"),
+        ],
     );
 }
 
 /// Draw the logo with status
 fn draw_logo(frame: &mut Frame, area: Rect, app: &App) {
-    let completed = app.wipe_progress.values().filter(|p| p.outcome.is_some()).count();
+    let completed = app
+        .wipe_progress
+        .values()
+        .filter(|p| p.outcome.is_some())
+        .count();
     let total = app.wipe_progress.len();
     let all_done = completed == total && total > 0;
 
@@ -158,10 +171,10 @@ fn draw_drive_panel(frame: &mut Frame, area: Rect, progress: &crate::app::WipePr
     let layout = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(5),  // Header info
-            Constraint::Length(1),  // Progress bar
-            Constraint::Length(3),  // Sector map
-            Constraint::Min(3),     // Technical details
+            Constraint::Length(5), // Header info
+            Constraint::Length(1), // Progress bar
+            Constraint::Length(3), // Sector map
+            Constraint::Min(3),    // Technical details
         ])
         .split(inner);
 
@@ -182,7 +195,11 @@ fn draw_drive_panel(frame: &mut Frame, area: Rect, progress: &crate::app::WipePr
 fn draw_header_info(frame: &mut Frame, area: Rect, progress: &crate::app::WipeProgress) {
     let method_info = format!("METHOD: {}", progress.method.to_uppercase());
     let pass_info = format!("PASS: {}/{}", progress.current_pass, progress.total_passes);
-    let phase = if progress.verifying { "VERIFICATION" } else { "DATA SANITIZATION" };
+    let phase = if progress.verifying {
+        "VERIFICATION"
+    } else {
+        "DATA SANITIZATION"
+    };
 
     let bytes_written = if progress.verifying {
         progress.verify_bytes
@@ -218,8 +235,14 @@ fn draw_header_info(frame: &mut Frame, area: Rect, progress: &crate::app::WipePr
                 Style::default().fg(Color::Cyan).bold(),
             ),
             Span::raw("  "),
-            Span::styled(format!("({} / {})", format_bytes(bytes_written), format_bytes(total_bytes)),
-                Style::default().fg(Color::Gray)),
+            Span::styled(
+                format!(
+                    "({} / {})",
+                    format_bytes(bytes_written),
+                    format_bytes(total_bytes)
+                ),
+                Style::default().fg(Color::Gray),
+            ),
         ]),
         Line::from(vec![
             Span::styled("║ THROUGHPUT: ", Style::default().fg(Color::DarkGray)),
@@ -228,9 +251,15 @@ fn draw_header_info(frame: &mut Frame, area: Rect, progress: &crate::app::WipePr
                 Style::default().fg(Color::Green).bold(),
             ),
             Span::raw("  "),
-            Span::styled(format!("IOPS: {:.0}", progress.iops), Style::default().fg(Color::Yellow)),
+            Span::styled(
+                format!("IOPS: {:.0}", progress.iops),
+                Style::default().fg(Color::Yellow),
+            ),
         ]),
-        Line::from(Span::styled("╚═══════════════", Style::default().fg(Color::DarkGray))),
+        Line::from(Span::styled(
+            "╚═══════════════",
+            Style::default().fg(Color::DarkGray),
+        )),
     ];
 
     frame.render_widget(Paragraph::new(lines), area);
@@ -255,7 +284,10 @@ fn draw_progress_bar(frame: &mut Frame, area: Rect, progress: &crate::app::WipeP
     let gauge = Gauge::default()
         .gauge_style(Style::default().fg(color).bg(Color::Black))
         .ratio(fraction)
-        .label(Span::styled(label, Style::default().fg(Color::White).bold()));
+        .label(Span::styled(
+            label,
+            Style::default().fg(Color::White).bold(),
+        ));
 
     frame.render_widget(gauge, area);
 }
@@ -294,7 +326,10 @@ fn draw_sector_map(frame: &mut Frame, area: Rect, progress: &crate::app::WipePro
                 Style::default().fg(Color::Cyan).bold(),
             ),
             Span::styled(" / ", Style::default().fg(Color::DarkGray)),
-            Span::styled(format_number(total_sectors), Style::default().fg(Color::Gray)),
+            Span::styled(
+                format_number(total_sectors),
+                Style::default().fg(Color::Gray),
+            ),
         ]),
         Line::from(Span::styled(sector_line, Style::default().fg(Color::Blue))),
     ];
@@ -325,13 +360,21 @@ fn draw_technical_details(frame: &mut Frame, area: Rect, progress: &crate::app::
             .style(Style::default().fg(security_level.1)),
         ListItem::new(format!("├─ Write Operations: {}", format_number(ops)))
             .style(Style::default().fg(Color::Gray)),
-        ListItem::new(format!("├─ Average Throughput: {}", format_throughput(avg_throughput)))
-            .style(Style::default().fg(Color::Gray)),
+        ListItem::new(format!(
+            "├─ Average Throughput: {}",
+            format_throughput(avg_throughput)
+        ))
+        .style(Style::default().fg(Color::Gray)),
         ListItem::new(format!("├─ Elapsed Time: {}", ui::format_eta(elapsed)))
             .style(Style::default().fg(Color::Gray)),
-        ListItem::new(format!("└─ Status: {}",
-            progress.outcome.map(|o| o.to_string()).unwrap_or_else(|| "IN PROGRESS".to_string())))
-            .style(Style::default().fg(Color::Cyan)),
+        ListItem::new(format!(
+            "└─ Status: {}",
+            progress
+                .outcome
+                .map(|o| o.to_string())
+                .unwrap_or_else(|| "IN PROGRESS".to_string())
+        ))
+        .style(Style::default().fg(Color::Cyan)),
     ];
 
     let list = List::new(items);
@@ -350,15 +393,33 @@ fn draw_system_stats(frame: &mut Frame, area: Rect, progress_list: &[&crate::app
     frame.render_widget(block, area);
 
     let active = progress_list.iter().filter(|p| p.outcome.is_none()).count();
-    let completed = progress_list.iter().filter(|p| matches!(p.outcome, Some(WipeOutcome::Success | WipeOutcome::SuccessWithWarnings))).count();
-    let failed = progress_list.iter().filter(|p| matches!(p.outcome, Some(WipeOutcome::Failed | WipeOutcome::Cancelled | WipeOutcome::Interrupted))).count();
+    let completed = progress_list
+        .iter()
+        .filter(|p| {
+            matches!(
+                p.outcome,
+                Some(WipeOutcome::Success | WipeOutcome::SuccessWithWarnings)
+            )
+        })
+        .count();
+    let failed = progress_list
+        .iter()
+        .filter(|p| {
+            matches!(
+                p.outcome,
+                Some(WipeOutcome::Failed | WipeOutcome::Cancelled | WipeOutcome::Interrupted)
+            )
+        })
+        .count();
 
-    let total_throughput: f64 = progress_list.iter()
+    let total_throughput: f64 = progress_list
+        .iter()
         .filter(|p| p.outcome.is_none())
         .map(|p| p.throughput_bps)
         .sum();
 
-    let total_iops: f64 = progress_list.iter()
+    let total_iops: f64 = progress_list
+        .iter()
         .filter(|p| p.outcome.is_none())
         .map(|p| p.iops)
         .sum();
@@ -368,26 +429,44 @@ fn draw_system_stats(frame: &mut Frame, area: Rect, progress_list: &[&crate::app
     let lines = vec![
         Line::from(vec![
             Span::styled("ACTIVE OPERATIONS: ", Style::default().fg(Color::Gray)),
-            Span::styled(format!("{}", active), Style::default().fg(Color::Cyan).bold()),
+            Span::styled(
+                format!("{}", active),
+                Style::default().fg(Color::Cyan).bold(),
+            ),
             Span::raw("  "),
             Span::styled("COMPLETED: ", Style::default().fg(Color::Gray)),
-            Span::styled(format!("{}", completed), Style::default().fg(Color::Green).bold()),
+            Span::styled(
+                format!("{}", completed),
+                Style::default().fg(Color::Green).bold(),
+            ),
             Span::raw("  "),
             Span::styled("FAILED: ", Style::default().fg(Color::Gray)),
-            Span::styled(format!("{}", failed), Style::default().fg(Color::Red).bold()),
+            Span::styled(
+                format!("{}", failed),
+                Style::default().fg(Color::Red).bold(),
+            ),
         ]),
         Line::from(""),
         Line::from(vec![
             Span::styled("AGGREGATE THROUGHPUT: ", Style::default().fg(Color::Gray)),
-            Span::styled(format_throughput(total_throughput), Style::default().fg(Color::Green).bold()),
+            Span::styled(
+                format_throughput(total_throughput),
+                Style::default().fg(Color::Green).bold(),
+            ),
         ]),
         Line::from(vec![
             Span::styled("AGGREGATE IOPS: ", Style::default().fg(Color::Gray)),
-            Span::styled(format!("{:.0}", total_iops), Style::default().fg(Color::Yellow).bold()),
+            Span::styled(
+                format!("{:.0}", total_iops),
+                Style::default().fg(Color::Yellow).bold(),
+            ),
         ]),
         Line::from(vec![
             Span::styled("TOTAL DATA WRITTEN: ", Style::default().fg(Color::Gray)),
-            Span::styled(format_bytes(total_written), Style::default().fg(Color::Blue).bold()),
+            Span::styled(
+                format_bytes(total_written),
+                Style::default().fg(Color::Blue).bold(),
+            ),
         ]),
     ];
 
@@ -463,16 +542,34 @@ pub fn draw_completed(frame: &mut Frame, app: &mut App) {
 
         lines.push(Line::from(vec![
             Span::styled(format!("{} ", icon), Style::default().fg(color).bold()),
-            Span::styled(format!("{:<20}", progress.device), Style::default().fg(Color::Cyan).bold()),
-            Span::styled(format!("{:<20}", progress.method), Style::default().fg(Color::Blue)),
-            Span::styled(format!("Passes: {}", progress.total_passes), Style::default().fg(Color::Magenta)),
+            Span::styled(
+                format!("{:<20}", progress.device),
+                Style::default().fg(Color::Cyan).bold(),
+            ),
+            Span::styled(
+                format!("{:<20}", progress.method),
+                Style::default().fg(Color::Blue),
+            ),
+            Span::styled(
+                format!("Passes: {}", progress.total_passes),
+                Style::default().fg(Color::Magenta),
+            ),
         ]));
 
         lines.push(Line::from(vec![
             Span::raw("   "),
-            Span::styled(format!("Data: {}  ", format_bytes(progress.bytes_written)), Style::default().fg(Color::Gray)),
-            Span::styled(format!("Avg: {}  ", avg_throughput), Style::default().fg(Color::Gray)),
-            Span::styled(format!("Time: {}", ui::format_eta(elapsed)), Style::default().fg(Color::Gray)),
+            Span::styled(
+                format!("Data: {}  ", format_bytes(progress.bytes_written)),
+                Style::default().fg(Color::Gray),
+            ),
+            Span::styled(
+                format!("Avg: {}  ", avg_throughput),
+                Style::default().fg(Color::Gray),
+            ),
+            Span::styled(
+                format!("Time: {}", ui::format_eta(elapsed)),
+                Style::default().fg(Color::Gray),
+            ),
         ]));
         lines.push(Line::from(""));
     }
@@ -481,15 +578,25 @@ pub fn draw_completed(frame: &mut Frame, app: &mut App) {
 
     // Summary
     let total = sorted_progress.len();
-    let succeeded = sorted_progress.iter()
-        .filter(|p| matches!(p.outcome, Some(WipeOutcome::Success | WipeOutcome::SuccessWithWarnings)))
+    let succeeded = sorted_progress
+        .iter()
+        .filter(|p| {
+            matches!(
+                p.outcome,
+                Some(WipeOutcome::Success | WipeOutcome::SuccessWithWarnings)
+            )
+        })
         .count();
     let failed = total - succeeded;
 
     let summary_block = Block::default()
         .title(" SUMMARY ")
         .borders(Borders::ALL)
-        .border_style(Style::default().fg(if failed == 0 { Color::Green } else { Color::Yellow }));
+        .border_style(Style::default().fg(if failed == 0 {
+            Color::Green
+        } else {
+            Color::Yellow
+        }));
 
     let summary_inner = summary_block.inner(chunks[2]);
     frame.render_widget(summary_block, chunks[2]);
@@ -497,9 +604,20 @@ pub fn draw_completed(frame: &mut Frame, app: &mut App) {
     let summary_lines = vec![
         Line::from(""),
         Line::from(vec![
-            Span::styled(format!("  Total Drives: {} ", total), Style::default().fg(Color::Cyan).bold()),
-            Span::styled(format!(" Success: {} ", succeeded), Style::default().fg(Color::Green).bold()),
-            Span::styled(format!(" Failed: {}", failed), Style::default().fg(if failed > 0 { Color::Red } else { Color::Gray }).bold()),
+            Span::styled(
+                format!("  Total Drives: {} ", total),
+                Style::default().fg(Color::Cyan).bold(),
+            ),
+            Span::styled(
+                format!(" Success: {} ", succeeded),
+                Style::default().fg(Color::Green).bold(),
+            ),
+            Span::styled(
+                format!(" Failed: {}", failed),
+                Style::default()
+                    .fg(if failed > 0 { Color::Red } else { Color::Gray })
+                    .bold(),
+            ),
         ]),
         Line::from(""),
         Line::from(Span::styled(
@@ -508,7 +626,13 @@ pub fn draw_completed(frame: &mut Frame, app: &mut App) {
             } else {
                 "  ⚠ SOME OPERATIONS FAILED - REVIEW REQUIRED"
             },
-            Style::default().fg(if failed == 0 { Color::Green } else { Color::Yellow }).bold(),
+            Style::default()
+                .fg(if failed == 0 {
+                    Color::Green
+                } else {
+                    Color::Yellow
+                })
+                .bold(),
         )),
         Line::from(""),
     ];

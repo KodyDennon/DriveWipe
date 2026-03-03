@@ -1,8 +1,8 @@
 use iced::widget::{column, container, progress_bar, text};
 use iced::{Element, Length};
 
-use crate::theme;
 use crate::Message;
+use crate::theme;
 
 /// View for the wipe progress screen.
 pub fn view<'a>(
@@ -35,8 +35,7 @@ pub fn view<'a>(
         .size(theme::FONT_SIZE_MD)
         .color(theme::TEXT_SECONDARY);
 
-    let bar = progress_bar(0.0..=1.0, fraction)
-        .height(20);
+    let bar = progress_bar(0.0..=1.0, fraction).height(20);
 
     let pct_text = text(format!("{:.1}%", fraction * 100.0))
         .size(theme::FONT_SIZE_LG)

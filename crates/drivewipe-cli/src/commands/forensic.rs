@@ -20,10 +20,7 @@ pub fn scan(
 }
 
 /// Execute a forensic scan and return the result.
-fn execute_scan(
-    cancel_token: &Arc<CancellationToken>,
-    device: &str,
-) -> Result<ForensicResult> {
+fn execute_scan(cancel_token: &Arc<CancellationToken>, device: &str) -> Result<ForensicResult> {
     let enumerator = drive::create_enumerator();
     let drive_info = enumerator
         .inspect(&PathBuf::from(device))
@@ -39,13 +36,15 @@ fn execute_scan(
     let mut device_io = drivewipe_core::io::open_device(&PathBuf::from(device), false)
         .context("Failed to open device")?;
 
-    let result = session.execute(
-        device_io.as_mut(),
-        device,
-        &drive_info.serial,
-        &progress_tx,
-        cancel_token,
-    ).context("Forensic scan failed")?;
+    let result = session
+        .execute(
+            device_io.as_mut(),
+            device,
+            &drive_info.serial,
+            &progress_tx,
+            cancel_token,
+        )
+        .context("Forensic scan failed")?;
 
     // Drain progress
     drop(progress_tx);
@@ -62,7 +61,10 @@ fn print_results(result: &ForensicResult) {
     if let Some(ref entropy) = result.entropy_stats {
         println!("\n  Entropy Analysis:");
         println!("    Average: {:.2} bits/byte", entropy.average_entropy);
-        println!("    Range: {:.2} - {:.2}", entropy.min_entropy, entropy.max_entropy);
+        println!(
+            "    Range: {:.2} - {:.2}",
+            entropy.min_entropy, entropy.max_entropy
+        );
         println!("    High entropy sectors: {:.1}%", entropy.high_entropy_pct);
         println!("    Zero sectors: {:.1}%", entropy.zero_pct);
     }
@@ -100,13 +102,10 @@ pub fn report(
     print_results(&result);
 
     // Generate and save a formal forensic report
-    let report = drivewipe_core::forensic::report::ForensicReport::generate(
-        result,
-        None,
-        None,
-    );
+    let report = drivewipe_core::forensic::report::ForensicReport::generate(result, None, None);
 
-    let report_json = report.to_json()
+    let report_json = report
+        .to_json()
         .context("Failed to serialize forensic report")?;
 
     let output_path = match output {

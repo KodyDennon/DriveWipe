@@ -36,15 +36,19 @@ impl Notifier for DefaultNotifier {
 
         // Set timeout based on urgency
         match urgency {
-            NotificationUrgency::Low => { notification.timeout(5000); }
-            NotificationUrgency::Normal => { notification.timeout(10000); }
-            NotificationUrgency::Critical => { notification.timeout(0); } // persistent
+            NotificationUrgency::Low => {
+                notification.timeout(5000);
+            }
+            NotificationUrgency::Normal => {
+                notification.timeout(10000);
+            }
+            NotificationUrgency::Critical => {
+                notification.timeout(0);
+            } // persistent
         }
 
         notification.show().map_err(|e| {
-            crate::error::DriveWipeError::Notification(format!(
-                "Failed to send notification: {e}"
-            ))
+            crate::error::DriveWipeError::Notification(format!("Failed to send notification: {e}"))
         })?;
 
         Ok(())

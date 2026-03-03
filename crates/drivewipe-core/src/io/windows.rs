@@ -19,8 +19,8 @@ use std::os::windows::ffi::OsStrExt;
 use windows::Win32::Foundation::{CloseHandle, HANDLE, INVALID_HANDLE_VALUE};
 #[cfg(target_os = "windows")]
 use windows::Win32::Storage::FileSystem::{
-    CreateFileW, FILE_FLAG_NO_BUFFERING, FILE_FLAG_WRITE_THROUGH, FILE_BEGIN,
-    FlushFileBuffers, OPEN_EXISTING, ReadFile, SetFilePointerEx, WriteFile,
+    CreateFileW, FILE_BEGIN, FILE_FLAG_NO_BUFFERING, FILE_FLAG_WRITE_THROUGH, FlushFileBuffers,
+    OPEN_EXISTING, ReadFile, SetFilePointerEx, WriteFile,
 };
 #[cfg(target_os = "windows")]
 use windows::Win32::System::IO::DeviceIoControl;
@@ -137,7 +137,7 @@ impl WindowsDeviceIo {
             Version: mem::size_of::<SetDiskAttributes>() as u32,
             Persist: 0, // Don't persist across reboots
             Reserved1: [0; 3],
-            Attributes: 0x1, // Set OFFLINE
+            Attributes: 0x1,     // Set OFFLINE
             AttributesMask: 0x1, // Modify OFFLINE attribute
             Reserved2: [0; 4],
         };
@@ -148,7 +148,7 @@ impl WindowsDeviceIo {
             CreateFileW(
                 PCWSTR(wide_for_offline.as_ptr()),
                 0x80000000u32 | 0x40000000u32, // GENERIC_READ | GENERIC_WRITE
-                Default::default(), // No sharing
+                Default::default(),            // No sharing
                 None,
                 OPEN_EXISTING,
                 Default::default(),
@@ -172,14 +172,17 @@ impl WindowsDeviceIo {
                     )
                 };
 
-                unsafe { let _ = CloseHandle(h); }
+                unsafe {
+                    let _ = CloseHandle(h);
+                }
 
                 if offline_result.is_ok() {
                     log::debug!("[WINDOWS] Disk set offline successfully");
                     write_debug("Disk set offline successfully");
                 } else {
                     let err = offline_result.unwrap_err();
-                    let err_msg = format!("Failed to set disk offline: error code {}", err.code().0);
+                    let err_msg =
+                        format!("Failed to set disk offline: error code {}", err.code().0);
                     log::debug!("[WINDOWS WARNING] {}", err_msg);
                     write_debug(&err_msg);
                     write_debug("Continuing anyway - wipe may fail if disk has partitions");
@@ -209,8 +212,14 @@ impl WindowsDeviceIo {
 
         let access_rights = GENERIC_READ | GENERIC_WRITE | WRITE_DAC | READ_CONTROL | SYNCHRONIZE;
 
-        write_debug(&format!("Opening with access rights: 0x{:X}", access_rights));
-        log::debug!("[WINDOWS] Opening with access rights: 0x{:X}", access_rights);
+        write_debug(&format!(
+            "Opening with access rights: 0x{:X}",
+            access_rights
+        ));
+        log::debug!(
+            "[WINDOWS] Opening with access rights: 0x{:X}",
+            access_rights
+        );
 
         // CRITICAL: Use ZERO sharing mode for exclusive access.
         // Even FILE_SHARE_READ allows other processes to keep handles open, which
@@ -295,7 +304,11 @@ impl WindowsDeviceIo {
                 let err_msg = format!("IOCTL_DISK_GET_LENGTH_INFO FAILED: error code {}", err_code);
                 log::debug!("[WINDOWS ERROR] {}", err_msg);
                 write_debug(&err_msg);
-                log::error!("IOCTL_DISK_GET_LENGTH_INFO failed for {}: error {}", path.display(), err_code);
+                log::error!(
+                    "IOCTL_DISK_GET_LENGTH_INFO failed for {}: error {}",
+                    path.display(),
+                    err_code
+                );
                 unsafe {
                     let _ = CloseHandle(handle);
                 }
@@ -342,9 +355,16 @@ impl WindowsDeviceIo {
         // physical drive handles (\\.\PhysicalDrive0). We don't need to lock.
 
         write_debug(&format!("========== DEVICE OPENED SUCCESSFULLY =========="));
-        write_debug(&format!("Handle: valid, Capacity: {} bytes, Block size: {} bytes", capacity, block_size));
+        write_debug(&format!(
+            "Handle: valid, Capacity: {} bytes, Block size: {} bytes",
+            capacity, block_size
+        ));
         log::debug!("[WINDOWS] Device opened successfully!");
-        log::debug!("[WINDOWS] Capacity: {} bytes, Block size: {}", capacity, block_size);
+        log::debug!(
+            "[WINDOWS] Capacity: {} bytes, Block size: {}",
+            capacity,
+            block_size
+        );
 
         Ok(Self {
             handle,
@@ -365,7 +385,8 @@ impl WindowsDeviceIo {
 impl RawDeviceIo for WindowsDeviceIo {
     fn write_at(&mut self, offset: u64, buf: &[u8]) -> Result<usize> {
         // Log write parameters for first write to debug alignment issues
-        static FIRST_WRITE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
+        static FIRST_WRITE: std::sync::atomic::AtomicBool =
+            std::sync::atomic::AtomicBool::new(true);
         if FIRST_WRITE.swap(false, std::sync::atomic::Ordering::Relaxed) {
             let debug_log = std::env::temp_dir().join("drivewipe_debug.log");
             if let Ok(mut f) = std::fs::OpenOptions::new()
@@ -380,30 +401,35 @@ impl RawDeviceIo for WindowsDeviceIo {
                 let _ = writeln!(f, "  Buffer address: {:p}", buf.as_ptr());
                 let _ = writeln!(f, "  Offset % 512 = {}", offset % 512);
                 let _ = writeln!(f, "  Buffer size % 512 = {}", buf.len() % 512);
-                let _ = writeln!(f, "  Buffer address % 512 = {}", buf.as_ptr() as usize % 512);
+                let _ = writeln!(
+                    f,
+                    "  Buffer address % 512 = {}",
+                    buf.as_ptr() as usize % 512
+                );
                 let _ = writeln!(f, "  Block size: {}", self.block_size);
             }
-            log::debug!("[WINDOWS WRITE_AT] First write (SYNCHRONOUS): offset={}, size={}, block_size={}",
-                offset, buf.len(), self.block_size);
+            log::debug!(
+                "[WINDOWS WRITE_AT] First write (SYNCHRONOUS): offset={}, size={}, block_size={}",
+                offset,
+                buf.len(),
+                self.block_size
+            );
         }
 
         // Use synchronous I/O with SetFilePointerEx instead of OVERLAPPED
         // SetFilePointerEx to position the file pointer
         let distance_to_move = offset as i64;
-        unsafe {
-            SetFilePointerEx(
-                self.handle,
-                distance_to_move,
-                None,
-                FILE_BEGIN,
-            )
-        }
-        .map_err(|e| {
-            let err_code = e.code().0;
-            let err_msg = format!("SetFilePointerEx failed: error code {} (0x{:X})", err_code, err_code as u32);
-            log::debug!("[WINDOWS ERROR] {}", err_msg);
-            DriveWipeError::IoGeneric(std::io::Error::from_raw_os_error(err_code as i32))
-        })?;
+        unsafe { SetFilePointerEx(self.handle, distance_to_move, None, FILE_BEGIN) }.map_err(
+            |e| {
+                let err_code = e.code().0;
+                let err_msg = format!(
+                    "SetFilePointerEx failed: error code {} (0x{:X})",
+                    err_code, err_code as u32
+                );
+                log::debug!("[WINDOWS ERROR] {}", err_msg);
+                DriveWipeError::IoGeneric(std::io::Error::from_raw_os_error(err_code as i32))
+            },
+        )?;
 
         // Now write at the current file position (synchronous, no OVERLAPPED)
         let mut bytes_written: u32 = 0;
@@ -424,7 +450,13 @@ impl RawDeviceIo for WindowsDeviceIo {
                 Buffer address: {:p}\n  \
                 Error code: {} (0x{:X})\n  \
                 Error: {}",
-                offset, offset, buf.len(), buf.as_ptr(), err_code, err_code as u32, e
+                offset,
+                offset,
+                buf.len(),
+                buf.as_ptr(),
+                err_code,
+                err_code as u32,
+                e
             );
             log::debug!("{}", err_msg);
 
@@ -448,17 +480,9 @@ impl RawDeviceIo for WindowsDeviceIo {
     fn read_at(&mut self, offset: u64, buf: &mut [u8]) -> Result<usize> {
         // Use synchronous I/O with SetFilePointerEx
         let distance_to_move = offset as i64;
-        unsafe {
-            SetFilePointerEx(
-                self.handle,
-                distance_to_move,
-                None,
-                FILE_BEGIN,
-            )
-        }
-        .map_err(|e| {
-            DriveWipeError::IoGeneric(std::io::Error::from_raw_os_error(e.code().0 as i32))
-        })?;
+        unsafe { SetFilePointerEx(self.handle, distance_to_move, None, FILE_BEGIN) }.map_err(
+            |e| DriveWipeError::IoGeneric(std::io::Error::from_raw_os_error(e.code().0 as i32)),
+        )?;
 
         let mut bytes_read: u32 = 0;
         unsafe {

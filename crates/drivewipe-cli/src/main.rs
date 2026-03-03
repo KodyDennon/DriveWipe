@@ -1,3 +1,11 @@
+//! DriveWipe Command-Line Interface (CLI)
+//!
+//! The `drivewipe` binary provides a traditional POSIX-compatible interface
+//! for secure sanitization and drive management. It is designed for both
+//! interactive terminal use and integration into automation scripts.
+//!
+//! Use `drivewipe --help` for a full list of commands and flags.
+
 use std::process;
 use std::sync::Arc;
 
@@ -328,12 +336,22 @@ fn run(cli: Cli) -> Result<()> {
             mode,
             compress,
             encrypt,
-        } => commands::clone::run(&config, &cancel_token, &source, &target, &mode, compress, encrypt),
+        } => commands::clone::run(
+            &config,
+            &cancel_token,
+            &source,
+            &target,
+            &mode,
+            compress,
+            encrypt,
+        ),
         Commands::Partition { action } => match action {
             PartitionAction::List { device } => commands::partition::list(&config, &device),
         },
         Commands::Forensic { action } => match action {
-            ForensicAction::Scan { device } => commands::forensic::scan(&config, &cancel_token, &device),
+            ForensicAction::Scan { device } => {
+                commands::forensic::scan(&config, &cancel_token, &device)
+            }
             ForensicAction::Report { device, output } => {
                 commands::forensic::report(&config, &cancel_token, &device, output.as_deref())
             }

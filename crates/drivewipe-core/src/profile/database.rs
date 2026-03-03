@@ -50,19 +50,11 @@ impl ProfileDatabase {
                                     profiles.push(profile);
                                 }
                                 Err(e) => {
-                                    log::warn!(
-                                        "Failed to parse profile {}: {}",
-                                        path.display(),
-                                        e
-                                    );
+                                    log::warn!("Failed to parse profile {}: {}", path.display(), e);
                                 }
                             },
                             Err(e) => {
-                                log::warn!(
-                                    "Failed to read profile {}: {}",
-                                    path.display(),
-                                    e
-                                );
+                                log::warn!("Failed to read profile {}: {}", path.display(), e);
                             }
                         }
                     }

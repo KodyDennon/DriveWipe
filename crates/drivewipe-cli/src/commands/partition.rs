@@ -12,7 +12,10 @@ pub fn list(_config: &DriveWipeConfig, device: &str) -> Result<()> {
         .inspect(&PathBuf::from(device))
         .context("Failed to inspect device")?;
 
-    println!("Partition Table: {} {}", drive_info.model, drive_info.serial);
+    println!(
+        "Partition Table: {} {}",
+        drive_info.model, drive_info.serial
+    );
     println!("  Capacity: {}", drive_info.capacity_display());
 
     if let Some(ref table_type) = drive_info.partition_table {
@@ -25,12 +28,16 @@ pub fn list(_config: &DriveWipeConfig, device: &str) -> Result<()> {
         .context("Failed to open device")?;
 
     let mut buf = vec![0u8; 34 * 512]; // GPT needs at least 34 sectors
-    device_io.read_at(0, &mut buf)
+    device_io
+        .read_at(0, &mut buf)
         .context("Failed to read partition table")?;
 
     match drivewipe_core::partition::PartitionTable::parse(&buf) {
         Ok(table) => {
-            println!("\n  {:>4}  {:>12}  {:>12}  {:>12}  {}", "#", "Start LBA", "End LBA", "Size", "Name/Type");
+            println!(
+                "\n  {:>4}  {:>12}  {:>12}  {:>12}  Name/Type",
+                "#", "Start LBA", "End LBA", "Size"
+            );
             println!("  {}", "-".repeat(60));
 
             for part in table.partitions() {
@@ -40,7 +47,11 @@ pub fn list(_config: &DriveWipeConfig, device: &str) -> Result<()> {
                     part.start_lba,
                     part.end_lba,
                     drivewipe_core::format_bytes(part.size_bytes),
-                    if part.name.is_empty() { &part.type_id } else { &part.name },
+                    if part.name.is_empty() {
+                        &part.type_id
+                    } else {
+                        &part.name
+                    },
                 );
             }
         }

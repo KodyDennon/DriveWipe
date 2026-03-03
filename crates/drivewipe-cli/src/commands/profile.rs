@@ -15,8 +15,8 @@ pub fn run(config: &DriveWipeConfig, device: &str) -> Result<()> {
 
     println!("Drive: {} {}", drive_info.model, drive_info.serial);
 
-    let db = ProfileDatabase::load(&config.profiles_dir)
-        .context("Failed to load profile database")?;
+    let db =
+        ProfileDatabase::load(&config.profiles_dir).context("Failed to load profile database")?;
 
     let matcher = db.into_matcher();
 
@@ -26,7 +26,10 @@ pub fn run(config: &DriveWipeConfig, device: &str) -> Result<()> {
         if let Some(ref controller) = profile.controller_type {
             println!("  Controller: {}", controller);
         }
-        println!("  Over-provisioning: {:.0}%", profile.over_provisioning_ratio * 100.0);
+        println!(
+            "  Over-provisioning: {:.0}%",
+            profile.over_provisioning_ratio * 100.0
+        );
         println!("  Sanitize support: {}", profile.sanitize_support);
         if let Some(ref method) = profile.recommended_method {
             println!("  Recommended method: {}", method);
@@ -52,7 +55,10 @@ pub fn run(config: &DriveWipeConfig, device: &str) -> Result<()> {
         }
     } else {
         println!("\nNo matching profile found for this drive.");
-        println!("Using generic defaults based on drive type: {}", drive_info.drive_type);
+        println!(
+            "Using generic defaults based on drive type: {}",
+            drive_info.drive_type
+        );
     }
 
     Ok(())

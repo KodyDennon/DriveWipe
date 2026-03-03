@@ -1,8 +1,8 @@
 use iced::widget::{button, checkbox, column, container, text};
 use iced::{Element, Length};
 
-use crate::theme;
 use crate::Message;
+use crate::theme;
 
 /// View for the settings screen.
 pub fn view<'a>(
@@ -27,8 +27,7 @@ pub fn view<'a>(
     let health_cb = checkbox("Auto Health Check Before Wipe", auto_health)
         .on_toggle(|v| Message::ToggleSetting("auto_health".into(), v));
 
-    let back_btn = button(text("Back").size(theme::FONT_SIZE_MD))
-        .on_press(Message::NavigateToMenu);
+    let back_btn = button(text("Back").size(theme::FONT_SIZE_MD)).on_press(Message::NavigateToMenu);
 
     let content = column![
         title,

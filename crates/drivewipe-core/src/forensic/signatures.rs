@@ -24,23 +24,91 @@ struct FileSignature {
 }
 
 const SIGNATURES: &[FileSignature] = &[
-    FileSignature { name: "JPEG", magic: b"\xFF\xD8\xFF", offset: 0 },
-    FileSignature { name: "PNG", magic: b"\x89PNG\r\n\x1A\n", offset: 0 },
-    FileSignature { name: "PDF", magic: b"%PDF", offset: 0 },
-    FileSignature { name: "ZIP/DOCX/XLSX", magic: b"PK\x03\x04", offset: 0 },
-    FileSignature { name: "GIF87a", magic: b"GIF87a", offset: 0 },
-    FileSignature { name: "GIF89a", magic: b"GIF89a", offset: 0 },
-    FileSignature { name: "EXE/DLL", magic: b"MZ", offset: 0 },
-    FileSignature { name: "ELF", magic: b"\x7FELF", offset: 0 },
-    FileSignature { name: "RAR", magic: b"Rar!", offset: 0 },
-    FileSignature { name: "7z", magic: b"7z\xBC\xAF\x27\x1C", offset: 0 },
-    FileSignature { name: "BMP", magic: b"BM", offset: 0 },
-    FileSignature { name: "GZIP", magic: b"\x1F\x8B", offset: 0 },
-    FileSignature { name: "SQLite", magic: b"SQLite format 3", offset: 0 },
-    FileSignature { name: "MP3/ID3", magic: b"ID3", offset: 0 },
-    FileSignature { name: "RIFF/AVI/WAV", magic: b"RIFF", offset: 0 },
-    FileSignature { name: "Mach-O 64", magic: b"\xCF\xFA\xED\xFE", offset: 0 },
-    FileSignature { name: "Mach-O 32", magic: b"\xCE\xFA\xED\xFE", offset: 0 },
+    FileSignature {
+        name: "JPEG",
+        magic: b"\xFF\xD8\xFF",
+        offset: 0,
+    },
+    FileSignature {
+        name: "PNG",
+        magic: b"\x89PNG\r\n\x1A\n",
+        offset: 0,
+    },
+    FileSignature {
+        name: "PDF",
+        magic: b"%PDF",
+        offset: 0,
+    },
+    FileSignature {
+        name: "ZIP/DOCX/XLSX",
+        magic: b"PK\x03\x04",
+        offset: 0,
+    },
+    FileSignature {
+        name: "GIF87a",
+        magic: b"GIF87a",
+        offset: 0,
+    },
+    FileSignature {
+        name: "GIF89a",
+        magic: b"GIF89a",
+        offset: 0,
+    },
+    FileSignature {
+        name: "EXE/DLL",
+        magic: b"MZ",
+        offset: 0,
+    },
+    FileSignature {
+        name: "ELF",
+        magic: b"\x7FELF",
+        offset: 0,
+    },
+    FileSignature {
+        name: "RAR",
+        magic: b"Rar!",
+        offset: 0,
+    },
+    FileSignature {
+        name: "7z",
+        magic: b"7z\xBC\xAF\x27\x1C",
+        offset: 0,
+    },
+    FileSignature {
+        name: "BMP",
+        magic: b"BM",
+        offset: 0,
+    },
+    FileSignature {
+        name: "GZIP",
+        magic: b"\x1F\x8B",
+        offset: 0,
+    },
+    FileSignature {
+        name: "SQLite",
+        magic: b"SQLite format 3",
+        offset: 0,
+    },
+    FileSignature {
+        name: "MP3/ID3",
+        magic: b"ID3",
+        offset: 0,
+    },
+    FileSignature {
+        name: "RIFF/AVI/WAV",
+        magic: b"RIFF",
+        offset: 0,
+    },
+    FileSignature {
+        name: "Mach-O 64",
+        magic: b"\xCF\xFA\xED\xFE",
+        offset: 0,
+    },
+    FileSignature {
+        name: "Mach-O 32",
+        magic: b"\xCE\xFA\xED\xFE",
+        offset: 0,
+    },
 ];
 
 /// Scan a device for file signatures.

@@ -138,10 +138,7 @@ pub fn delete_partition(
                 .iter()
                 .position(|p| p.index == partition_index)
                 .ok_or_else(|| {
-                    DriveWipeError::Partition(format!(
-                        "Partition {} not found",
-                        partition_index
-                    ))
+                    DriveWipeError::Partition(format!("Partition {} not found", partition_index))
                 })?;
             gpt.partitions.remove(pos);
             Ok(())
@@ -152,10 +149,7 @@ pub fn delete_partition(
                 .iter()
                 .position(|p| p.index == partition_index)
                 .ok_or_else(|| {
-                    DriveWipeError::Partition(format!(
-                        "Partition {} not found",
-                        partition_index
-                    ))
+                    DriveWipeError::Partition(format!("Partition {} not found", partition_index))
                 })?;
             mbr.partitions.remove(pos);
             Ok(())
@@ -180,10 +174,7 @@ pub fn resize_partition(
                 .iter()
                 .position(|p| p.index == partition_index)
                 .ok_or_else(|| {
-                    DriveWipeError::Partition(format!(
-                        "Partition {} not found",
-                        partition_index
-                    ))
+                    DriveWipeError::Partition(format!("Partition {} not found", partition_index))
                 })?;
 
             let start_lba = gpt.partitions[part_pos].start_lba;
@@ -205,9 +196,7 @@ pub fn resize_partition(
             // Check for overlap with other partitions when growing
             if new_end_lba > old_end {
                 for (i, other) in gpt.partitions.iter().enumerate() {
-                    if i != part_pos
-                        && new_end_lba >= other.start_lba
-                        && start_lba <= other.end_lba
+                    if i != part_pos && new_end_lba >= other.start_lba && start_lba <= other.end_lba
                     {
                         return Err(DriveWipeError::Partition(format!(
                             "Resize would overlap with partition {}",
@@ -227,10 +216,7 @@ pub fn resize_partition(
                 .iter()
                 .position(|p| p.index == partition_index)
                 .ok_or_else(|| {
-                    DriveWipeError::Partition(format!(
-                        "Partition {} not found",
-                        partition_index
-                    ))
+                    DriveWipeError::Partition(format!("Partition {} not found", partition_index))
                 })?;
 
             let start_lba = mbr.partitions[part_pos].start_lba;
@@ -245,9 +231,7 @@ pub fn resize_partition(
             // Check overlap when growing
             if new_end_lba > old_end {
                 for (i, other) in mbr.partitions.iter().enumerate() {
-                    if i != part_pos
-                        && new_end_lba >= other.start_lba
-                        && start_lba <= other.end_lba
+                    if i != part_pos && new_end_lba >= other.start_lba && start_lba <= other.end_lba
                     {
                         return Err(DriveWipeError::Partition(format!(
                             "Resize would overlap with partition {}",
@@ -282,13 +266,11 @@ pub fn move_partition(
                 .iter()
                 .position(|p| p.index == partition_index)
                 .ok_or_else(|| {
-                    DriveWipeError::Partition(format!(
-                        "Partition {} not found",
-                        partition_index
-                    ))
+                    DriveWipeError::Partition(format!("Partition {} not found", partition_index))
                 })?;
 
-            let size_sectors = gpt.partitions[part_pos].end_lba - gpt.partitions[part_pos].start_lba;
+            let size_sectors =
+                gpt.partitions[part_pos].end_lba - gpt.partitions[part_pos].start_lba;
             let new_end_lba = new_start_lba + size_sectors;
 
             if new_start_lba < gpt.first_usable_lba {
@@ -306,9 +288,7 @@ pub fn move_partition(
 
             // Check overlap with other partitions
             for (i, other) in gpt.partitions.iter().enumerate() {
-                if i != part_pos
-                    && new_start_lba <= other.end_lba
-                    && new_end_lba >= other.start_lba
+                if i != part_pos && new_start_lba <= other.end_lba && new_end_lba >= other.start_lba
                 {
                     return Err(DriveWipeError::Partition(format!(
                         "Move would overlap with partition {}",
@@ -328,20 +308,16 @@ pub fn move_partition(
                 .iter()
                 .position(|p| p.index == partition_index)
                 .ok_or_else(|| {
-                    DriveWipeError::Partition(format!(
-                        "Partition {} not found",
-                        partition_index
-                    ))
+                    DriveWipeError::Partition(format!("Partition {} not found", partition_index))
                 })?;
 
-            let size_sectors = mbr.partitions[part_pos].end_lba - mbr.partitions[part_pos].start_lba;
+            let size_sectors =
+                mbr.partitions[part_pos].end_lba - mbr.partitions[part_pos].start_lba;
             let new_end_lba = new_start_lba + size_sectors;
 
             // Check overlap
             for (i, other) in mbr.partitions.iter().enumerate() {
-                if i != part_pos
-                    && new_start_lba <= other.end_lba
-                    && new_end_lba >= other.start_lba
+                if i != part_pos && new_start_lba <= other.end_lba && new_end_lba >= other.start_lba
                 {
                     return Err(DriveWipeError::Partition(format!(
                         "Move would overlap with partition {}",

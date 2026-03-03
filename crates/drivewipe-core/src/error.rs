@@ -159,6 +159,30 @@ pub enum DriveWipeError {
     // ── Keyboard Lock ────────────────────────────────────────────────
     #[error("Keyboard lock error: {0}")]
     KeyboardLock(String),
+
+    // ── Hidden Areas (HPA/DCO) ─────────────────────────────────────────
+    #[error("HPA error: {0}")]
+    HpaError(String),
+
+    #[error("DCO error: {0}")]
+    DcoError(String),
+
+    #[error("Hidden area removal failed: {reason}")]
+    HiddenAreaRemovalFailed { reason: String },
+
+    #[error("DCO is frozen — power cycle the drive to unfreeze")]
+    DcoFrozen,
+
+    // ── Kernel Module ──────────────────────────────────────────────────
+    #[error("DriveWipe kernel module not loaded: {0}")]
+    KernelModuleNotLoaded(String),
+
+    #[error("Kernel module error: {0}")]
+    KernelModuleError(String),
+
+    // ── Live Environment ───────────────────────────────────────────────
+    #[error("Live environment required: {0}")]
+    LiveEnvironmentRequired(String),
 }
 
 pub type Result<T> = std::result::Result<T, DriveWipeError>;

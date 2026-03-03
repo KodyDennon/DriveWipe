@@ -1,3 +1,4 @@
+use serde::{Deserialize, Serialize};
 use std::time::Instant;
 
 use chrono::Utc;
@@ -92,16 +93,29 @@ pub fn clone_block(
     };
 
     // Verification pass
-    let (verified, verification_passed, source_hash, target_hash) = if config.verify {
-        verify_clone(source, target, copy_bytes, block_size, session_id, progress_tx, cancel_token)?
+    let v_res = if config.verify {
+        verify_clone(
+            source,
+            target,
+            copy_bytes,
+            block_size,
+            session_id,
+            progress_tx,
+            cancel_token,
+        )?
     } else {
-        (false, None, None, None)
+        VerificationResult {
+            verified: false,
+            passed: None,
+            source_hash: None,
+            target_hash: None,
+        }
     };
 
     let _ = progress_tx.send(ProgressEvent::CloneCompleted {
         session_id,
         duration_secs: duration,
-        verified,
+        verified: v_res.verified,
     });
 
     Ok(CloneResult {
@@ -112,13 +126,22 @@ pub fn clone_block(
         bytes_copied,
         duration_secs: duration,
         throughput_mbps,
-        verified,
-        verification_passed,
-        source_hash,
-        target_hash,
+        verified: v_res.verified,
+        verification_passed: v_res.passed,
+        source_hash: v_res.source_hash,
+        target_hash: v_res.target_hash,
         started_at,
         completed_at: Utc::now(),
     })
+}
+
+/// Result of a clone verification pass.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VerificationResult {
+    pub verified: bool,
+    pub passed: Option<bool>,
+    pub source_hash: Option<String>,
+    pub target_hash: Option<String>,
 }
 
 fn verify_clone(
@@ -129,7 +152,7 @@ fn verify_clone(
     session_id: Uuid,
     progress_tx: &Sender<ProgressEvent>,
     cancel_token: &CancellationToken,
-) -> Result<(bool, Option<bool>, Option<String>, Option<String>)> {
+) -> Result<VerificationResult> {
     use blake3::Hasher;
 
     let _ = progress_tx.send(ProgressEvent::VerificationStarted { session_id });
@@ -173,5 +196,10 @@ fn verify_clone(
         duration_secs: 0.0,
     });
 
-    Ok((true, Some(passed), Some(source_hash), Some(target_hash)))
+    Ok(VerificationResult {
+        verified: true,
+        passed: Some(passed),
+        source_hash: Some(source_hash),
+        target_hash: Some(target_hash),
+    })
 }

@@ -1,8 +1,8 @@
 use iced::widget::{button, column, container, scrollable, text};
 use iced::{Element, Length};
 
-use crate::theme;
 use crate::Message;
+use crate::theme;
 
 /// View for the drive health screen.
 pub fn view<'a>(
@@ -42,8 +42,7 @@ pub fn view<'a>(
         );
     }
 
-    let back_btn = button(text("Back").size(theme::FONT_SIZE_MD))
-        .on_press(Message::NavigateToMenu);
+    let back_btn = button(text("Back").size(theme::FONT_SIZE_MD)).on_press(Message::NavigateToMenu);
 
     let content = column![
         title,

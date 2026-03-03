@@ -51,7 +51,14 @@ impl SleepGuard {
         use std::process::Command;
 
         let result = Command::new("systemd-inhibit")
-            .args(["--what=sleep", "--who=DriveWipe", &format!("--why={reason}"), "--mode=block", "sleep", "infinity"])
+            .args([
+                "--what=sleep",
+                "--who=DriveWipe",
+                &format!("--why={reason}"),
+                "--mode=block",
+                "sleep",
+                "infinity",
+            ])
             .spawn();
 
         match result {

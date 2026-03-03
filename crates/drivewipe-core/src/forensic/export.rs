@@ -12,8 +12,14 @@ pub fn export_dfxml(results: &ForensicResult) -> Result<String> {
     xml.push_str("  </creator>\n");
 
     xml.push_str("  <source>\n");
-    xml.push_str(&format!("    <image_filename>{}</image_filename>\n", results.device_path));
-    xml.push_str(&format!("    <serial_number>{}</serial_number>\n", results.device_serial));
+    xml.push_str(&format!(
+        "    <image_filename>{}</image_filename>\n",
+        results.device_path
+    ));
+    xml.push_str(&format!(
+        "    <serial_number>{}</serial_number>\n",
+        results.device_serial
+    ));
     xml.push_str("  </source>\n");
 
     // File objects from signature hits

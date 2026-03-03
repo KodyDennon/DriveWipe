@@ -1,8 +1,8 @@
 use iced::widget::{button, column, container, text, text_input};
 use iced::{Element, Length};
 
-use crate::theme;
 use crate::Message;
+use crate::theme;
 
 /// View for the confirmation screen.
 pub fn view<'a>(
@@ -41,8 +41,8 @@ pub fn view<'a>(
         confirm_btn = confirm_btn.on_press(Message::StartWipe);
     }
 
-    let cancel_btn = button(text("Cancel").size(theme::FONT_SIZE_MD))
-        .on_press(Message::NavigateBack);
+    let cancel_btn =
+        button(text("Cancel").size(theme::FONT_SIZE_MD)).on_press(Message::NavigateBack);
 
     let content = column![
         title,

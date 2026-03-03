@@ -79,8 +79,8 @@ pub fn elevation_hint() -> String {
 pub fn enable_raw_disk_privileges() -> Result<()> {
     use windows::Win32::Foundation::{CloseHandle, HANDLE, LUID};
     use windows::Win32::Security::{
-        AdjustTokenPrivileges, LookupPrivilegeValueW, LUID_AND_ATTRIBUTES,
-        SE_PRIVILEGE_ENABLED, TOKEN_ADJUST_PRIVILEGES, TOKEN_PRIVILEGES, TOKEN_QUERY,
+        AdjustTokenPrivileges, LUID_AND_ATTRIBUTES, LookupPrivilegeValueW, SE_PRIVILEGE_ENABLED,
+        TOKEN_ADJUST_PRIVILEGES, TOKEN_PRIVILEGES, TOKEN_QUERY,
     };
     use windows::Win32::System::Threading::{GetCurrentProcess, OpenProcessToken};
     use windows::core::PCWSTR;
@@ -118,8 +118,7 @@ pub fn enable_raw_disk_privileges() -> Result<()> {
             .chain(std::iter::once(0))
             .collect();
         let mut restore_luid = LUID::default();
-        if LookupPrivilegeValueW(None, PCWSTR(restore_name.as_ptr()), &mut restore_luid).is_err()
-        {
+        if LookupPrivilegeValueW(None, PCWSTR(restore_name.as_ptr()), &mut restore_luid).is_err() {
             let _ = CloseHandle(token);
             return Err(DriveWipeError::InsufficientPrivileges {
                 message: "Failed to lookup SeRestorePrivilege".to_string(),
@@ -132,7 +131,8 @@ pub fn enable_raw_disk_privileges() -> Result<()> {
             .chain(std::iter::once(0))
             .collect();
         let mut manage_vol_luid = LUID::default();
-        if LookupPrivilegeValueW(None, PCWSTR(manage_vol_name.as_ptr()), &mut manage_vol_luid).is_err()
+        if LookupPrivilegeValueW(None, PCWSTR(manage_vol_name.as_ptr()), &mut manage_vol_luid)
+            .is_err()
         {
             let _ = CloseHandle(token);
             return Err(DriveWipeError::InsufficientPrivileges {
@@ -149,20 +149,12 @@ pub fn enable_raw_disk_privileges() -> Result<()> {
             }],
         };
 
-        if AdjustTokenPrivileges(
-            token,
-            false,
-            Some(&mut tp_backup),
-            0,
-            None,
-            None,
-        )
-        .is_err()
-        {
+        if AdjustTokenPrivileges(token, false, Some(&mut tp_backup), 0, None, None).is_err() {
             let _ = CloseHandle(token);
             return Err(DriveWipeError::InsufficientPrivileges {
-                message: "Failed to enable SeBackupPrivilege. Ensure you are running as Administrator."
-                    .to_string(),
+                message:
+                    "Failed to enable SeBackupPrivilege. Ensure you are running as Administrator."
+                        .to_string(),
             });
         }
 
@@ -175,20 +167,12 @@ pub fn enable_raw_disk_privileges() -> Result<()> {
             }],
         };
 
-        if AdjustTokenPrivileges(
-            token,
-            false,
-            Some(&mut tp_restore),
-            0,
-            None,
-            None,
-        )
-        .is_err()
-        {
+        if AdjustTokenPrivileges(token, false, Some(&mut tp_restore), 0, None, None).is_err() {
             let _ = CloseHandle(token);
             return Err(DriveWipeError::InsufficientPrivileges {
-                message: "Failed to enable SeRestorePrivilege. Ensure you are running as Administrator."
-                    .to_string(),
+                message:
+                    "Failed to enable SeRestorePrivilege. Ensure you are running as Administrator."
+                        .to_string(),
             });
         }
 
@@ -201,16 +185,7 @@ pub fn enable_raw_disk_privileges() -> Result<()> {
             }],
         };
 
-        if AdjustTokenPrivileges(
-            token,
-            false,
-            Some(&mut tp_manage_vol),
-            0,
-            None,
-            None,
-        )
-        .is_err()
-        {
+        if AdjustTokenPrivileges(token, false, Some(&mut tp_manage_vol), 0, None, None).is_err() {
             let _ = CloseHandle(token);
             return Err(DriveWipeError::InsufficientPrivileges {
                 message: "Failed to enable SeManageVolumePrivilege. Ensure you are running as Administrator."
@@ -220,7 +195,9 @@ pub fn enable_raw_disk_privileges() -> Result<()> {
 
         let _ = CloseHandle(token);
 
-        log::info!("Successfully enabled SeBackupPrivilege, SeRestorePrivilege, and SeManageVolumePrivilege");
+        log::info!(
+            "Successfully enabled SeBackupPrivilege, SeRestorePrivilege, and SeManageVolumePrivilege"
+        );
         Ok(())
     }
 }

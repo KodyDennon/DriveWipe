@@ -1,8 +1,8 @@
 use iced::widget::{button, column, container, scrollable, text};
 use iced::{Element, Length};
 
-use crate::theme;
 use crate::Message;
+use crate::theme;
 
 /// View for the forensic analysis screen.
 pub fn view<'a>(
@@ -22,9 +22,13 @@ pub fn view<'a>(
             drive.capacity_display(),
         );
         drive_buttons = drive_buttons.push(
-            button(text(label).size(theme::FONT_SIZE_MD).color(theme::TEXT_PRIMARY))
-                .on_press(Message::RunForensicScan(i))
-                .width(Length::Fill),
+            button(
+                text(label)
+                    .size(theme::FONT_SIZE_MD)
+                    .color(theme::TEXT_PRIMARY),
+            )
+            .on_press(Message::RunForensicScan(i))
+            .width(Length::Fill),
         );
     }
 
@@ -45,8 +49,7 @@ pub fn view<'a>(
         }
     }
 
-    let back_btn = button(text("Back").size(theme::FONT_SIZE_MD))
-        .on_press(Message::NavigateToMenu);
+    let back_btn = button(text("Back").size(theme::FONT_SIZE_MD)).on_press(Message::NavigateToMenu);
 
     let content = column![
         title,

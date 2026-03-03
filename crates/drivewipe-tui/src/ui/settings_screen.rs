@@ -60,7 +60,7 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(3),  // Title
+            Constraint::Length(3), // Title
             Constraint::Min(12),   // Settings list
             Constraint::Length(5), // Detail panel
             Constraint::Length(1), // Status bar
@@ -68,9 +68,10 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
         .split(area);
 
     // Title
-    let title = Paragraph::new(Line::from(vec![
-        Span::styled(" Settings ", Style::default().fg(Color::Cyan).bold()),
-    ]))
+    let title = Paragraph::new(Line::from(vec![Span::styled(
+        " Settings ",
+        Style::default().fg(Color::Cyan).bold(),
+    )]))
     .block(
         Block::default()
             .borders(Borders::ALL)

@@ -165,30 +165,31 @@ impl RawDeviceIo for MacosDeviceIo {
 /// device that has mounted partitions.
 fn unmount_disk(path: &Path) -> Result<()> {
     // Extract the disk identifier: /dev/rdisk12 → disk12, /dev/disk12 → disk12
-    let name = path
-        .file_name()
-        .and_then(|n| n.to_str())
-        .ok_or_else(|| {
-            DriveWipeError::DeviceError(format!("Invalid device path: {}", path.display()))
-        })?;
+    let name = path.file_name().and_then(|n| n.to_str()).ok_or_else(|| {
+        DriveWipeError::DeviceError(format!("Invalid device path: {}", path.display()))
+    })?;
 
     let disk_id = name.strip_prefix('r').unwrap_or(name);
 
-    log::info!("Unmounting all volumes on {} before opening for raw I/O", disk_id);
+    log::info!(
+        "Unmounting all volumes on {} before opening for raw I/O",
+        disk_id
+    );
 
     let output = Command::new("diskutil")
         .args(["unmountDisk", disk_id])
         .output()
-        .map_err(|e| DriveWipeError::DeviceError(format!(
-            "Failed to run diskutil unmountDisk {}: {}", disk_id, e
-        )))?;
+        .map_err(|e| {
+            DriveWipeError::DeviceError(format!(
+                "Failed to run diskutil unmountDisk {}: {}",
+                disk_id, e
+            ))
+        })?;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         // Don't fail if the disk has no mounted volumes — that's fine.
-        if !stderr.contains("was already not mounted")
-            && !stderr.contains("not find disk")
-        {
+        if !stderr.contains("was already not mounted") && !stderr.contains("not find disk") {
             log::warn!("diskutil unmountDisk {} failed: {}", disk_id, stderr.trim());
         }
     } else {

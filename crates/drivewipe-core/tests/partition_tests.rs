@@ -1,8 +1,8 @@
 mod common;
 
+use drivewipe_core::partition::PartitionTable;
 use drivewipe_core::partition::gpt::GptTable;
 use drivewipe_core::partition::mbr::MbrTable;
-use drivewipe_core::partition::PartitionTable;
 use drivewipe_core::partition::ops;
 
 use common::MockDevice;
@@ -19,9 +19,7 @@ fn test_gpt_create_partition() {
         partitions: vec![],
     });
 
-    let result = ops::create_partition(
-        &mut device, &mut table, 100, 500, "EFI-TYPE", "TestPart",
-    );
+    let result = ops::create_partition(&mut device, &mut table, 100, 500, "EFI-TYPE", "TestPart");
     assert!(result.is_ok());
 
     let part = result.unwrap();
@@ -125,7 +123,15 @@ fn test_mbr_create_max_4_partitions() {
     for i in 0..4 {
         let start = 100 + i * 200;
         let end = start + 100;
-        ops::create_partition(&mut device, &mut table, start, end, "0x83", &format!("P{}", i + 1)).unwrap();
+        ops::create_partition(
+            &mut device,
+            &mut table,
+            start,
+            end,
+            "0x83",
+            &format!("P{}", i + 1),
+        )
+        .unwrap();
     }
 
     // 5th should fail
@@ -135,11 +141,7 @@ fn test_mbr_create_max_4_partitions() {
 
 #[test]
 fn test_preview_operation() {
-    let preview = ops::preview_operation(
-        "Delete partition 2",
-        &[2],
-        true,
-    );
+    let preview = ops::preview_operation("Delete partition 2", &[2], true);
     assert_eq!(preview.description, "Delete partition 2");
     assert!(preview.data_loss_risk);
     assert_eq!(preview.affected_partitions, vec![2]);

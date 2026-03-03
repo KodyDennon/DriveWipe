@@ -42,6 +42,14 @@ pub enum AppScreen {
     PartitionManager,
     ForensicAnalysis,
     Settings,
+    #[cfg(feature = "live")]
+    LiveDashboard,
+    #[cfg(feature = "live")]
+    HpaDcoManager,
+    #[cfg(feature = "live")]
+    AtaSecurityManager,
+    #[cfg(feature = "live")]
+    KernelModuleStatus,
 }
 
 // ── Per-session wipe progress ───────────────────────────────────────────────
@@ -212,6 +220,20 @@ pub struct App {
     pub clone_throughput: String,
     /// Partition display lines.
     pub partition_lines: Vec<String>,
+
+    // ── Live mode state ─────────────────────────────────────────────────
+    /// Whether live mode is active.
+    #[cfg(feature = "live")]
+    pub live_mode: bool,
+    /// Live mode status lines for the dashboard.
+    #[cfg(feature = "live")]
+    pub live_status_lines: Vec<String>,
+    /// Live mode selected drive index (for HPA/DCO/ATA security screens).
+    #[cfg(feature = "live")]
+    pub live_drive_index: usize,
+    /// Live mode action confirmation state.
+    #[cfg(feature = "live")]
+    pub live_confirm_action: Option<String>,
 }
 
 impl App {
@@ -269,7 +291,32 @@ impl App {
             clone_progress_fraction: 0.0,
             clone_throughput: String::new(),
             partition_lines: Vec::new(),
+            #[cfg(feature = "live")]
+            live_mode: false,
+            #[cfg(feature = "live")]
+            live_status_lines: Vec::new(),
+            #[cfg(feature = "live")]
+            live_drive_index: 0,
+            #[cfg(feature = "live")]
+            live_confirm_action: None,
         };
+
+        // Detect live environment if compiled with live feature.
+        #[cfg(feature = "live")]
+        {
+            let detection = drivewipe_live::detect::detect_live_environment();
+            app.live_mode = detection.is_live;
+            if app.live_mode {
+                app.live_status_lines.push("DRIVEWIPE LIVE".to_string());
+                if detection.kernel_module_present {
+                    app.live_status_lines
+                        .push("Kernel module: loaded".to_string());
+                }
+                if detection.pxe_booted {
+                    app.live_status_lines.push("Boot: PXE network".to_string());
+                }
+            }
+        }
 
         // Populate the drive list. Errors are logged into the TUI rather
         // than propagated — this lets users see a helpful message on-screen
@@ -282,7 +329,46 @@ impl App {
     pub fn refresh_drives(&mut self) {
         let enumerator = drive::create_enumerator();
         match enumerator.enumerate() {
-            Ok(drives) => {
+            #[allow(unused_mut)]
+            Ok(mut drives) => {
+                // When running in live mode, probe each SATA drive for hidden
+                // areas and ATA security state using drivewipe-live.
+                #[cfg(feature = "live")]
+                if self.live_mode {
+                    for drive in &mut drives {
+                        if drive.transport == drivewipe_core::types::Transport::Sata {
+                            let dev = drive.path.display().to_string();
+
+                            if let Ok(hpa) = drivewipe_live::hpa::detect_hpa(&dev) {
+                                drive.hidden_areas.hpa_enabled = hpa.hpa_present;
+                                if hpa.hpa_present {
+                                    drive.hidden_areas.hpa_size = Some(hpa.hpa_sectors * 512);
+                                    drive.hidden_areas.hpa_native_max_lba =
+                                        Some(hpa.native_max_lba);
+                                    drive.hidden_areas.hpa_current_max_lba =
+                                        Some(hpa.current_max_lba);
+                                }
+                            }
+
+                            if let Ok(dco) = drivewipe_live::dco::detect_dco(&dev) {
+                                drive.hidden_areas.dco_enabled = dco.dco_present;
+                                if dco.dco_present {
+                                    drive.hidden_areas.dco_size = Some(dco.dco_hidden_bytes);
+                                    drive.hidden_areas.dco_factory_max_lba =
+                                        Some(dco.factory_max_lba);
+                                    drive.hidden_areas.dco_features_restricted =
+                                        dco.restricted_features;
+                                }
+                            }
+
+                            if let Ok(sec) = drivewipe_live::ata_security::query_ata_security(&dev)
+                            {
+                                drive.ata_security = sec.to_core_state();
+                            }
+                        }
+                    }
+                }
+
                 let count = drives.len();
                 self.drives = drives;
                 self.selected_drives = vec![false; count];
@@ -452,7 +538,328 @@ impl App {
             AppScreen::PartitionManager => self.handle_partition_key(key),
             AppScreen::ForensicAnalysis => self.handle_forensic_key(key),
             AppScreen::Settings => self.handle_settings_key(key),
+            #[cfg(feature = "live")]
+            AppScreen::LiveDashboard
+            | AppScreen::HpaDcoManager
+            | AppScreen::AtaSecurityManager
+            | AppScreen::KernelModuleStatus => self.handle_live_screen_key(key),
         }
+    }
+
+    #[cfg(feature = "live")]
+    fn handle_live_screen_key(&mut self, key: KeyEvent) {
+        // Handle confirmation flow first — if a destructive action is pending,
+        // 'y' confirms and anything else cancels.
+        if let Some(ref action) = self.live_confirm_action.clone() {
+            match key.code {
+                KeyCode::Char('y') | KeyCode::Char('Y') => {
+                    self.live_confirm_action = None;
+                    self.execute_live_confirmed_action(action);
+                }
+                _ => {
+                    self.log_push("Action cancelled".into());
+                    self.live_confirm_action = None;
+                }
+            }
+            return;
+        }
+
+        match key.code {
+            KeyCode::Char('q') | KeyCode::Esc => {
+                self.screen = AppScreen::MainMenu;
+            }
+            KeyCode::Up | KeyCode::Char('k') => {
+                if self.live_drive_index > 0 {
+                    self.live_drive_index -= 1;
+                }
+            }
+            KeyCode::Down | KeyCode::Char('j') => {
+                if !self.drives.is_empty() && self.live_drive_index < self.drives.len() - 1 {
+                    self.live_drive_index += 1;
+                }
+            }
+
+            // ── HPA/DCO Manager actions ────────────────────────────────
+            KeyCode::Char('d') if self.screen == AppScreen::HpaDcoManager => {
+                self.live_detect_hidden_areas();
+            }
+            KeyCode::Char('r') if self.screen == AppScreen::HpaDcoManager => {
+                self.live_confirm_action = Some("Remove HPA".to_string());
+                self.log_push("Press 'y' to confirm HPA removal, any other key to cancel".into());
+            }
+            KeyCode::Char('R') if self.screen == AppScreen::HpaDcoManager => {
+                self.live_confirm_action = Some("Restore DCO".to_string());
+                self.log_push("Press 'y' to confirm DCO restore, any other key to cancel".into());
+            }
+            KeyCode::Char('F') if self.screen == AppScreen::HpaDcoManager => {
+                self.live_freeze_dco();
+            }
+
+            // ── ATA Security Manager actions ───────────────────────────
+            KeyCode::Char('u') if self.screen == AppScreen::AtaSecurityManager => {
+                self.live_unfreeze_drives();
+            }
+
+            // ── Dashboard quick-nav ────────────────────────────────────
+            KeyCode::Char('1') if self.screen == AppScreen::LiveDashboard => {
+                self.refresh_drives();
+                self.live_drive_index = 0;
+                self.screen = AppScreen::HpaDcoManager;
+            }
+            KeyCode::Char('2') if self.screen == AppScreen::LiveDashboard => {
+                self.refresh_drives();
+                self.live_drive_index = 0;
+                self.screen = AppScreen::AtaSecurityManager;
+            }
+            KeyCode::Char('3') if self.screen == AppScreen::LiveDashboard => {
+                self.screen = AppScreen::KernelModuleStatus;
+            }
+
+            // ── Kernel Module Status refresh ───────────────────────────
+            KeyCode::Char('r') if self.screen == AppScreen::KernelModuleStatus => {
+                self.live_refresh_capabilities();
+            }
+
+            _ => {}
+        }
+    }
+
+    /// Detect HPA and DCO on the currently selected drive and update the
+    /// drive's `hidden_areas` field with the results.
+    #[cfg(feature = "live")]
+    fn live_detect_hidden_areas(&mut self) {
+        if self.drives.is_empty() {
+            self.log_push("No drives available".into());
+            return;
+        }
+        let idx = self.live_drive_index.min(self.drives.len() - 1);
+        let device_path = self.drives[idx].path.display().to_string();
+
+        self.log_push(format!("Detecting hidden areas on {}...", device_path));
+
+        // HPA detection
+        match drivewipe_live::hpa::detect_hpa(&device_path) {
+            Ok(hpa) => {
+                self.drives[idx].hidden_areas.hpa_enabled = hpa.hpa_present;
+                if hpa.hpa_present {
+                    self.drives[idx].hidden_areas.hpa_size = Some(hpa.hpa_sectors * 512);
+                    self.drives[idx].hidden_areas.hpa_native_max_lba = Some(hpa.native_max_lba);
+                    self.drives[idx].hidden_areas.hpa_current_max_lba = Some(hpa.current_max_lba);
+                    self.log_push(format!(
+                        "  HPA detected: {} sectors hidden ({} bytes)",
+                        hpa.hpa_sectors,
+                        drivewipe_core::types::format_bytes(hpa.hpa_sectors * 512)
+                    ));
+                } else {
+                    self.drives[idx].hidden_areas.hpa_size = None;
+                    self.log_push("  HPA: none detected".into());
+                }
+            }
+            Err(e) => {
+                self.log_push(format!("  HPA detection failed: {e}"));
+            }
+        }
+
+        // DCO detection
+        match drivewipe_live::dco::detect_dco(&device_path) {
+            Ok(dco) => {
+                self.drives[idx].hidden_areas.dco_enabled = dco.dco_present;
+                if dco.dco_present {
+                    self.drives[idx].hidden_areas.dco_size = Some(dco.dco_hidden_bytes);
+                    self.drives[idx].hidden_areas.dco_factory_max_lba = Some(dco.factory_max_lba);
+                    self.drives[idx].hidden_areas.dco_features_restricted =
+                        dco.restricted_features.clone();
+                    self.log_push(format!(
+                        "  DCO detected: {} sectors hidden ({})",
+                        dco.dco_hidden_sectors,
+                        drivewipe_core::types::format_bytes(dco.dco_hidden_bytes)
+                    ));
+                    if !dco.restricted_features.is_empty() {
+                        self.log_push(format!(
+                            "  DCO restrictions: {}",
+                            dco.restricted_features.join(", ")
+                        ));
+                    }
+                } else {
+                    self.drives[idx].hidden_areas.dco_size = None;
+                    self.log_push("  DCO: none detected".into());
+                }
+            }
+            Err(e) => {
+                self.log_push(format!("  DCO detection failed: {e}"));
+            }
+        }
+
+        // ATA security state
+        match drivewipe_live::ata_security::query_ata_security(&device_path) {
+            Ok(info) => {
+                self.drives[idx].ata_security = info.to_core_state();
+                self.log_push(format!("  ATA Security: {}", info.summary));
+            }
+            Err(e) => {
+                self.log_push(format!("  ATA security query failed: {e}"));
+            }
+        }
+    }
+
+    /// Execute a confirmed destructive live action.
+    #[cfg(feature = "live")]
+    fn execute_live_confirmed_action(&mut self, action: &str) {
+        if self.drives.is_empty() {
+            self.log_push("No drives available".into());
+            return;
+        }
+        let idx = self.live_drive_index.min(self.drives.len() - 1);
+        let device_path = self.drives[idx].path.display().to_string();
+
+        match action {
+            "Remove HPA" => {
+                self.log_push(format!("Removing HPA on {}...", device_path));
+                match drivewipe_live::hpa::remove_hpa(&device_path) {
+                    Ok(result) => {
+                        self.drives[idx].hidden_areas.hpa_enabled = result.hpa_present;
+                        self.drives[idx].hidden_areas.hpa_size = if result.hpa_present {
+                            Some(result.hpa_sectors * 512)
+                        } else {
+                            None
+                        };
+                        if result.hpa_present {
+                            self.log_push(format!(
+                                "WARNING: HPA still present after removal ({} sectors remaining)",
+                                result.hpa_sectors
+                            ));
+                        } else {
+                            self.log_push(
+                                "HPA removed successfully — full capacity restored".into(),
+                            );
+                        }
+                    }
+                    Err(e) => {
+                        self.log_push(format!("HPA removal failed: {e}"));
+                    }
+                }
+            }
+            "Restore DCO" => {
+                self.log_push(format!("Restoring DCO on {}...", device_path));
+                match drivewipe_live::dco::restore_dco(&device_path) {
+                    Ok(_) => {
+                        self.drives[idx].hidden_areas.dco_enabled = false;
+                        self.drives[idx].hidden_areas.dco_size = None;
+                        self.drives[idx]
+                            .hidden_areas
+                            .dco_features_restricted
+                            .clear();
+                        self.log_push(
+                            "DCO restored to factory settings — power cycle recommended".into(),
+                        );
+                    }
+                    Err(e) => {
+                        self.log_push(format!("DCO restore failed: {e}"));
+                    }
+                }
+            }
+            _ => {
+                self.log_push(format!("Unknown action: {action}"));
+            }
+        }
+    }
+
+    /// Freeze DCO on the currently selected drive.
+    #[cfg(feature = "live")]
+    fn live_freeze_dco(&mut self) {
+        if self.drives.is_empty() {
+            self.log_push("No drives available".into());
+            return;
+        }
+        let idx = self.live_drive_index.min(self.drives.len() - 1);
+        let device_path = self.drives[idx].path.display().to_string();
+
+        self.log_push(format!("Freezing DCO on {}...", device_path));
+        match drivewipe_live::dco::freeze_dco(&device_path) {
+            Ok(()) => {
+                self.log_push("DCO frozen — no further DCO changes until power cycle".into());
+            }
+            Err(e) => {
+                self.log_push(format!("DCO freeze failed: {e}"));
+            }
+        }
+    }
+
+    /// Unfreeze all SATA drives via suspend/resume cycle.
+    #[cfg(feature = "live")]
+    fn live_unfreeze_drives(&mut self) {
+        self.log_push("Checking for frozen drives...".into());
+
+        if !drivewipe_live::unfreeze::any_drives_frozen() {
+            self.log_push("No frozen drives detected — no action needed".into());
+            return;
+        }
+
+        self.log_push("Frozen drives detected. Initiating suspend/resume cycle...".into());
+        self.log_push("WARNING: System will briefly suspend to RAM".into());
+
+        match drivewipe_live::unfreeze::unfreeze_drives() {
+            Ok(()) => {
+                self.log_push("All drives unfrozen successfully".into());
+                // Re-query ATA security state for all SATA drives
+                for drive in &mut self.drives {
+                    if drive.transport == drivewipe_core::types::Transport::Sata {
+                        let path = drive.path.display().to_string();
+                        if let Ok(info) = drivewipe_live::ata_security::query_ata_security(&path) {
+                            drive.ata_security = info.to_core_state();
+                        }
+                    }
+                }
+            }
+            Err(e) => {
+                self.log_push(format!("Unfreeze failed: {e}"));
+                self.log_push(
+                    "Some drives may still be frozen. Try manual unfreeze or power cycle.".into(),
+                );
+            }
+        }
+    }
+
+    /// Refresh live capabilities (kernel module status, system info).
+    #[cfg(feature = "live")]
+    fn live_refresh_capabilities(&mut self) {
+        self.log_push("Refreshing kernel module status...".into());
+        let caps = drivewipe_live::capabilities::LiveCapabilities::probe();
+
+        self.live_status_lines.clear();
+        self.live_status_lines.push("DRIVEWIPE LIVE".to_string());
+
+        if caps.kernel_module.loaded {
+            let ver = caps.kernel_module.version.as_deref().unwrap_or("unknown");
+            self.live_status_lines
+                .push(format!("Kernel module: loaded (v{})", ver));
+            self.log_push(format!(
+                "Module v{} — capabilities: {:#06x}",
+                ver, caps.kernel_module.raw_capabilities
+            ));
+        } else {
+            self.live_status_lines
+                .push("Kernel module: not loaded".to_string());
+            self.log_push("Kernel module not loaded — using userspace fallback".into());
+        }
+
+        if caps.system.pxe_booted {
+            self.live_status_lines.push("Boot: PXE network".to_string());
+        }
+
+        self.live_status_lines.push(format!(
+            "System: {} cores, {} RAM, kernel {}",
+            caps.system.cpu_cores,
+            drivewipe_core::types::format_bytes(caps.system.total_ram),
+            caps.system.kernel_version
+        ));
+
+        self.live_status_lines.push(format!(
+            "Hardware: {} SATA, {} NVMe, {} USB drives",
+            caps.hardware.sata_drives, caps.hardware.nvme_drives, caps.hardware.usb_drives
+        ));
+
+        self.log_push("Capabilities refreshed".into());
     }
 
     // ── Drive selection keys ────────────────────────────────────────────
@@ -743,7 +1150,7 @@ impl App {
     // ── Main menu keys ─────────────────────────────────────────────────
 
     fn handle_main_menu_key(&mut self, key: KeyEvent) {
-        const MENU_ITEMS: usize = 7;
+        let menu_items = self.main_menu_item_count();
         match key.code {
             KeyCode::Char('q') | KeyCode::Esc => {
                 self.should_quit = true;
@@ -754,54 +1161,11 @@ impl App {
                 }
             }
             KeyCode::Down | KeyCode::Char('j') => {
-                if self.main_menu_index < MENU_ITEMS - 1 {
+                if self.main_menu_index < menu_items - 1 {
                     self.main_menu_index += 1;
                 }
             }
-            KeyCode::Enter => {
-                match self.main_menu_index {
-                    0 => {
-                        // Secure Wipe
-                        self.refresh_drives();
-                        self.screen = AppScreen::DriveSelection;
-                    }
-                    1 => {
-                        // Drive Health
-                        self.refresh_drives();
-                        self.screen = AppScreen::DriveHealth;
-                    }
-                    2 => {
-                        // Drive Clone
-                        self.refresh_drives();
-                        self.clone_source_index = None;
-                        self.clone_target_index = None;
-                        self.clone_mode = "block".to_string();
-                        self.screen = AppScreen::CloneSetup;
-                    }
-                    3 => {
-                        // Partition Manager
-                        self.refresh_drives();
-                        self.screen = AppScreen::PartitionManager;
-                    }
-                    4 => {
-                        // Forensic Analysis
-                        self.refresh_drives();
-                        self.forensic_result_lines.clear();
-                        self.forensic_progress_pct = 0.0;
-                        self.screen = AppScreen::ForensicAnalysis;
-                    }
-                    5 => {
-                        // Settings
-                        self.settings_index = 0;
-                        self.screen = AppScreen::Settings;
-                    }
-                    6 => {
-                        // Quit
-                        self.should_quit = true;
-                    }
-                    _ => {}
-                }
-            }
+            KeyCode::Enter => self.activate_main_menu_item(),
             // Quick access keys
             KeyCode::Char('w') | KeyCode::Char('1') => {
                 self.refresh_drives();
@@ -831,6 +1195,83 @@ impl App {
                 self.screen = AppScreen::Settings;
             }
             _ => {}
+        }
+    }
+
+    /// Number of items in the main menu (varies if live mode is active).
+    pub fn main_menu_item_count(&self) -> usize {
+        #[cfg(feature = "live")]
+        if self.live_mode {
+            return 11; // 7 base + 4 live items
+        }
+        7
+    }
+
+    /// Activate the currently selected main menu item.
+    fn activate_main_menu_item(&mut self) {
+        match self.main_menu_index {
+            0 => {
+                self.refresh_drives();
+                self.screen = AppScreen::DriveSelection;
+            }
+            1 => {
+                self.refresh_drives();
+                self.screen = AppScreen::DriveHealth;
+            }
+            2 => {
+                self.refresh_drives();
+                self.clone_source_index = None;
+                self.clone_target_index = None;
+                self.clone_mode = "block".to_string();
+                self.screen = AppScreen::CloneSetup;
+            }
+            3 => {
+                self.refresh_drives();
+                self.screen = AppScreen::PartitionManager;
+            }
+            4 => {
+                self.refresh_drives();
+                self.forensic_result_lines.clear();
+                self.forensic_progress_pct = 0.0;
+                self.screen = AppScreen::ForensicAnalysis;
+            }
+            5 => {
+                self.settings_index = 0;
+                self.screen = AppScreen::Settings;
+            }
+            6 => {
+                #[cfg(feature = "live")]
+                if self.live_mode {
+                    // In live mode, index 6 = Live Dashboard
+                    self.screen = AppScreen::LiveDashboard;
+                    return;
+                }
+                self.should_quit = true;
+            }
+            #[cfg(feature = "live")]
+            7 => {
+                self.refresh_drives();
+                self.live_drive_index = 0;
+                self.screen = AppScreen::HpaDcoManager;
+            }
+            #[cfg(feature = "live")]
+            8 => {
+                self.refresh_drives();
+                self.live_drive_index = 0;
+                self.screen = AppScreen::AtaSecurityManager;
+            }
+            #[cfg(feature = "live")]
+            9 => {
+                self.screen = AppScreen::KernelModuleStatus;
+            }
+            #[cfg(feature = "live")]
+            10 => {
+                self.should_quit = true;
+            }
+            _ => {
+                // Non-live mode index 6+ or unknown
+                self.should_quit = true;
+            }
         }
     }
 
@@ -880,7 +1321,14 @@ impl App {
         }
         let drive = &self.drives[drive_idx];
         lines.push(format!("Drive: {} ({})", drive.model, drive.path.display()));
-        lines.push(format!("Serial: {}", if drive.serial.is_empty() { "N/A" } else { &drive.serial }));
+        lines.push(format!(
+            "Serial: {}",
+            if drive.serial.is_empty() {
+                "N/A"
+            } else {
+                &drive.serial
+            }
+        ));
         lines.push(format!("Type: {} / {}", drive.drive_type, drive.transport));
         lines.push(format!("Capacity: {}", drive.capacity_display()));
         lines.push(String::new());
@@ -890,14 +1338,31 @@ impl App {
             None => lines.push("SMART Status: Not available".to_string()),
         }
         lines.push(format!("Block size: {} bytes", drive.block_size));
-        lines.push(format!("Supports TRIM: {}", if drive.supports_trim { "Yes" } else { "No" }));
-        lines.push(format!("Self-encrypting: {}", if drive.is_sed { "Yes" } else { "No" }));
+        lines.push(format!(
+            "Supports TRIM: {}",
+            if drive.supports_trim { "Yes" } else { "No" }
+        ));
+        lines.push(format!(
+            "Self-encrypting: {}",
+            if drive.is_sed { "Yes" } else { "No" }
+        ));
         if let Some(ref pt) = drive.partition_table {
-            lines.push(format!("Partition table: {} ({} partitions)", pt, drive.partition_count));
+            lines.push(format!(
+                "Partition table: {} ({} partitions)",
+                pt, drive.partition_count
+            ));
         }
         if drive.hidden_areas.hpa_enabled || drive.hidden_areas.dco_enabled {
-            let hpa = drive.hidden_areas.hpa_size.map(|s| format_bytes(s)).unwrap_or_default();
-            let dco = drive.hidden_areas.dco_size.map(|s| format_bytes(s)).unwrap_or_default();
+            let hpa = drive
+                .hidden_areas
+                .hpa_size
+                .map(format_bytes)
+                .unwrap_or_default();
+            let dco = drive
+                .hidden_areas
+                .dco_size
+                .map(format_bytes)
+                .unwrap_or_default();
             lines.push(format!("Hidden areas: HPA={}, DCO={}", hpa, dco));
         }
         lines
@@ -1066,7 +1531,9 @@ impl App {
                 match self.settings_index {
                     0 => self.config.auto_report_json = !self.config.auto_report_json,
                     1 => self.config.notifications_enabled = !self.config.notifications_enabled,
-                    2 => self.config.sleep_prevention_enabled = !self.config.sleep_prevention_enabled,
+                    2 => {
+                        self.config.sleep_prevention_enabled = !self.config.sleep_prevention_enabled
+                    }
                     3 => self.config.auto_health_pre_wipe = !self.config.auto_health_pre_wipe,
                     _ => {}
                 }
@@ -1146,7 +1613,8 @@ impl App {
                     // Calculate IOPS (operations per second)
                     let now = Instant::now();
                     let elapsed = now.duration_since(p.last_update).as_secs_f64();
-                    if elapsed >= 0.1 { // Update IOPS every 100ms
+                    if elapsed >= 0.1 {
+                        // Update IOPS every 100ms
                         p.iops = 1.0 / elapsed.max(0.001);
                         p.last_update = now;
                     }
@@ -1320,7 +1788,8 @@ impl App {
                 ..
             } => {
                 if total_bytes > 0 {
-                    self.forensic_progress_pct = (bytes_scanned as f64 / total_bytes as f64 * 100.0) as f32;
+                    self.forensic_progress_pct =
+                        (bytes_scanned as f64 / total_bytes as f64 * 100.0) as f32;
                 }
             }
             ProgressEvent::ForensicScanCompleted { duration_secs, .. } => {
@@ -1416,14 +1885,8 @@ impl App {
             // Log debug file locations
             let io_debug_log = std::env::temp_dir().join("drivewipe_debug.log");
             let thread_debug_log = std::env::temp_dir().join("drivewipe_thread_debug.log");
-            self.log_push(format!(
-                "I/O log: {}",
-                io_debug_log.display()
-            ));
-            self.log_push(format!(
-                "Thread log: {}",
-                thread_debug_log.display()
-            ));
+            self.log_push(format!("I/O log: {}", io_debug_log.display()));
+            self.log_push(format!("Thread log: {}", thread_debug_log.display()));
 
             std::thread::spawn(move || {
                 let debug_log = std::env::temp_dir().join("drivewipe_thread_debug.log");
@@ -1520,9 +1983,10 @@ impl App {
                         d
                     }
                     Err(e) => {
-                        let err_msg = format!("Failed to open {}: {}", drive_info.path.display(), e);
+                        let err_msg =
+                            format!("Failed to open {}: {}", drive_info.path.display(), e);
                         write_debug(&format!("Device open FAILED: {}", err_msg));
-                        eprintln!("DEVICE OPEN ERROR: {}", err_msg);  // Also print to stderr for debugging
+                        eprintln!("DEVICE OPEN ERROR: {}", err_msg); // Also print to stderr for debugging
                         let _ = progress_tx.send(ProgressEvent::Error {
                             session_id: session.session_id,
                             message: err_msg,
@@ -1542,7 +2006,10 @@ impl App {
                 write_debug("Calling session.execute()...");
                 match session.execute(&mut device, &progress_tx, &cancel_token, None) {
                     Ok(result) => {
-                        write_debug(&format!("session.execute() returned OK, outcome: {}", result.outcome));
+                        write_debug(&format!(
+                            "session.execute() returned OK, outcome: {}",
+                            result.outcome
+                        ));
                         // Completion event already sent by the session.
                         // Auto-generate JSON report in the thread while we
                         // have access to the WipeResult.
@@ -1725,9 +2192,7 @@ impl App {
             }
         };
 
-        self.forensic_result_lines = vec![
-            format!("Scanning {}...", drive_info.path.display()),
-        ];
+        self.forensic_result_lines = vec![format!("Scanning {}...", drive_info.path.display())];
         self.forensic_progress_pct = 0.0;
 
         self.log_push(format!(
@@ -1792,8 +2257,10 @@ impl App {
         ];
 
         let pt_type = drive.partition_table.as_deref().unwrap_or("Unknown");
-        self.partition_lines.push(format!("Table type: {}", pt_type));
-        self.partition_lines.push(format!("Partition count: {}", drive.partition_count));
+        self.partition_lines
+            .push(format!("Table type: {}", pt_type));
+        self.partition_lines
+            .push(format!("Partition count: {}", drive.partition_count));
         self.partition_lines.push(String::new());
 
         // Try to read the actual partition table from the device
@@ -1808,7 +2275,8 @@ impl App {
                             Ok(table) => {
                                 let partitions = table.partitions();
                                 if partitions.is_empty() {
-                                    self.partition_lines.push("No partitions found.".to_string());
+                                    self.partition_lines
+                                        .push("No partitions found.".to_string());
                                 } else {
                                     for p in partitions {
                                         self.partition_lines.push(format!(
@@ -1837,8 +2305,10 @@ impl App {
                 }
             }
             Err(e) => {
-                self.partition_lines.push(format!("Cannot open device: {}", e));
-                self.partition_lines.push("Use CLI with elevated privileges:".to_string());
+                self.partition_lines
+                    .push(format!("Cannot open device: {}", e));
+                self.partition_lines
+                    .push("Use CLI with elevated privileges:".to_string());
                 self.partition_lines.push(format!(
                     "  drivewipe partition list -d {}",
                     drive.path.display()

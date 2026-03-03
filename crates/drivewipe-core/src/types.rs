@@ -81,10 +81,19 @@ pub struct HiddenAreaInfo {
     pub hpa_enabled: bool,
     /// Size of the HPA in bytes, if detected.
     pub hpa_size: Option<u64>,
+    /// Native (true hardware) max LBA reported by READ NATIVE MAX ADDRESS.
+    pub hpa_native_max_lba: Option<u64>,
+    /// Current max LBA as reported by IDENTIFY DEVICE.
+    pub hpa_current_max_lba: Option<u64>,
     /// Whether Device Configuration Overlay is enabled.
     pub dco_enabled: bool,
     /// Size of the DCO in bytes, if detected.
     pub dco_size: Option<u64>,
+    /// Factory maximum LBA (true capacity before DCO restrictions).
+    pub dco_factory_max_lba: Option<u64>,
+    /// Features restricted by DCO (e.g., "SMART disabled", "48-bit LBA disabled").
+    #[serde(default)]
+    pub dco_features_restricted: Vec<String>,
 }
 
 /// Comprehensive information about a detected drive.

@@ -53,10 +53,10 @@ pub mod gpt_types {
 /// Alignment helpers.
 pub fn align_to_1mib(lba: u64, sector_size: u32) -> u64 {
     let sectors_per_mib = 1024 * 1024 / sector_size as u64;
-    ((lba + sectors_per_mib - 1) / sectors_per_mib) * sectors_per_mib
+    lba.div_ceil(sectors_per_mib) * sectors_per_mib
 }
 
 pub fn align_to_4k(lba: u64, sector_size: u32) -> u64 {
     let sectors_per_4k = 4096 / sector_size as u64;
-    ((lba + sectors_per_4k - 1) / sectors_per_4k) * sectors_per_4k
+    lba.div_ceil(sectors_per_4k) * sectors_per_4k
 }

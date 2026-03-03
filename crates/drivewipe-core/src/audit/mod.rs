@@ -28,31 +28,66 @@ pub struct AuditEntry {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum AuditEvent {
     // Wipe
-    WipeStarted { method: String, device: String },
-    WipeCompleted { outcome: String, duration_secs: f64 },
+    WipeStarted {
+        method: String,
+        device: String,
+    },
+    WipeCompleted {
+        outcome: String,
+        duration_secs: f64,
+    },
     WipeCancelled,
-    WipeResumed { session_id: uuid::Uuid },
+    WipeResumed {
+        session_id: uuid::Uuid,
+    },
 
     // Clone
-    CloneStarted { source: String, target: String },
-    CloneCompleted { duration_secs: f64, verified: bool },
+    CloneStarted {
+        source: String,
+        target: String,
+    },
+    CloneCompleted {
+        duration_secs: f64,
+        verified: bool,
+    },
 
     // Partition
-    PartitionCreated { device: String, partition_type: String },
-    PartitionDeleted { device: String, partition_index: u32 },
-    PartitionResized { device: String, partition_index: u32 },
+    PartitionCreated {
+        device: String,
+        partition_type: String,
+    },
+    PartitionDeleted {
+        device: String,
+        partition_index: u32,
+    },
+    PartitionResized {
+        device: String,
+        partition_index: u32,
+    },
 
     // Forensic
-    ForensicScanStarted { scan_type: String },
-    ForensicScanCompleted { findings: u32 },
+    ForensicScanStarted {
+        scan_type: String,
+    },
+    ForensicScanCompleted {
+        findings: u32,
+    },
 
     // Health
-    HealthCheckPerformed { healthy: bool },
-    HealthSnapshotSaved { path: String },
+    HealthCheckPerformed {
+        healthy: bool,
+    },
+    HealthSnapshotSaved {
+        path: String,
+    },
 
     // Config
-    ConfigLoaded { path: String },
-    ConfigChanged { key: String },
+    ConfigLoaded {
+        path: String,
+    },
+    ConfigChanged {
+        key: String,
+    },
 
     // Keyboard Lock
     KeyboardLocked,
@@ -79,7 +114,13 @@ impl AuditLogger {
     }
 
     /// Log an audit event, writing it as a JSONL line to today's log file.
-    pub fn log(&self, event: AuditEvent, device_path: Option<&str>, device_serial: Option<&str>, session_id: Option<uuid::Uuid>) -> Result<()> {
+    pub fn log(
+        &self,
+        event: AuditEvent,
+        device_path: Option<&str>,
+        device_serial: Option<&str>,
+        session_id: Option<uuid::Uuid>,
+    ) -> Result<()> {
         let entry = AuditEntry {
             timestamp: Utc::now(),
             category: event.category(),
@@ -96,7 +137,13 @@ impl AuditLogger {
     }
 
     /// Log an audit event with additional detail text.
-    pub fn log_with_details(&self, event: AuditEvent, details: &str, device_path: Option<&str>, session_id: Option<uuid::Uuid>) -> Result<()> {
+    pub fn log_with_details(
+        &self,
+        event: AuditEvent,
+        details: &str,
+        device_path: Option<&str>,
+        session_id: Option<uuid::Uuid>,
+    ) -> Result<()> {
         let entry = AuditEntry {
             timestamp: Utc::now(),
             category: event.category(),
@@ -142,9 +189,7 @@ impl AuditLogger {
             })?;
 
         file.write_all(line.as_bytes()).map_err(|e| {
-            crate::error::DriveWipeError::Audit(format!(
-                "Failed to write audit entry: {e}"
-            ))
+            crate::error::DriveWipeError::Audit(format!("Failed to write audit entry: {e}"))
         })?;
 
         Ok(())
@@ -188,24 +233,29 @@ impl AuditEvent {
             | AuditEvent::WipeCancelled
             | AuditEvent::WipeResumed { .. } => AuditCategory::Wipe,
 
-            AuditEvent::CloneStarted { .. }
-            | AuditEvent::CloneCompleted { .. } => AuditCategory::Clone,
+            AuditEvent::CloneStarted { .. } | AuditEvent::CloneCompleted { .. } => {
+                AuditCategory::Clone
+            }
 
             AuditEvent::PartitionCreated { .. }
             | AuditEvent::PartitionDeleted { .. }
             | AuditEvent::PartitionResized { .. } => AuditCategory::Partition,
 
-            AuditEvent::ForensicScanStarted { .. }
-            | AuditEvent::ForensicScanCompleted { .. } => AuditCategory::Forensic,
+            AuditEvent::ForensicScanStarted { .. } | AuditEvent::ForensicScanCompleted { .. } => {
+                AuditCategory::Forensic
+            }
 
-            AuditEvent::HealthCheckPerformed { .. }
-            | AuditEvent::HealthSnapshotSaved { .. } => AuditCategory::Health,
+            AuditEvent::HealthCheckPerformed { .. } | AuditEvent::HealthSnapshotSaved { .. } => {
+                AuditCategory::Health
+            }
 
-            AuditEvent::ConfigLoaded { .. }
-            | AuditEvent::ConfigChanged { .. } => AuditCategory::Config,
+            AuditEvent::ConfigLoaded { .. } | AuditEvent::ConfigChanged { .. } => {
+                AuditCategory::Config
+            }
 
-            AuditEvent::KeyboardLocked
-            | AuditEvent::KeyboardUnlocked => AuditCategory::KeyboardLock,
+            AuditEvent::KeyboardLocked | AuditEvent::KeyboardUnlocked => {
+                AuditCategory::KeyboardLock
+            }
 
             AuditEvent::ApplicationStarted
             | AuditEvent::ApplicationStopped

@@ -319,7 +319,14 @@ fn build_and_package(tag: &str, platform: &Platform) -> Result<BuildResult> {
 
     let sp = spinner(&format!("Creating {archive_filename}..."));
     if platform.archive_ext == "zip" {
-        cmd_run("zip", &["-qj", archive_path.to_str().unwrap(), &format!("{}/", dist_dir.display())])?;
+        cmd_run(
+            "zip",
+            &[
+                "-qj",
+                archive_path.to_str().unwrap(),
+                &format!("{}/", dist_dir.display()),
+            ],
+        )?;
     } else {
         cmd_run(
             "tar",
@@ -370,10 +377,7 @@ fn flow_new_release(platform: &Platform) -> Result<()> {
 
     // Clean working tree (excluding .claude directory)
     let status = cmd_output("git", &["status", "--porcelain"])?;
-    let dirty: Vec<&str> = status
-        .lines()
-        .filter(|l| !l.contains(".claude"))
-        .collect();
+    let dirty: Vec<&str> = status.lines().filter(|l| !l.contains(".claude")).collect();
     if !dirty.is_empty() {
         error_line("Working tree is dirty:");
         for line in &dirty {
@@ -420,10 +424,7 @@ fn flow_new_release(platform: &Platform) -> Result<()> {
     let current = get_current_version()?;
     let auto = auto_detect_bump()?;
     println!("  Current version: {}", style(&current).yellow());
-    println!(
-        "  Auto-detected bump: {}",
-        style(&auto).cyan()
-    );
+    println!("  Auto-detected bump: {}", style(&auto).cyan());
     println!();
 
     let choices = &[
@@ -463,15 +464,17 @@ fn flow_new_release(platform: &Platform) -> Result<()> {
 
     // Check tag doesn't already exist
     if cmd_ok("git", &["rev-parse", &tag]) {
-        bail!(
-            "Tag '{tag}' already exists. Use \"Attach to existing release\" to add builds."
-        );
+        bail!("Tag '{tag}' already exists. Use \"Attach to existing release\" to add builds.");
     }
 
     // ── Step 3: Confirm ─────────────────────────────────────────────────────
     step(3, "Confirm release");
 
-    println!("  Version: {} → {}", style(&current).red(), style(&new_version).green());
+    println!(
+        "  Version: {} → {}",
+        style(&current).red(),
+        style(&new_version).green()
+    );
     println!("  Tag:     {}", style(&tag).green());
     println!();
 
@@ -538,9 +541,11 @@ fn flow_new_release(platform: &Platform) -> Result<()> {
         .interact()?
     {
         println!("Skipped. Tag {tag} is pushed — create the release manually:");
-        println!("  gh release create {tag} {} {}",
+        println!(
+            "  gh release create {tag} {} {}",
             build.archive_path.display(),
-            build.checksum_path.display());
+            build.checksum_path.display()
+        );
         return Ok(());
     }
 
@@ -565,8 +570,11 @@ fn flow_new_release(platform: &Platform) -> Result<()> {
     success("GitHub release created");
 
     // ── Summary ─────────────────────────────────────────────────────────────
-    let url = cmd_output("gh", &["release", "view", &tag, "--json", "url", "-q", ".url"])
-        .unwrap_or_else(|_| "https://github.com/KodyDennon/DriveWipe/releases".into());
+    let url = cmd_output(
+        "gh",
+        &["release", "view", &tag, "--json", "url", "-q", ".url"],
+    )
+    .unwrap_or_else(|_| "https://github.com/KodyDennon/DriveWipe/releases".into());
 
     // Clean up dist
     let _ = fs::remove_dir_all("target/dist");
@@ -578,7 +586,7 @@ fn flow_new_release(platform: &Platform) -> Result<()> {
     println!("  To add builds from other platforms:");
     println!(
         "    {}",
-        style(format!("cargo xtask release   (choose \"Attach to existing release\")")).dim()
+        style("cargo xtask release   (choose \"Attach to existing release\")").dim()
     );
     println!();
 
@@ -614,8 +622,8 @@ fn flow_attach(platform: &Platform) -> Result<()> {
     )?;
     sp.finish_and_clear();
 
-    let releases: Vec<serde_json::Value> = serde_json::from_str(&json)
-        .context("Failed to parse release list from GitHub")?;
+    let releases: Vec<serde_json::Value> =
+        serde_json::from_str(&json).context("Failed to parse release list from GitHub")?;
 
     if releases.is_empty() {
         bail!("No releases found on GitHub. Create one first with a new release.");
@@ -660,10 +668,7 @@ fn flow_attach(platform: &Platform) -> Result<()> {
         }
         t
     } else {
-        releases[selection]["tagName"]
-            .as_str()
-            .unwrap()
-            .to_string()
+        releases[selection]["tagName"].as_str().unwrap().to_string()
     };
 
     println!(
@@ -729,8 +734,11 @@ fn flow_attach(platform: &Platform) -> Result<()> {
     success("Artifacts uploaded");
 
     // ── Summary ─────────────────────────────────────────────────────────────
-    let url = cmd_output("gh", &["release", "view", &tag, "--json", "url", "-q", ".url"])
-        .unwrap_or_else(|_| "https://github.com/KodyDennon/DriveWipe/releases".into());
+    let url = cmd_output(
+        "gh",
+        &["release", "view", &tag, "--json", "url", "-q", ".url"],
+    )
+    .unwrap_or_else(|_| "https://github.com/KodyDennon/DriveWipe/releases".into());
 
     // Clean up dist
     let _ = fs::remove_dir_all("target/dist");
@@ -749,19 +757,23 @@ fn flow_attach(platform: &Platform) -> Result<()> {
 fn build_release_notes(tag: &str, platform: &Platform, build: &BuildResult) -> String {
     let archive_name = format!("drivewipe-{tag}-{}", platform.target);
     let mut notes = format!(
-        "## DriveWipe {tag}\n\
+        "# 🚀 DriveWipe {tag}\n\
          \n\
-         ### Downloads\n\
+         Professional-grade storage sanitization and drive management suite.\n\
+         \n\
+         ## 🖥️ Desktop Applications\n\
+         \n\
          | Platform | Architecture | Archive |\n\
-         |---|---|---|\n\
-         | {} | {} | `{}.{}` |\n\
+         |:---|:---|:---|\n\
+         | **{}** | {} | `{}.{}` |\n\
          \n\
-         *Run `cargo xtask release` on other platforms to add their builds.*\n\
+         > [!NOTE]\n\
+         > This release contains the standard desktop binaries. Run this tool on other platforms to attach more builds.\n\
          \n\
-         ### Contents\n\
-         - `drivewipe{}` — CLI tool\n\
-         - `drivewipe-tui{}` — Terminal UI",
-        platform.os,
+         ### Included Binaries\n\
+         - `drivewipe{}` — Advanced CLI for scripts and automation\n\
+         - `drivewipe-tui{}` — Dashboard-centric Terminal UI",
+        platform.os.to_uppercase(),
         platform.arch,
         archive_name,
         platform.archive_ext,
@@ -771,13 +783,17 @@ fn build_release_notes(tag: &str, platform: &Platform, build: &BuildResult) -> S
 
     if build.gui_built {
         notes.push_str(&format!(
-            "\n- `drivewipe-gui{}` — Graphical UI",
+            "\n- `drivewipe-gui{}` — Simplified Graphical Interface",
             platform.exe_suffix
         ));
     }
 
     notes.push_str(&format!(
-        "\n\n### Verify\n```\nshasum -a 256 -c {archive_name}.sha256\n```\n"
+        "\n\n---\n\n\
+         ### Integrity Verification\n\
+         ```bash\n\
+         shasum -a 256 -c {archive_name}.sha256\n\
+         ```\n"
     ));
 
     notes

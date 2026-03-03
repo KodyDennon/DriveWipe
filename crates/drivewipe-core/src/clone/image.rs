@@ -35,7 +35,10 @@ pub struct CloneImage;
 
 impl CloneImage {
     /// Write image header to a writer.
-    pub fn write_header<W: Write>(writer: &mut W, header: &CloneImageHeader) -> crate::error::Result<()> {
+    pub fn write_header<W: Write>(
+        writer: &mut W,
+        header: &CloneImageHeader,
+    ) -> crate::error::Result<()> {
         writer.write_all(IMAGE_MAGIC).map_err(|e| {
             crate::error::DriveWipeError::Clone(format!("Failed to write image magic: {e}"))
         })?;
@@ -95,8 +98,8 @@ impl CloneImage {
         let compressed = match compression {
             CompressionMode::None => data.to_vec(),
             CompressionMode::Gzip => {
-                use flate2::write::GzEncoder;
                 use flate2::Compression;
+                use flate2::write::GzEncoder;
                 let mut encoder = GzEncoder::new(Vec::new(), Compression::fast());
                 encoder.write_all(data).map_err(|e| {
                     crate::error::DriveWipeError::Compression(format!("Gzip compress failed: {e}"))
@@ -105,11 +108,9 @@ impl CloneImage {
                     crate::error::DriveWipeError::Compression(format!("Gzip finish failed: {e}"))
                 })?
             }
-            CompressionMode::Zstd => {
-                zstd::encode_all(data, 3).map_err(|e| {
-                    crate::error::DriveWipeError::Compression(format!("Zstd compress failed: {e}"))
-                })?
-            }
+            CompressionMode::Zstd => zstd::encode_all(data, 3).map_err(|e| {
+                crate::error::DriveWipeError::Compression(format!("Zstd compress failed: {e}"))
+            })?,
         };
 
         let chunk_len = compressed.len() as u32;
@@ -152,13 +153,9 @@ impl CloneImage {
                 })?;
                 decompressed
             }
-            CompressionMode::Zstd => {
-                zstd::decode_all(&compressed[..]).map_err(|e| {
-                    crate::error::DriveWipeError::Compression(format!(
-                        "Zstd decompress failed: {e}"
-                    ))
-                })?
-            }
+            CompressionMode::Zstd => zstd::decode_all(&compressed[..]).map_err(|e| {
+                crate::error::DriveWipeError::Compression(format!("Zstd decompress failed: {e}"))
+            })?,
         };
 
         Ok(data)

@@ -1,6 +1,6 @@
 [package]
 name = "drivewipe-tui"
-version = "1.0.0"
+version = "1.1.0"
 edition.workspace = true
 rust-version.workspace = true
 authors.workspace = true
@@ -14,9 +14,11 @@ path = "src/main.rs"
 [features]
 default = ["pdf-report"]
 pdf-report = ["drivewipe-core/pdf-report"]
+live = ["dep:drivewipe-live"]
 
 [dependencies]
 drivewipe-core = { path = "../drivewipe-core" }
+drivewipe-live = { path = "../drivewipe-live", optional = true }
 ratatui.workspace = true
 crossterm.workspace = true
 crossbeam-channel.workspace = true

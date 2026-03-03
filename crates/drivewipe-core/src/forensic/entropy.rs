@@ -48,10 +48,7 @@ pub fn shannon_entropy(data: &[u8]) -> f64 {
 }
 
 /// Analyze entropy across the entire device.
-pub fn analyze_entropy(
-    device: &mut dyn RawDeviceIo,
-    block_size: usize,
-) -> Result<EntropyStats> {
+pub fn analyze_entropy(device: &mut dyn RawDeviceIo, block_size: usize) -> Result<EntropyStats> {
     let capacity = device.capacity();
     let mut buf = vec![0u8; block_size];
 

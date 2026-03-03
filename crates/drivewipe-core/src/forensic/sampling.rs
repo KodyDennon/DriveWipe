@@ -32,7 +32,9 @@ pub fn statistical_sample(
     let sector_size = device.block_size() as u64;
     let total_sectors = capacity / sector_size;
 
-    let samples = ((total_sectors as f64 * sample_ratio) as u64).max(100).min(total_sectors);
+    let samples = ((total_sectors as f64 * sample_ratio) as u64)
+        .max(100)
+        .min(total_sectors);
 
     let mut rng = rand::rng();
     let mut buf = vec![0u8; sector_size as usize];

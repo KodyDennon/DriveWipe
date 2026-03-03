@@ -180,10 +180,14 @@ impl WipeMethodRegistry {
 
     /// Register the DriveWipe Secure wipe methods for each drive type.
     pub fn register_drivewipe_secure_methods(&mut self) {
-        self.methods.push(Box::new(drivewipe_secure::DriveWipeSecureHdd));
-        self.methods.push(Box::new(drivewipe_secure::DriveWipeSecureSataSsd));
-        self.methods.push(Box::new(drivewipe_secure::DriveWipeSecureNvme));
-        self.methods.push(Box::new(drivewipe_secure::DriveWipeSecureUsb));
+        self.methods
+            .push(Box::new(drivewipe_secure::DriveWipeSecureHdd));
+        self.methods
+            .push(Box::new(drivewipe_secure::DriveWipeSecureSataSsd));
+        self.methods
+            .push(Box::new(drivewipe_secure::DriveWipeSecureNvme));
+        self.methods
+            .push(Box::new(drivewipe_secure::DriveWipeSecureUsb));
     }
 
     /// Register user-defined custom wipe methods from the application

@@ -1,0 +1,56 @@
+#!ipxe
+#
+# DriveWipe Live — iPXE Boot Script
+#
+# This script is loaded by PXE firmware and downloads the DriveWipe Live
+# kernel and initramfs from the TFTP server, then boots directly into the
+# DriveWipe TUI.
+#
+# The boot.ipxe script auto-boots without a menu. For an interactive menu,
+# chain to menu.ipxe instead.
+
+# ── Configuration ───────────────────────────────────────────────────────
+# Base path on the TFTP server where kernel + initramfs live.
+set base-path drivewipe
+set timeout 5000
+
+# ── Banner ──────────────────────────────────────────────────────────────
+echo
+echo ========================================
+echo   DriveWipe Live - Network Boot
+echo ========================================
+echo
+
+# ── Network setup ───────────────────────────────────────────────────────
+# Configure networking via DHCP (may already be done by PXE firmware).
+isset ${ip} || dhcp || goto failed
+
+echo Network: ${ip}/${netmask} via ${gateway}
+echo Server: ${next-server}
+echo
+
+# ── Download and boot ───────────────────────────────────────────────────
+echo Downloading kernel...
+kernel tftp://${next-server}/${base-path}/vmlinuz drivewipe.live=1 ip=dhcp console=tty0 console=ttyS0,115200n8 quiet || goto failed
+
+echo Downloading initramfs...
+initrd tftp://${next-server}/${base-path}/initramfs.img || goto failed
+
+echo
+echo Booting DriveWipe Live...
+echo
+boot || goto failed
+
+# ── Error handler ───────────────────────────────────────────────────────
+:failed
+echo
+echo !! DriveWipe Live boot FAILED !!
+echo
+echo Possible causes:
+echo   - Boot files missing from TFTP server
+echo   - Network connectivity issues
+echo   - Insufficient memory (need >= 512 MB)
+echo
+echo Dropping to iPXE shell. Type 'exit' to retry PXE boot.
+echo
+shell

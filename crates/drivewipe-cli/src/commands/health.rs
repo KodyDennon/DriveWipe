@@ -7,7 +7,12 @@ use drivewipe_core::drive;
 use drivewipe_core::health::snapshot::DriveHealthSnapshot;
 
 /// Run the `health` subcommand.
-pub fn run(config: &DriveWipeConfig, device: &str, save: bool, compare: Option<&str>) -> Result<()> {
+pub fn run(
+    config: &DriveWipeConfig,
+    device: &str,
+    save: bool,
+    compare: Option<&str>,
+) -> Result<()> {
     let enumerator = drive::create_enumerator();
     let drive_info = enumerator
         .inspect(&PathBuf::from(device))
@@ -16,10 +21,16 @@ pub fn run(config: &DriveWipeConfig, device: &str, save: bool, compare: Option<&
     println!("Drive Health: {} {}", drive_info.model, drive_info.serial);
     println!("  Path: {}", drive_info.path.display());
     println!("  Capacity: {}", drive_info.capacity_display());
-    println!("  Type: {} / {}", drive_info.drive_type, drive_info.transport);
+    println!(
+        "  Type: {} / {}",
+        drive_info.drive_type, drive_info.transport
+    );
 
     if let Some(healthy) = drive_info.smart_healthy {
-        println!("  SMART Status: {}", if healthy { "Healthy" } else { "FAILING" });
+        println!(
+            "  SMART Status: {}",
+            if healthy { "Healthy" } else { "FAILING" }
+        );
     } else {
         println!("  SMART Status: Not available");
     }
@@ -37,12 +48,19 @@ pub fn run(config: &DriveWipeConfig, device: &str, save: bool, compare: Option<&
     };
 
     if save {
-        let snapshot_path = config.sessions_dir.parent()
+        let snapshot_path = config
+            .sessions_dir
+            .parent()
             .unwrap_or(&config.sessions_dir)
             .join("health")
-            .join(format!("{}_{}.json", drive_info.serial, chrono::Utc::now().format("%Y%m%d_%H%M%S")));
+            .join(format!(
+                "{}_{}.json",
+                drive_info.serial,
+                chrono::Utc::now().format("%Y%m%d_%H%M%S")
+            ));
 
-        snapshot.save(&snapshot_path)
+        snapshot
+            .save(&snapshot_path)
             .context("Failed to save health snapshot")?;
         println!("\nSnapshot saved to: {}", snapshot_path.display());
     }

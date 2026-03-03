@@ -1,8 +1,8 @@
 use iced::widget::{button, column, container, row, scrollable, text};
 use iced::{Element, Length};
 
-use crate::theme;
 use crate::Message;
+use crate::theme;
 
 /// View for the drive selection screen.
 pub fn view<'a>(
@@ -18,9 +18,11 @@ pub fn view<'a>(
         .color(theme::TEXT_SECONDARY);
 
     let drive_list = if drives.is_empty() {
-        column![text("No drives detected. Check permissions or connect a drive.")
-            .size(theme::FONT_SIZE_MD)
-            .color(theme::TEXT_MUTED)]
+        column![
+            text("No drives detected. Check permissions or connect a drive.")
+                .size(theme::FONT_SIZE_MD)
+                .color(theme::TEXT_MUTED)
+        ]
         .spacing(theme::SPACING_MD)
     } else {
         let mut col = column![].spacing(theme::SPACING_SM);
@@ -45,16 +47,19 @@ pub fn view<'a>(
     };
 
     let buttons_row = row![
-        button(text("Refresh").size(theme::FONT_SIZE_MD))
-            .on_press(Message::RefreshDrives),
-        button(text("Continue").size(theme::FONT_SIZE_MD))
-            .on_press(Message::ProceedToMethodSelect),
+        button(text("Refresh").size(theme::FONT_SIZE_MD)).on_press(Message::RefreshDrives),
+        button(text("Continue").size(theme::FONT_SIZE_MD)).on_press(Message::ProceedToMethodSelect),
     ]
     .spacing(theme::SPACING_MD);
 
-    let content = column![title, subtitle, scrollable(drive_list).height(Length::Fill), buttons_row]
-        .spacing(theme::SPACING_LG)
-        .padding(theme::SPACING_XL);
+    let content = column![
+        title,
+        subtitle,
+        scrollable(drive_list).height(Length::Fill),
+        buttons_row
+    ]
+    .spacing(theme::SPACING_LG)
+    .padding(theme::SPACING_XL);
 
     container(content)
         .width(Length::Fill)

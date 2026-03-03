@@ -102,7 +102,19 @@ jobs:
         shell: bash
         run: |
           TAG="${GITHUB_REF#refs/tags/}"
-          ARCHIVE_NAME="drivewipe-${TAG}-${{ matrix.target }}"
+          
+          # Human-readable platform names
+          case "${{ matrix.target }}" in
+            x86_64-unknown-linux-gnu)  PLATFORM="Linux-x64" ;;
+            aarch64-unknown-linux-gnu) PLATFORM="Linux-ARM64" ;;
+            x86_64-apple-darwin)       PLATFORM="macOS-Intel" ;;
+            aarch64-apple-darwin)      PLATFORM="macOS-Apple-Silicon" ;;
+            x86_64-pc-windows-msvc)    PLATFORM="Windows-x64" ;;
+            aarch64-pc-windows-msvc)   PLATFORM="Windows-ARM64" ;;
+            *)                         PLATFORM="${{ matrix.target }}" ;;
+          esac
+
+          ARCHIVE_NAME="DriveWipe-${TAG}-${PLATFORM}"
           mkdir -p dist
 
           cp target/${{ matrix.target }}/release/drivewipe${{ matrix.suffix }} dist/
@@ -124,9 +136,86 @@ jobs:
           name: drivewipe-${{ matrix.target }}
           path: drivewipe-*.*
 
+  # ── Live ISO Build ──────────────────────────────────────────────────────
+  build-live:
+    name: Build Live ISO
+    needs: ci-gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-unknown-linux-musl
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: release-live
+
+      - name: Install musl tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y musl-tools
+
+      - name: Build TUI for live (static musl)
+        run: |
+          cargo build --release \
+            --target x86_64-unknown-linux-musl \
+            --package drivewipe-tui \
+            --features live
+
+      - name: Build CLI for live (static musl)
+        run: |
+          cargo build --release \
+            --target x86_64-unknown-linux-musl \
+            --package drivewipe-cli
+
+      - name: Extract version
+        id: version
+        run: |
+          VERSION=$(grep '^version' crates/drivewipe-live/Cargo.toml | head -1 | sed 's/.*"\(.*\)".*/\1/')
+          TAG="${GITHUB_REF#refs/tags/}"
+          echo "live_version=${VERSION}" >> $GITHUB_OUTPUT
+          echo "tag=${TAG}" >> $GITHUB_OUTPUT
+
+      - name: Build Live ISO
+        run: |
+          chmod +x scripts/build-live.sh
+          DRIVEWIPE_LIVE_VERSION=${{ steps.version.outputs.live_version }} \
+            ./scripts/build-live.sh
+        env:
+          SKIP_KERNEL_MODULE: "1"
+
+      - name: Package Live artifacts
+        run: |
+          TAG="${{ steps.version.outputs.tag }}"
+          mkdir -p live-dist
+
+          # Copy ISO if it was built
+          cp output/*.iso live-dist/drivewipe-live-${TAG}.iso 2>/dev/null || true
+
+          # Package PXE boot files
+          mkdir -p live-dist/pxe
+          cp output/vmlinuz live-dist/pxe/ 2>/dev/null || true
+          cp output/initramfs.img live-dist/pxe/ 2>/dev/null || true
+          cp live/pxe/ipxe/*.ipxe live-dist/pxe/
+          cp live/pxe/dnsmasq.conf live-dist/pxe/
+          cp live/pxe/README.md live-dist/pxe/
+
+          cd live-dist
+          tar czf "../drivewipe-live-${TAG}-pxe.tar.gz" pxe/
+
+      - name: Upload Live artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: drivewipe-live
+          path: |
+            live-dist/drivewipe-live-*.iso
+            drivewipe-live-*-pxe.tar.gz
+
   release:
     name: Create Release
-    needs: build
+    needs: [build, build-live]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -154,30 +243,47 @@ jobs:
           files: |
             artifacts/*
           body: |
-            ## Installation
+            # 🚀 DriveWipe ${{ steps.version.outputs.version }}
 
-            Download the archive for your platform and extract the binaries:
+            DriveWipe is a professional-grade storage sanitization and drive management suite. This release provides a full version of the toolkit, including Desktop apps, TUI, and the Live ISO environment.
+
+            ---
+
+            ## 🖥️ Desktop Applications (Standalone)
+
+            No installation required. Download the archive for your system and run the included binaries.
 
             | Platform | Architecture | Download |
-            |---|---|---|
-            | Linux | x86_64 | `drivewipe-${{ steps.version.outputs.version }}-x86_64-unknown-linux-gnu.tar.gz` |
-            | Linux | ARM64 | `drivewipe-${{ steps.version.outputs.version }}-aarch64-unknown-linux-gnu.tar.gz` |
-            | macOS | x86_64 (Intel) | `drivewipe-${{ steps.version.outputs.version }}-x86_64-apple-darwin.tar.gz` |
-            | macOS | ARM64 (Apple Silicon) | `drivewipe-${{ steps.version.outputs.version }}-aarch64-apple-darwin.tar.gz` |
-            | Windows | x86_64 | `drivewipe-${{ steps.version.outputs.version }}-x86_64-pc-windows-msvc.zip` |
-            | Windows | ARM64 | `drivewipe-${{ steps.version.outputs.version }}-aarch64-pc-windows-msvc.zip` |
+            |:---|:---|:---|
+            | **Linux** | x86_64 (Standard 64-bit) | `DriveWipe-${{ steps.version.outputs.version }}-Linux-x64.tar.gz` |
+            | **Linux** | ARM64 | `DriveWipe-${{ steps.version.outputs.version }}-Linux-ARM64.tar.gz` |
+            | **macOS** | Intel | `DriveWipe-${{ steps.version.outputs.version }}-macOS-Intel.tar.gz` |
+            | **macOS** | Apple Silicon | `DriveWipe-${{ steps.version.outputs.version }}-macOS-Apple-Silicon.tar.gz` |
+            | **Windows** | x64 (Standard 64-bit) | `DriveWipe-${{ steps.version.outputs.version }}-Windows-x64.zip` |
+            | **Windows** | ARM64 | `DriveWipe-${{ steps.version.outputs.version }}-Windows-ARM64.zip` |
 
-            Each archive contains:
-            - `drivewipe` — CLI tool
-            - `drivewipe-tui` — Terminal UI
-            - `LICENSE.md`
-            - `README.md`
+            ### 💡 Usage Tip
+            DriveWipe requires **Administrative / Root** privileges to access raw disks.
+            - **Windows**: Right-click -> "Run as Administrator".
+            - **Linux/macOS**: Prefix commands with `sudo`.
 
-            Verify integrity with `SHA256SUMS.txt`.
+            ---
 
-            ## Requirements
+            ## 🔒 Live Environment (For Secure Labs)
 
-            - Root/Administrator privileges required for raw device access
-            - macOS NVMe commands require `nvme-cli` (`brew install nvme-cli`)
+            Boot directly into a specialized OS to perform sanitization without host interference.
+
+            | Type | File | Description |
+            |:---|:---|:---|
+            | **ISO Image** | `drivewipe-live-${{ steps.version.outputs.version }}.iso` | Write to USB with Rufus or `dd`. |
+            | **PXE Network** | `drivewipe-live-${{ steps.version.outputs.version }}-pxe.tar.gz` | Dissected artifacts for network booting. |
+
+            ---
+
+            ### 🔐 Integrity Verification
+            Check the authenticity of your downloads using `SHA256SUMS.txt`:
+            ```bash
+            sha256sum -c SHA256SUMS.txt
+            ```
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

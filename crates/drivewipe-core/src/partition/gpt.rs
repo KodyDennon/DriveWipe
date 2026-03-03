@@ -123,16 +123,12 @@ impl GptTable {
 
         // Header CRC32 is at offset 16 in the header, covering bytes 0..92
         // with the CRC field itself zeroed during calculation
-        let header_size = u32::from_le_bytes(
-            header[12..16].try_into().unwrap_or([0; 4]),
-        ) as usize;
+        let header_size = u32::from_le_bytes(header[12..16].try_into().unwrap_or([0; 4])) as usize;
         if header_size < 92 || 512 + header_size > data.len() {
             return false;
         }
 
-        let stored_header_crc = u32::from_le_bytes(
-            header[16..20].try_into().unwrap_or([0; 4]),
-        );
+        let stored_header_crc = u32::from_le_bytes(header[16..20].try_into().unwrap_or([0; 4]));
 
         // Zero the CRC field for computation
         let mut header_copy = header[..header_size].to_vec();
@@ -144,19 +140,11 @@ impl GptTable {
         }
 
         // Partition entry array CRC32 is at offset 88 in the header
-        let stored_entry_crc = u32::from_le_bytes(
-            header[88..92].try_into().unwrap_or([0; 4]),
-        );
+        let stored_entry_crc = u32::from_le_bytes(header[88..92].try_into().unwrap_or([0; 4]));
 
-        let partition_entry_lba = u64::from_le_bytes(
-            header[72..80].try_into().unwrap_or([0; 8]),
-        );
-        let entry_count = u32::from_le_bytes(
-            header[80..84].try_into().unwrap_or([0; 4]),
-        );
-        let entry_size = u32::from_le_bytes(
-            header[84..88].try_into().unwrap_or([0; 4]),
-        );
+        let partition_entry_lba = u64::from_le_bytes(header[72..80].try_into().unwrap_or([0; 8]));
+        let entry_count = u32::from_le_bytes(header[80..84].try_into().unwrap_or([0; 4]));
+        let entry_size = u32::from_le_bytes(header[84..88].try_into().unwrap_or([0; 4]));
 
         let entries_offset = (partition_entry_lba * 512) as usize;
         let entries_len = (entry_count * entry_size) as usize;
@@ -165,7 +153,8 @@ impl GptTable {
             return false;
         }
 
-        let computed_entry_crc = crc32fast::hash(&data[entries_offset..entries_offset + entries_len]);
+        let computed_entry_crc =
+            crc32fast::hash(&data[entries_offset..entries_offset + entries_len]);
 
         stored_entry_crc == computed_entry_crc
     }
@@ -175,10 +164,21 @@ impl GptTable {
 fn format_guid(bytes: &[u8; 16]) -> String {
     format!(
         "{:02X}{:02X}{:02X}{:02X}-{:02X}{:02X}-{:02X}{:02X}-{:02X}{:02X}-{:02X}{:02X}{:02X}{:02X}{:02X}{:02X}",
-        bytes[3], bytes[2], bytes[1], bytes[0],
-        bytes[5], bytes[4],
-        bytes[7], bytes[6],
-        bytes[8], bytes[9],
-        bytes[10], bytes[11], bytes[12], bytes[13], bytes[14], bytes[15],
+        bytes[3],
+        bytes[2],
+        bytes[1],
+        bytes[0],
+        bytes[5],
+        bytes[4],
+        bytes[7],
+        bytes[6],
+        bytes[8],
+        bytes[9],
+        bytes[10],
+        bytes[11],
+        bytes[12],
+        bytes[13],
+        bytes[14],
+        bytes[15],
     )
 }

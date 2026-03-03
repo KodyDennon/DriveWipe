@@ -1,8 +1,8 @@
+pub mod filesystem;
 pub mod gpt;
 pub mod mbr;
 pub mod ops;
 pub mod types;
-pub mod filesystem;
 
 pub use types::{Partition, PartitionTableType};
 

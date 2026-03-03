@@ -42,7 +42,6 @@ pub struct DriveWipeConfig {
     pub operator_name: Option<String>,
 
     // ── New overhaul fields ──────────────────────────────────────────
-
     /// Directory containing drive profile TOML files.
     pub profiles_dir: PathBuf,
 
@@ -141,9 +140,7 @@ fn default_performance_history_dir() -> PathBuf {
 fn drivewipe_data_dir() -> PathBuf {
     dirs::data_local_dir()
         .unwrap_or_else(|| {
-            log::warn!(
-                "Could not determine local data directory, falling back to /tmp/drivewipe"
-            );
+            log::warn!("Could not determine local data directory, falling back to /tmp/drivewipe");
             PathBuf::from("/tmp")
         })
         .join("drivewipe")

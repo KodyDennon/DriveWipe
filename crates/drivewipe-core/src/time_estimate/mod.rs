@@ -72,11 +72,7 @@ pub struct PerformanceHistory {
 }
 
 impl TimeEstimator {
-    pub fn new(
-        total_bytes_per_pass: u64,
-        total_passes: u32,
-        has_verification: bool,
-    ) -> Self {
+    pub fn new(total_bytes_per_pass: u64, total_passes: u32, has_verification: bool) -> Self {
         Self {
             alpha: 0.1,
             smoothed_throughput: 0.0,
@@ -157,7 +153,9 @@ impl TimeEstimator {
             };
         }
 
-        let remaining_bytes = self.total_bytes_all_passes.saturating_sub(self.total_bytes_completed);
+        let remaining_bytes = self
+            .total_bytes_all_passes
+            .saturating_sub(self.total_bytes_completed);
         let verification_bytes = if self.has_verification {
             self.total_bytes_all_passes / self.total_passes as u64
         } else {
@@ -170,9 +168,8 @@ impl TimeEstimator {
         // Calculate confidence intervals from sample variance
         let (best_secs, worst_secs) = if self.samples.len() >= 10 {
             let mean: f64 = self.samples.iter().sum::<f64>() / self.samples.len() as f64;
-            let variance: f64 = self.samples.iter()
-                .map(|s| (s - mean).powi(2))
-                .sum::<f64>() / self.samples.len() as f64;
+            let variance: f64 = self.samples.iter().map(|s| (s - mean).powi(2)).sum::<f64>()
+                / self.samples.len() as f64;
             let stddev = variance.sqrt();
 
             let best_throughput = (mean + stddev).max(1.0);
@@ -249,10 +246,8 @@ impl TimeEstimator {
             crate::error::DriveWipeError::Health(format!("Failed to serialize history: {e}"))
         })?;
 
-        std::fs::write(&path, json).map_err(|e| crate::error::DriveWipeError::Io {
-            path,
-            source: e,
-        })?;
+        std::fs::write(&path, json)
+            .map_err(|e| crate::error::DriveWipeError::Io { path, source: e })?;
 
         Ok(())
     }

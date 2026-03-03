@@ -11,17 +11,18 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(3),  // Title
-            Constraint::Length(6),  // Config panel
+            Constraint::Length(3), // Title
+            Constraint::Length(6), // Config panel
             Constraint::Min(8),    // Drive list
             Constraint::Length(1), // Status bar
         ])
         .split(area);
 
     // Title
-    let title = Paragraph::new(Line::from(vec![
-        Span::styled(" Drive Clone Setup ", Style::default().fg(Color::Cyan).bold()),
-    ]))
+    let title = Paragraph::new(Line::from(vec![Span::styled(
+        " Drive Clone Setup ",
+        Style::default().fg(Color::Cyan).bold(),
+    )]))
     .block(
         Block::default()
             .borders(Borders::ALL)

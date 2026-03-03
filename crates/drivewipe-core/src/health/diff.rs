@@ -45,25 +45,20 @@ impl HealthDiff {
             _ => None,
         };
 
-        let reallocated_sectors_change =
-            match (&before.smart_data, &after.smart_data) {
-                (Some(b), Some(a)) => {
-                    match (b.reallocated_sectors, a.reallocated_sectors) {
-                        (Some(bv), Some(av)) => {
-                            let change = av as i64 - bv as i64;
-                            if change > 0 {
-                                messages.push(format!(
-                                    "Reallocated sectors increased by {change}"
-                                ));
-                                verdict = HealthVerdict::Fail;
-                            }
-                            Some(change)
-                        }
-                        _ => None,
+        let reallocated_sectors_change = match (&before.smart_data, &after.smart_data) {
+            (Some(b), Some(a)) => match (b.reallocated_sectors, a.reallocated_sectors) {
+                (Some(bv), Some(av)) => {
+                    let change = av as i64 - bv as i64;
+                    if change > 0 {
+                        messages.push(format!("Reallocated sectors increased by {change}"));
+                        verdict = HealthVerdict::Fail;
                     }
+                    Some(change)
                 }
                 _ => None,
-            };
+            },
+            _ => None,
+        };
 
         let pending_sectors_change = match (&before.smart_data, &after.smart_data) {
             (Some(b), Some(a)) => match (b.pending_sectors, a.pending_sectors) {

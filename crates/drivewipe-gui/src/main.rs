@@ -1,3 +1,10 @@
+//! DriveWipe Graphical User Interface (GUI)
+//!
+//! The `drivewipe-gui` binary is a cross-platform desktop application built
+//! using the `iced` framework. It provides a simplified, visual-first workflow
+//! for all DriveWipe features, making complex sanitization tasks accessible
+//! to non-technical operators.
+
 mod screens;
 mod theme;
 
@@ -245,8 +252,7 @@ impl DriveWipeApp {
                         Some(false) => "FAILED",
                         None => "N/A",
                     };
-                    self.health_info
-                        .push(format!("SMART Status: {}", status));
+                    self.health_info.push(format!("SMART Status: {}", status));
                 }
             }
 
@@ -273,12 +279,9 @@ impl DriveWipeApp {
                         drive.model
                     ));
                     let pt = drive.partition_table.as_deref().unwrap_or("Unknown");
+                    self.partition_info.push(format!("Partition Table: {}", pt));
                     self.partition_info
-                        .push(format!("Partition Table: {}", pt));
-                    self.partition_info.push(format!(
-                        "Partitions: {}",
-                        drive.partition_count
-                    ));
+                        .push(format!("Partitions: {}", drive.partition_count));
                 }
             }
 
@@ -308,9 +311,7 @@ impl DriveWipeApp {
     fn view(&self) -> Element<'_, Message> {
         match self.screen {
             Screen::Menu => self.view_menu(),
-            Screen::DriveSelect => {
-                screens::drive_select::view(&self.drives, &self.selected_drives)
-            }
+            Screen::DriveSelect => screens::drive_select::view(&self.drives, &self.selected_drives),
             Screen::MethodSelect => {
                 screens::method_select::view(&self.methods, self.selected_method)
             }
@@ -331,21 +332,15 @@ impl DriveWipeApp {
                 &self.wipe_pass_info,
                 self.wipe_complete,
             ),
-            Screen::Health => {
-                screens::health::view(&self.drives, &self.health_info)
-            }
+            Screen::Health => screens::health::view(&self.drives, &self.health_info),
             Screen::Clone => screens::clone::view(
                 &self.drives,
                 self.clone_source,
                 self.clone_target,
                 &self.clone_mode,
             ),
-            Screen::Partition => {
-                screens::partition::view(&self.drives, &self.partition_info)
-            }
-            Screen::Forensic => {
-                screens::forensic::view(&self.drives, &self.forensic_results)
-            }
+            Screen::Partition => screens::partition::view(&self.drives, &self.partition_info),
+            Screen::Forensic => screens::forensic::view(&self.drives, &self.forensic_results),
             Screen::Settings => screens::settings::view(
                 self.setting_auto_report,
                 self.setting_notifications,
@@ -406,7 +401,11 @@ impl DriveWipeApp {
 }
 
 fn main() -> iced::Result {
-    iced::application(DriveWipeApp::title, DriveWipeApp::update, DriveWipeApp::view)
-        .window_size((900.0, 650.0))
-        .run_with(DriveWipeApp::new)
+    iced::application(
+        DriveWipeApp::title,
+        DriveWipeApp::update,
+        DriveWipeApp::view,
+    )
+    .window_size((900.0, 650.0))
+    .run_with(DriveWipeApp::new)
 }

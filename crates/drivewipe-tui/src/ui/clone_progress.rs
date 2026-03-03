@@ -11,18 +11,19 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(3),  // Title
-            Constraint::Length(5),  // Source/Target info
-            Constraint::Length(3),  // Progress bar
+            Constraint::Length(3), // Title
+            Constraint::Length(5), // Source/Target info
+            Constraint::Length(3), // Progress bar
             Constraint::Min(6),    // Stats
             Constraint::Length(1), // Status bar
         ])
         .split(area);
 
     // Title
-    let title = Paragraph::new(Line::from(vec![
-        Span::styled(" Clone in Progress ", Style::default().fg(Color::Yellow).bold()),
-    ]))
+    let title = Paragraph::new(Line::from(vec![Span::styled(
+        " Clone in Progress ",
+        Style::default().fg(Color::Yellow).bold(),
+    )]))
     .block(
         Block::default()
             .borders(Borders::ALL)
@@ -97,12 +98,10 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
         &app.clone_throughput
     };
 
-    let stats_lines = vec![
-        Line::from(vec![
-            Span::styled("  Throughput: ", Style::default().fg(Color::Gray)),
-            Span::styled(throughput, Style::default().fg(Color::Green).bold()),
-        ]),
-    ];
+    let stats_lines = vec![Line::from(vec![
+        Span::styled("  Throughput: ", Style::default().fg(Color::Gray)),
+        Span::styled(throughput, Style::default().fg(Color::Green).bold()),
+    ])];
     frame.render_widget(Paragraph::new(stats_lines), stats_inner);
 
     // Status bar

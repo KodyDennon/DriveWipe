@@ -9,6 +9,7 @@ use drivewipe_core::types::*;
 /// A mock device backed by an in-memory buffer for testing.
 ///
 /// Tracks all writes for verification and supports injecting errors.
+#[allow(dead_code)]
 pub struct MockDevice {
     data: Vec<u8>,
     capacity: u64,
@@ -20,6 +21,7 @@ pub struct MockDevice {
 }
 
 impl MockDevice {
+    #[allow(dead_code)]
     /// Create a new mock device of the given size (in bytes).
     pub fn new(capacity: u64) -> Self {
         Self {
@@ -33,6 +35,7 @@ impl MockDevice {
         }
     }
 
+    #[allow(dead_code)]
     /// Create a mock device with a custom block size.
     pub fn with_block_size(capacity: u64, block_size: u32) -> Self {
         Self {
@@ -46,38 +49,45 @@ impl MockDevice {
         }
     }
 
+    #[allow(dead_code)]
     /// Configure the device to return an error at a specific write offset.
     pub fn inject_write_error(mut self, at_offset: u64) -> Self {
         self.inject_write_error_at = Some(at_offset);
         self
     }
 
+    #[allow(dead_code)]
     /// Configure the device to return an error at a specific read offset.
     pub fn inject_read_error(mut self, at_offset: u64) -> Self {
         self.inject_read_error_at = Some(at_offset);
         self
     }
 
+    #[allow(dead_code)]
     /// Return the underlying data buffer for verification.
     pub fn data(&self) -> &[u8] {
         &self.data
     }
 
+    #[allow(dead_code)]
     /// Check if a byte range is entirely filled with the given value.
     pub fn is_filled_with(&self, value: u8) -> bool {
         self.data.iter().all(|&b| b == value)
     }
 
+    #[allow(dead_code)]
     /// Check if a byte range is entirely zeros.
     pub fn is_zeroed(&self) -> bool {
         self.is_filled_with(0)
     }
 
+    #[allow(dead_code)]
     /// Get the total number of write operations.
     pub fn write_count(&self) -> u64 {
         self.write_count
     }
 
+    #[allow(dead_code)]
     /// Get the total number of read operations.
     pub fn read_count(&self) -> u64 {
         self.read_count
@@ -89,7 +99,7 @@ impl RawDeviceIo for MockDevice {
         if let Some(err_offset) = self.inject_write_error_at {
             if offset == err_offset {
                 return Err(drivewipe_core::error::DriveWipeError::IoGeneric(
-                    std::io::Error::new(std::io::ErrorKind::Other, "injected write error"),
+                    std::io::Error::other("injected write error"),
                 ));
             }
         }
@@ -106,7 +116,7 @@ impl RawDeviceIo for MockDevice {
         if let Some(err_offset) = self.inject_read_error_at {
             if offset == err_offset {
                 return Err(drivewipe_core::error::DriveWipeError::IoGeneric(
-                    std::io::Error::new(std::io::ErrorKind::Other, "injected read error"),
+                    std::io::Error::other("injected read error"),
                 ));
             }
         }
@@ -132,6 +142,7 @@ impl RawDeviceIo for MockDevice {
     }
 }
 
+#[allow(dead_code)]
 /// Create a test DriveInfo with sensible defaults.
 pub fn test_drive_info(capacity: u64) -> DriveInfo {
     DriveInfo {
@@ -156,6 +167,7 @@ pub fn test_drive_info(capacity: u64) -> DriveInfo {
     }
 }
 
+#[allow(dead_code)]
 /// Create a test DriveInfo that resembles an HDD.
 pub fn test_hdd_info(capacity: u64) -> DriveInfo {
     let mut info = test_drive_info(capacity);
@@ -166,6 +178,7 @@ pub fn test_hdd_info(capacity: u64) -> DriveInfo {
     info
 }
 
+#[allow(dead_code)]
 /// Create a test DriveInfo that resembles an NVMe drive.
 pub fn test_nvme_info(capacity: u64) -> DriveInfo {
     let mut info = test_drive_info(capacity);

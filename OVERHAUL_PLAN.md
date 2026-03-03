@@ -4,6 +4,30 @@
 >
 > **Scope**: This plan covers the full transformation of DriveWipe from a secure wipe tool into a comprehensive drive management, forensics, and sanitization platform.
 
+## Implementation Status Summary
+
+> **Last verified: March 2026.** Status checked against actual codebase.
+
+| # | Feature | Phase | Status |
+|---|---|---|---|
+| 1 | Drive health system | Phase 1 | ✅ Module exists (`health/` — 6 files: smart, nvme, benchmark, snapshot, diff) |
+| 2 | Custom high-security wipe ("DriveWipe Secure") | Phase 1 | ✅ Implemented (4 variants in wipe registry) |
+| 3 | Drive profile system | Phase 1 | ✅ Module exists (`profile/` — database, matcher, mod) |
+| 4 | Time estimate overhaul | Phase 1 | ✅ Module exists (`time_estimate/` — EMA smoothing) |
+| 5 | TUI overhaul | Phase 1 | 🔶 Partial — core screens done, new feature screens not yet |
+| 6 | Unified audit log expansion | Phase 1 | ✅ Module exists (`audit/` — 2 files) |
+| 7 | Sleep prevention | Phase 1 | ✅ Module exists (`sleep_inhibit/`) |
+| 8 | Keyboard lock mode | Phase 1 | ✅ Module exists (`keyboard_lock/`) |
+| 9 | Desktop notifications | Phase 1 | ✅ Module exists (`notify/`) |
+| 10 | Crate structure evolution | Phase 1 | ✅ All modules created in `drivewipe-core` |
+| 11 | Drive cloning | Phase 2 | ✅ Module exists (`clone/` — block, image, partition_aware) |
+| 12 | Partition manager | Phase 2 | ✅ Module exists (`partition/` — gpt, mbr, ops, filesystem) |
+| 13 | Forensic toolkit | Phase 2 | ✅ Module exists (`forensic/` — entropy, signatures, sampling, export, hidden) |
+| 14 | Documentation overhaul | Phase 3 | 🔶 Partial — README overhauled, user guides not yet |
+| 15 | Build system & installer | Phase 3 | ✅ CI workflows + xtask commands in place |
+| 16 | GUI foundation (iced) | Phase 3 | 🔶 Scaffold only — `drivewipe-gui` crate exists |
+| 17 | Bootable live environment | Phase 3 | ✅ Fully implemented (see LIVE-ENVIRONMENT-PLAN.md) |
+
 ---
 
 ## Phase 1 — Core Enhancements
@@ -472,21 +496,30 @@ Build the foundational GUI application using iced. The goal is to get the archit
 
 ---
 
-### 3.4 Bootable Live Environment
+### 3.4 Bootable Live Environment ✅
 
 Create a bootable USB image that boots a minimal Linux environment straight into DriveWipe, enabling operators to wipe the boot drive (currently refused) and operate on machines without an installed OS.
 
-- [ ] Select and configure a minimal Linux base (Alpine, Tiny Core, or custom initramfs)
-- [ ] Bundle DriveWipe TUI binary and all dependencies into the live image
-- [ ] Auto-launch the DriveWipe TUI on boot (no shell required for basic operation, shell accessible for advanced users)
-- [ ] Include necessary kernel modules for drive access (SATA, NVMe, USB mass storage, SCSI)
-- [ ] Include firmware blobs needed for common hardware (NVMe controllers, USB host controllers)
-- [ ] Support both UEFI and legacy BIOS boot
-- [ ] Support writing the image to USB drives (provide a tool or instructions)
-- [ ] Include network support (optional, for sending reports or notifications)
-- [ ] Keep the image as small as possible (target: under 200 MB)
-- [ ] Document the bootable image creation process for contributors who want to customize it
-- [ ] Add build automation for generating the bootable image (script or xtask command)
+> **Status**: Fully implemented. See [LIVE-ENVIRONMENT-PLAN.md](LIVE-ENVIRONMENT-PLAN.md) for details.
+
+- [x] Select and configure a minimal Linux base (Alpine, Tiny Core, or custom initramfs)
+- [x] Bundle DriveWipe TUI binary and all dependencies into the live image
+- [x] Auto-launch the DriveWipe TUI on boot (no shell required for basic operation, shell accessible for advanced users)
+- [x] Include necessary kernel modules for drive access (SATA, NVMe, USB mass storage, SCSI)
+- [x] Include firmware blobs needed for common hardware (NVMe controllers, USB host controllers)
+- [x] Support both UEFI and legacy BIOS boot
+- [x] Support writing the image to USB drives (provide a tool or instructions)
+- [x] Include network support (optional, for sending reports or notifications)
+- [x] Keep the image as small as possible (target: under 200 MB)
+- [x] Document the bootable image creation process for contributors who want to customize it
+- [x] Add build automation for generating the bootable image (script or xtask command)
+
+Additional items implemented beyond original plan:
+- [x] Custom kernel module for direct ATA/NVMe passthrough, HPA/DCO manipulation, DMA I/O
+- [x] PXE network boot infrastructure (dnsmasq, iPXE menu with Normal/Safe/Serial modes)
+- [x] 4 new TUI screens with full interactive handlers (Live Dashboard, HPA/DCO Manager, ATA Security, Kernel Status)
+- [x] `drivewipe-live` Rust crate with capabilities probing and SG_IO fallbacks
+- [x] GitHub Actions live ISO build job with release categorization
 
 ---
 
@@ -532,22 +565,22 @@ A dedicated section covering how all new features should be tested.
 
 ## Summary Checklist (Quick Reference)
 
-| #  | Feature                                                              | Phase   |
-|----|----------------------------------------------------------------------|---------|
-| 1  | Drive health system (SMART, benchmarks, diff reports)                | Phase 1 |
-| 2  | Custom high-security wipe method ("DriveWipe Secure")                | Phase 1 |
-| 3  | Drive profile system (auto-detect, community-contributed)            | Phase 1 |
-| 4  | Time estimate full overhaul                                          | Phase 1 |
-| 5  | TUI overhaul (framework research + all new screens)                  | Phase 1 |
-| 6  | Unified audit log expansion (typed events for all operations)        | Phase 1 |
-| 7  | Sleep prevention / keep-alive (OS-native)                            | Phase 1 |
-| 8  | Kitty Cat Keyboard Mode (keyboard lock)                              | Phase 1 |
-| 9  | Desktop notification system (OS-native)                              | Phase 1 |
-| 10 | Crate structure evolution (new core modules)                         | Phase 1 |
-| 11 | Drive cloning (block-level + partition-aware, compressed, encrypted) | Phase 2 |
-| 12 | General partition manager (GPT/MBR, max filesystem coverage)         | Phase 2 |
-| 13 | Forensic drive evaluation toolkit (full analysis + formal reports)   | Phase 2 |
-| 14 | Documentation overhaul (user guides + API docs + doc site)           | Phase 3 |
-| 15 | Build system & installer (smart script + GitHub releases)            | Phase 3 |
-| 16 | GUI foundation (iced, modular, extensible)                           | Phase 3 |
-| 17 | Bootable live USB environment                                        | Phase 3 |
+| #  | Feature                                                              | Phase   | Status |
+|----|----------------------------------------------------------------------|---------|--------|
+| 1  | Drive health system (SMART, benchmarks, diff reports)                | Phase 1 | ✅ |
+| 2  | Custom high-security wipe method ("DriveWipe Secure")                | Phase 1 | ✅ |
+| 3  | Drive profile system (auto-detect, community-contributed)            | Phase 1 | ✅ |
+| 4  | Time estimate full overhaul                                          | Phase 1 | ✅ |
+| 5  | TUI overhaul (framework research + all new screens)                  | Phase 1 | 🔶 |
+| 6  | Unified audit log expansion (typed events for all operations)        | Phase 1 | ✅ |
+| 7  | Sleep prevention / keep-alive (OS-native)                            | Phase 1 | ✅ |
+| 8  | Kitty Cat Keyboard Mode (keyboard lock)                              | Phase 1 | ✅ |
+| 9  | Desktop notification system (OS-native)                              | Phase 1 | ✅ |
+| 10 | Crate structure evolution (new core modules)                         | Phase 1 | ✅ |
+| 11 | Drive cloning (block-level + partition-aware, compressed, encrypted) | Phase 2 | ✅ |
+| 12 | General partition manager (GPT/MBR, max filesystem coverage)         | Phase 2 | ✅ |
+| 13 | Forensic drive evaluation toolkit (full analysis + formal reports)   | Phase 2 | ✅ |
+| 14 | Documentation overhaul (user guides + API docs + doc site)           | Phase 3 | 🔶 |
+| 15 | Build system & installer (smart script + GitHub releases)            | Phase 3 | ✅ |
+| 16 | GUI foundation (iced, modular, extensible)                           | Phase 3 | 🔶 |
+| 17 | Bootable live USB environment                                        | Phase 3 | ✅ |

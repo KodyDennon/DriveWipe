@@ -7,9 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [1.0.0] - 2026-03-02
+## [1.1.0] - 2026-03-02
 
-DriveWipe 1.0.0 is a major release that transforms the project from a wipe-only tool into a comprehensive drive management, forensics, and sanitization platform. This release adds 10 new core modules, expands the CLI with 5 new subcommands, adds 7 new TUI screens, delivers a full graphical interface, and includes build tooling for bootable live USB images.
+DriveWipe 1.1.0 is a major release that transforms the project from a wipe-only tool into a comprehensive drive management, forensics, and sanitization platform. This release adds 10 new core modules, expands the CLI with 5 new subcommands, adds 7 new TUI screens, delivers a full graphical interface, and includes build tooling for bootable live USB images.
 
 ### Added
 
@@ -190,7 +190,7 @@ Initial release of DriveWipe.
 - GitHub Actions CI (build, test, clippy, fmt, docs, security audit) across Linux, macOS, and Windows.
 
 [Unreleased]: https://github.com/KodyDennon/DriveWipe/compare/v1.0.0...HEAD
-[1.0.0]: https://github.com/KodyDennon/DriveWipe/compare/v0.1.5...v1.0.0
+[1.1.0]: https://github.com/KodyDennon/DriveWipe/compare/v0.1.5...v1.1.0
 [0.1.5]: https://github.com/KodyDennon/DriveWipe/compare/v0.1.4...v0.1.5
 [0.1.4]: https://github.com/KodyDennon/DriveWipe/compare/v0.1.3...v0.1.4
 [0.1.3]: https://github.com/KodyDennon/DriveWipe/compare/v0.1.2...v0.1.3

@@ -13,6 +13,15 @@ pub mod partition_screen;
 pub mod settings_screen;
 pub mod wipe_dashboard;
 
+#[cfg(feature = "live")]
+pub mod ata_security_screen;
+#[cfg(feature = "live")]
+pub mod hpa_dco_screen;
+#[cfg(feature = "live")]
+pub mod kernel_status_screen;
+#[cfg(feature = "live")]
+pub mod live_dashboard;
+
 use ratatui::prelude::*;
 use ratatui::widgets::{Block, Borders, Clear, Paragraph, Wrap};
 
@@ -46,6 +55,14 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
         AppScreen::PartitionManager => partition_screen::draw(frame, app),
         AppScreen::ForensicAnalysis => forensic_screen::draw(frame, app),
         AppScreen::Settings => settings_screen::draw(frame, app),
+        #[cfg(feature = "live")]
+        AppScreen::LiveDashboard => live_dashboard::draw(frame, app),
+        #[cfg(feature = "live")]
+        AppScreen::HpaDcoManager => hpa_dco_screen::draw(frame, app),
+        #[cfg(feature = "live")]
+        AppScreen::AtaSecurityManager => ata_security_screen::draw(frame, app),
+        #[cfg(feature = "live")]
+        AppScreen::KernelModuleStatus => kernel_status_screen::draw(frame, app),
     }
 
     // Draw quit confirmation overlay if active.

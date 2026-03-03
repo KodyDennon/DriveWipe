@@ -1,0 +1,13 @@
+# SPDX-License-Identifier: GPL-2.0
+#
+# DriveWipe kernel module build configuration
+
+obj-m := drivewipe.o
+
+drivewipe-y := drivewipe_main.o \
+               drivewipe_ata.o  \
+               drivewipe_nvme.o \
+               drivewipe_hpa.o  \
+               drivewipe_dma.o
+
+ccflags-y := -I$(src)

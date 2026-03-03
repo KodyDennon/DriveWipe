@@ -57,24 +57,20 @@ pub fn run(
         .context("Failed to open target device")?;
 
     let result = match clone_mode {
-        CloneMode::Block => {
-            drivewipe_core::clone::block::clone_block(
-                source_device.as_mut(),
-                target_device.as_mut(),
-                &clone_config,
-                &progress_tx,
-                cancel_token,
-            )
-        }
-        CloneMode::Partition => {
-            drivewipe_core::clone::partition_aware::clone_partition_aware(
-                source_device.as_mut(),
-                target_device.as_mut(),
-                &clone_config,
-                &progress_tx,
-                cancel_token,
-            )
-        }
+        CloneMode::Block => drivewipe_core::clone::block::clone_block(
+            source_device.as_mut(),
+            target_device.as_mut(),
+            &clone_config,
+            &progress_tx,
+            cancel_token,
+        ),
+        CloneMode::Partition => drivewipe_core::clone::partition_aware::clone_partition_aware(
+            source_device.as_mut(),
+            target_device.as_mut(),
+            &clone_config,
+            &progress_tx,
+            cancel_token,
+        ),
     };
 
     // Drain progress events
@@ -84,11 +80,17 @@ pub fn run(
     match result {
         Ok(result) => {
             println!("\nClone completed successfully!");
-            println!("  Bytes copied: {}", drivewipe_core::format_bytes(result.bytes_copied));
+            println!(
+                "  Bytes copied: {}",
+                drivewipe_core::format_bytes(result.bytes_copied)
+            );
             println!("  Duration: {:.1}s", result.duration_secs);
             println!("  Throughput: {:.1} MiB/s", result.throughput_mbps);
             if let Some(passed) = result.verification_passed {
-                println!("  Verification: {}", if passed { "PASSED" } else { "FAILED" });
+                println!(
+                    "  Verification: {}",
+                    if passed { "PASSED" } else { "FAILED" }
+                );
             }
             Ok(())
         }
