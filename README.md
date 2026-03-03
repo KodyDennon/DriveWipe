@@ -297,8 +297,8 @@ DriveWipe/
 # Build the live image
 cargo xtask live-build
 
-# Write to USB (replace v1.1.0 and /dev/sdX with your version and device)
-sudo dd if=drivewipe-live-v1.1.0.iso of=/dev/sdX bs=4M status=progress
+# Write to USB (replace v1.1.1 and /dev/sdX with your version and device)
+sudo dd if=drivewipe-live-v1.1.1.iso of=/dev/sdX bs=4M status=progress
 ```
 
 ### PXE Network Boot
@@ -306,8 +306,8 @@ sudo dd if=drivewipe-live-v1.1.0.iso of=/dev/sdX bs=4M status=progress
 DriveWipe Live can be network-booted for wiping entire racks. The PXE artifact (`drivewipe-live-[VERSION]-pxe.tar.gz`) contains everything needed to seed a TFTP/HTTP server.
 
 ```bash
-# Extract PXE artifacts
-tar xzf drivewipe-live-v1.1.0-pxe.tar.gz -C /var/lib/tftpboot/
+# Extract PXE artifacts from a built image
+tar -xzvf DriveWipe-v1.1.1-Live-PXE.tar.gz -C /var/lib/tftpboot/
 
 # Configure dnsmasq with the included config
 sudo cp /var/lib/tftpboot/dnsmasq.conf /etc/dnsmasq.d/drivewipe.conf
@@ -366,15 +366,15 @@ pattern_type = "zero"
 
 DriveWipe includes multiple safety mechanisms:
 
-1. **Boot drive detection** — refuses to wipe the drive the OS is running from
-2. **Multi-step confirmation** — shows drive details, requires typing device path, 3-second countdown
-3. **SSD software wipe warning** — recommends firmware erase for SSDs (wear leveling makes software overwrite unreliable)
-4. **USB bridge warning** — firmware commands may fail through USB adapters
-5. **ATA frozen warning** — detects frozen security state, suggests suspend/resume (automatic in live mode)
-6. **HPA/DCO detection** — warns about hidden areas unreachable by software overwrite; live mode can remove them
-7. **Ctrl+C handling** — graceful interruption with state save for resume
-8. **Keyboard lock mode** — prevents accidental keystrokes during operations
-9. **Sleep prevention** — keeps system awake during long operations
+1.  **Boot drive detection** — refuses to wipe the drive the OS is running from
+2.  **Multi-step confirmation** — shows drive details, requires typing device path, 3-second countdown
+3.  **SSD software wipe warning** — recommends firmware erase for SSDs (wear leveling makes software overwrite unreliable)
+4.  **USB bridge warning** — firmware commands may fail through USB adapters
+5.  **ATA frozen warning** — detects frozen security state, suggests suspend/resume (automatic in live mode)
+6.  **HPA/DCO detection** — warns about hidden areas unreachable by software overwrite; live mode can remove them
+7.  **Ctrl+C handling** — graceful interruption with state save for resume
+8.  **Keyboard lock mode** — prevents accidental keystrokes during operations
+9.  **Sleep prevention** — keeps system awake during long operations
 10. **Pre-wipe health check** — optional automatic SMART check before wiping
 
 ---

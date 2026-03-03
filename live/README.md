@@ -83,9 +83,16 @@ The custom kernel module (`kernel/drivewipe/`) provides:
 
 Falls back to SG_IO userspace commands when the module is unavailable.
 
+## Available Artifacts
+
+| Artifact | Filename | Description |
+|---|---|---|
+| **ISO Image** | `drivewipe-live-v1.1.1.iso` | Write to USB with Rufus or `dd`. |
+| **PXE Network** | `drivewipe-live-v1.1.1-pxe.tar.gz` | Dissected artifacts for network booting. |
+
 ## PXE Network Boot
 
-For wiping entire racks without USB drives, use the `drivewipe-live-[VERSION]-pxe.tar.gz` archive. This provides a turnkey boot environment:
+For wiping entire racks without USB drives, use the `drivewipe-live-v1.1.1-pxe.tar.gz` archive. This provides a turnkey boot environment:
 
 1. **Extract** to your TFTP root (e.g., `/var/lib/tftpboot`).
 2. **Configure** your DHCP/TFTP server using the included `dnsmasq.conf`.

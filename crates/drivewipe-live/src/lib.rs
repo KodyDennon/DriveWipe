@@ -1,3 +1,4 @@
+#![cfg(target_os = "linux")]
 //! DriveWipe Live Environment Capability Crate
 //!
 //! This crate provides enhanced hardware interaction capabilities specifically

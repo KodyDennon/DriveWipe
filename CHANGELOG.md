@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+1.1.1
+## [1.1.1] - 2026-03-02
+
+### Fixed
+- **Windows/macOS Compilation** — Gated Unix-specific `drivewipe-live` modules to fix workspace compilation on non-Linux platforms.
+- **CI Dependencies** — Added missing system libraries to GitHub Actions for GUI builds.
+- **Artifact Synchronization** — Fixed path mismatches in release automation for ISO and PXE assets.
 
 ## [1.1.0] - 2026-03-02
 
