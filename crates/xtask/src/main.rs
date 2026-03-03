@@ -1,3 +1,5 @@
+mod release;
+
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 use std::collections::HashMap;
@@ -17,6 +19,8 @@ struct Cli {
 enum Commands {
     /// Bumps crate versions based on git history and LOC
     Bump,
+    /// Interactive release wizard — build, tag, and publish releases
+    Release,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -46,6 +50,7 @@ fn main() -> Result<()> {
 
     match cli.command {
         Commands::Bump => bump_versions()?,
+        Commands::Release => release::run()?,
     }
 
     Ok(())

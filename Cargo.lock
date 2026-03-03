@@ -6463,6 +6463,9 @@ version = "1.0.0"
 dependencies = [
  "anyhow",
  "clap",
+ "console 0.15.11",
+ "dialoguer",
+ "indicatif",
  "regex",
  "serde",
  "serde_json",

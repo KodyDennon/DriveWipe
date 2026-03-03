@@ -291,6 +291,12 @@ Best platform support. All software and firmware wipe methods fully operational.
 
 Software wipe methods fully operational. ATA Secure Erase is not supported (macOS lacks a reliable ATA passthrough). NVMe commands require `nvme-cli` (install with `brew install nvme-cli`). TCG Opal is not supported (no kernel SED driver). Sleep prevention via IOPMAssertionCreateWithName. Requires root privileges.
 
+**Gatekeeper:** If macOS shows *"drivewipe-gui can't be opened because Apple cannot check it for malicious software"*, remove the quarantine attribute:
+
+```bash
+xattr -dr com.apple.quarantine drivewipe-gui
+```
+
 ### Windows
 
 Full support for software wipe methods, drive enumeration, and device I/O using `CreateFileW` with `FILE_FLAG_NO_BUFFERING | FILE_FLAG_WRITE_THROUGH`. ATA Secure Erase uses `IOCTL_ATA_PASS_THROUGH` with `ATA_PASS_THROUGH_EX`. NVMe commands use `IOCTL_STORAGE_PROTOCOL_COMMAND`. Sleep prevention via SetThreadExecutionState. Requires Administrator privileges.
