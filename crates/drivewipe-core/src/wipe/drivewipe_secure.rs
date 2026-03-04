@@ -1,5 +1,6 @@
 //! DriveWipe Secure wipe methods — optimized multi-stage methods for each drive type.
 
+use async_trait::async_trait;
 use crossbeam_channel::Sender;
 use uuid::Uuid;
 
@@ -18,6 +19,7 @@ fn boxed<P: PatternGenerator + Send + 'static>(p: P) -> Box<dyn PatternGenerator
 /// HDD-optimized secure wipe: multi-pass patterns → verify.
 pub struct DriveWipeSecureHdd;
 
+#[async_trait]
 impl WipeMethod for DriveWipeSecureHdd {
     fn id(&self) -> &str {
         "drivewipe-secure-hdd"
@@ -48,6 +50,7 @@ impl WipeMethod for DriveWipeSecureHdd {
 /// SATA SSD-optimized: overwrite → TRIM → overwrite → ATA Secure Erase → verify.
 pub struct DriveWipeSecureSataSsd;
 
+#[async_trait]
 impl WipeMethod for DriveWipeSecureSataSsd {
     fn id(&self) -> &str {
         "drivewipe-secure-sata-ssd"
@@ -72,7 +75,7 @@ impl WipeMethod for DriveWipeSecureSataSsd {
         true
     }
 
-    fn execute_firmware(
+    async fn execute_firmware(
         &self,
         drive: &DriveInfo,
         session_id: Uuid,
@@ -99,6 +102,7 @@ impl WipeMethod for DriveWipeSecureSataSsd {
 /// NVMe-optimized: overwrite → deallocate → NVMe Format/Sanitize → overwrite → verify.
 pub struct DriveWipeSecureNvme;
 
+#[async_trait]
 impl WipeMethod for DriveWipeSecureNvme {
     fn id(&self) -> &str {
         "drivewipe-secure-nvme"
@@ -129,6 +133,7 @@ impl WipeMethod for DriveWipeSecureNvme {
 /// USB-optimized: multi-pass overwrite + verify (limited by USB controller).
 pub struct DriveWipeSecureUsb;
 
+#[async_trait]
 impl WipeMethod for DriveWipeSecureUsb {
     fn id(&self) -> &str {
         "drivewipe-secure-usb"

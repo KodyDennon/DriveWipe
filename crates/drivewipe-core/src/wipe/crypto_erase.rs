@@ -6,6 +6,7 @@
 //! - **Windows:** Returns `PlatformNotSupported` (deferred; would use
 //!   `IOCTL_SCSI_MINIPORT`)
 
+use async_trait::async_trait;
 use crossbeam_channel::Sender;
 
 use crate::error::{DriveWipeError, Result};
@@ -17,6 +18,7 @@ use super::firmware::FirmwareWipe;
 /// TCG Opal crypto erase — destroys the encryption key on a self-encrypting drive (SED).
 pub struct TcgOpalCryptoErase;
 
+#[async_trait]
 impl FirmwareWipe for TcgOpalCryptoErase {
     fn id(&self) -> &str {
         "tcg-opal"
@@ -35,39 +37,43 @@ impl FirmwareWipe for TcgOpalCryptoErase {
         drive.is_sed
     }
 
-    fn execute(
+    async fn execute(
         &self,
         drive: &DriveInfo,
         session_id: uuid::Uuid,
         progress_tx: &Sender<ProgressEvent>,
     ) -> Result<()> {
-        let _ = progress_tx.send(ProgressEvent::FirmwareEraseStarted {
-            session_id,
-            method_name: "TCG Opal Crypto Erase".to_string(),
-        });
+        let drive = drive.clone();
+        let progress_tx = progress_tx.clone();
+        tokio::task::spawn_blocking(move || {
+            let _ = progress_tx.send(ProgressEvent::FirmwareEraseStarted {
+                session_id,
+                method_name: "TCG Opal Crypto Erase".to_string(),
+            });
 
-        #[cfg(target_os = "linux")]
-        {
-            linux_opal::tcg_opal_erase_linux(drive, session_id, progress_tx)
-        }
+            #[cfg(target_os = "linux")]
+            {
+                linux_opal::tcg_opal_erase_linux(&drive, session_id, &progress_tx)
+            }
 
-        #[cfg(target_os = "macos")]
-        {
-            let _ = (drive, session_id, progress_tx);
-            Err(DriveWipeError::PlatformNotSupported(
-                "TCG Opal crypto erase is not supported on macOS (no kernel SED driver)".into(),
-            ))
-        }
+            #[cfg(target_os = "macos")]
+            {
+                let _ = (drive, session_id, progress_tx);
+                Err(DriveWipeError::PlatformNotSupported(
+                    "TCG Opal crypto erase is not supported on macOS (no kernel SED driver)".into(),
+                ))
+            }
 
-        #[cfg(target_os = "windows")]
-        {
-            let _ = (drive, session_id, progress_tx);
-            Err(DriveWipeError::PlatformNotSupported(
-                "TCG Opal crypto erase on Windows is not yet implemented \
-                 (requires IOCTL_SCSI_MINIPORT with TCG Storage commands)"
-                    .into(),
-            ))
-        }
+            #[cfg(target_os = "windows")]
+            {
+                let _ = (drive, session_id, progress_tx);
+                Err(DriveWipeError::PlatformNotSupported(
+                    "TCG Opal crypto erase on Windows is not yet implemented \
+                     (requires IOCTL_SCSI_MINIPORT with TCG Storage commands)"
+                        .into(),
+                ))
+            }
+        }).await.map_err(|e| DriveWipeError::IoGeneric(std::io::Error::new(std::io::ErrorKind::Other, e.to_string())))?
     }
 }
 

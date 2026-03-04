@@ -5,25 +5,27 @@
 //! enumerate drives on macOS without requiring IOKit bindings.
 
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use tokio::process::Command;
 
 use crate::error::{DriveWipeError, Result};
 use crate::types::{AtaSecurityState, DriveInfo, DriveType, HiddenAreaInfo, Transport};
 
 use super::DriveEnumerator;
 use super::info::detect_boot_drive;
+use async_trait::async_trait;
 
 /// macOS drive enumerator backed by the `diskutil` command-line tool.
 pub struct MacosDriveEnumerator;
 
+#[async_trait]
 impl DriveEnumerator for MacosDriveEnumerator {
-    fn enumerate(&self) -> Result<Vec<DriveInfo>> {
-        let disk_names = list_whole_disks()?;
+    async fn enumerate(&self) -> Result<Vec<DriveInfo>> {
+        let disk_names = list_whole_disks().await?;
         let mut drives = Vec::new();
 
         for disk_name in &disk_names {
             let dev_path = PathBuf::from(format!("/dev/{disk_name}"));
-            match build_drive_info_from_diskutil(disk_name, &dev_path) {
+            match build_drive_info_from_diskutil(disk_name, &dev_path).await {
                 Ok(info) => drives.push(info),
                 Err(e) => {
                     log::warn!("Skipping {disk_name}: {e}");
@@ -34,8 +36,8 @@ impl DriveEnumerator for MacosDriveEnumerator {
         Ok(drives)
     }
 
-    fn inspect(&self, path: &Path) -> Result<DriveInfo> {
-        if !path.exists() {
+    async fn inspect(&self, path: &Path) -> Result<DriveInfo> {
+        if !tokio::fs::try_exists(path).await.unwrap_or(false) {
             return Err(DriveWipeError::DeviceNotFound(path.to_path_buf()));
         }
 
@@ -52,15 +54,16 @@ impl DriveEnumerator for MacosDriveEnumerator {
             name.to_string()
         };
 
-        build_drive_info_from_diskutil(&disk_name, path)
+        build_drive_info_from_diskutil(&disk_name, path).await
     }
 }
 
 /// List whole (non-partition) disk identifiers by parsing `diskutil list`.
-fn list_whole_disks() -> Result<Vec<String>> {
+async fn list_whole_disks() -> Result<Vec<String>> {
     let output = Command::new("diskutil")
         .args(["list", "-plist"])
         .output()
+        .await
         .map_err(DriveWipeError::IoGeneric)?;
 
     if !output.status.success() {
@@ -80,10 +83,11 @@ fn list_whole_disks() -> Result<Vec<String>> {
 }
 
 /// Build a [`DriveInfo`] for the given disk by running `diskutil info -plist`.
-fn build_drive_info_from_diskutil(disk_name: &str, dev_path: &Path) -> Result<DriveInfo> {
+async fn build_drive_info_from_diskutil(disk_name: &str, dev_path: &Path) -> Result<DriveInfo> {
     let output = Command::new("diskutil")
         .args(["info", "-plist", disk_name])
         .output()
+        .await
         .map_err(DriveWipeError::IoGeneric)?;
 
     if !output.status.success() {
@@ -137,7 +141,7 @@ fn build_drive_info_from_diskutil(disk_name: &str, dev_path: &Path) -> Result<Dr
         .is_some_and(|v| v == "Yes" || v == "TRUE" || v == "true");
 
     // Count partitions by listing disk partitions.
-    let partition_count = count_partitions_macos(disk_name);
+    let partition_count = count_partitions_macos(disk_name).await;
 
     // Use the raw device path for best I/O performance.
     let raw_path = PathBuf::from(format!("/dev/r{disk_name}"));
@@ -165,8 +169,8 @@ fn build_drive_info_from_diskutil(disk_name: &str, dev_path: &Path) -> Result<Dr
 }
 
 /// Count partitions for a disk by listing its slices.
-fn count_partitions_macos(disk_name: &str) -> u32 {
-    let output = Command::new("diskutil").args(["list", disk_name]).output();
+async fn count_partitions_macos(disk_name: &str) -> u32 {
+    let output = Command::new("diskutil").args(["list", disk_name]).output().await;
 
     let Ok(output) = output else {
         return 0;

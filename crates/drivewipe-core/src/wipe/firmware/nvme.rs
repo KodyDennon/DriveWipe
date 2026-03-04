@@ -5,6 +5,7 @@
 //! - **macOS:** Shells out to `nvme-cli` if installed
 //! - **Windows:** `IOCTL_STORAGE_PROTOCOL_COMMAND` with NVMe admin passthrough
 
+use async_trait::async_trait;
 use crossbeam_channel::Sender;
 use uuid::Uuid;
 
@@ -45,6 +46,7 @@ const SANITIZE_LOG_PAGE_ID: u32 = 0x81;
 /// The controller determines the mechanism (pattern overwrite, reset, etc.).
 pub struct NvmeFormatUserData;
 
+#[async_trait]
 impl FirmwareWipe for NvmeFormatUserData {
     fn id(&self) -> &str {
         "nvme-format-user"
@@ -62,13 +64,17 @@ impl FirmwareWipe for NvmeFormatUserData {
         drive.transport == Transport::Nvme
     }
 
-    fn execute(
+    async fn execute(
         &self,
         drive: &DriveInfo,
         session_id: Uuid,
         progress_tx: &Sender<ProgressEvent>,
     ) -> Result<()> {
-        nvme_format_impl(drive, session_id, progress_tx, 1) // SES=1
+        let drive = drive.clone();
+        let progress_tx = progress_tx.clone();
+        tokio::task::spawn_blocking(move || {
+            nvme_format_impl(&drive, session_id, &progress_tx, 1) // SES=1
+        }).await.map_err(|e| DriveWipeError::IoGeneric(std::io::Error::new(std::io::ErrorKind::Other, e.to_string())))?
     }
 }
 
@@ -81,6 +87,7 @@ impl FirmwareWipe for NvmeFormatUserData {
 /// drives that support it.
 pub struct NvmeFormatCrypto;
 
+#[async_trait]
 impl FirmwareWipe for NvmeFormatCrypto {
     fn id(&self) -> &str {
         "nvme-format-crypto"
@@ -98,13 +105,17 @@ impl FirmwareWipe for NvmeFormatCrypto {
         drive.transport == Transport::Nvme
     }
 
-    fn execute(
+    async fn execute(
         &self,
         drive: &DriveInfo,
         session_id: Uuid,
         progress_tx: &Sender<ProgressEvent>,
     ) -> Result<()> {
-        nvme_format_impl(drive, session_id, progress_tx, 2) // SES=2
+        let drive = drive.clone();
+        let progress_tx = progress_tx.clone();
+        tokio::task::spawn_blocking(move || {
+            nvme_format_impl(&drive, session_id, &progress_tx, 2) // SES=2
+        }).await.map_err(|e| DriveWipeError::IoGeneric(std::io::Error::new(std::io::ErrorKind::Other, e.to_string())))?
     }
 }
 
@@ -113,6 +124,7 @@ impl FirmwareWipe for NvmeFormatCrypto {
 /// NVMe Sanitize command — Block Erase action.
 pub struct NvmeSanitizeBlock;
 
+#[async_trait]
 impl FirmwareWipe for NvmeSanitizeBlock {
     fn id(&self) -> &str {
         "nvme-sanitize-block"
@@ -130,19 +142,23 @@ impl FirmwareWipe for NvmeSanitizeBlock {
         drive.transport == Transport::Nvme
     }
 
-    fn execute(
+    async fn execute(
         &self,
         drive: &DriveInfo,
         session_id: Uuid,
         progress_tx: &Sender<ProgressEvent>,
     ) -> Result<()> {
-        nvme_sanitize_impl(
-            drive,
-            session_id,
-            progress_tx,
-            SANITIZE_ACT_BLOCK_ERASE,
-            None,
-        )
+        let drive = drive.clone();
+        let progress_tx = progress_tx.clone();
+        tokio::task::spawn_blocking(move || {
+            nvme_sanitize_impl(
+                &drive,
+                session_id,
+                &progress_tx,
+                SANITIZE_ACT_BLOCK_ERASE,
+                None,
+            )
+        }).await.map_err(|e| DriveWipeError::IoGeneric(std::io::Error::new(std::io::ErrorKind::Other, e.to_string())))?
     }
 }
 
@@ -151,6 +167,7 @@ impl FirmwareWipe for NvmeSanitizeBlock {
 /// NVMe Sanitize command — Crypto Erase action.
 pub struct NvmeSanitizeCrypto;
 
+#[async_trait]
 impl FirmwareWipe for NvmeSanitizeCrypto {
     fn id(&self) -> &str {
         "nvme-sanitize-crypto"
@@ -168,19 +185,23 @@ impl FirmwareWipe for NvmeSanitizeCrypto {
         drive.transport == Transport::Nvme
     }
 
-    fn execute(
+    async fn execute(
         &self,
         drive: &DriveInfo,
         session_id: Uuid,
         progress_tx: &Sender<ProgressEvent>,
     ) -> Result<()> {
-        nvme_sanitize_impl(
-            drive,
-            session_id,
-            progress_tx,
-            SANITIZE_ACT_CRYPTO_ERASE,
-            None,
-        )
+        let drive = drive.clone();
+        let progress_tx = progress_tx.clone();
+        tokio::task::spawn_blocking(move || {
+            nvme_sanitize_impl(
+                &drive,
+                session_id,
+                &progress_tx,
+                SANITIZE_ACT_CRYPTO_ERASE,
+                None,
+            )
+        }).await.map_err(|e| DriveWipeError::IoGeneric(std::io::Error::new(std::io::ErrorKind::Other, e.to_string())))?
     }
 }
 
@@ -189,6 +210,7 @@ impl FirmwareWipe for NvmeSanitizeCrypto {
 /// NVMe Sanitize command — Overwrite action.
 pub struct NvmeSanitizeOverwrite;
 
+#[async_trait]
 impl FirmwareWipe for NvmeSanitizeOverwrite {
     fn id(&self) -> &str {
         "nvme-sanitize-overwrite"
@@ -206,20 +228,24 @@ impl FirmwareWipe for NvmeSanitizeOverwrite {
         drive.transport == Transport::Nvme
     }
 
-    fn execute(
+    async fn execute(
         &self,
         drive: &DriveInfo,
         session_id: Uuid,
         progress_tx: &Sender<ProgressEvent>,
     ) -> Result<()> {
-        // Use a zero overwrite pattern, 1 pass
-        nvme_sanitize_impl(
-            drive,
-            session_id,
-            progress_tx,
-            SANITIZE_ACT_OVERWRITE,
-            Some(0),
-        )
+        let drive = drive.clone();
+        let progress_tx = progress_tx.clone();
+        tokio::task::spawn_blocking(move || {
+            // Use a zero overwrite pattern, 1 pass
+            nvme_sanitize_impl(
+                &drive,
+                session_id,
+                &progress_tx,
+                SANITIZE_ACT_OVERWRITE,
+                Some(0),
+            )
+        }).await.map_err(|e| DriveWipeError::IoGeneric(std::io::Error::new(std::io::ErrorKind::Other, e.to_string())))?
     }
 }
 

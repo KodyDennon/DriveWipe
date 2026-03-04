@@ -1,3 +1,4 @@
+use async_trait::async_trait;
 use crossbeam_channel::Sender;
 use uuid::Uuid;
 
@@ -53,8 +54,9 @@ impl ZeroVerifier {
     }
 }
 
+#[async_trait]
 impl Verifier for ZeroVerifier {
-    fn verify(
+    async fn verify(
         &self,
         device: &mut dyn RawDeviceIo,
         session_id: Uuid,
@@ -66,22 +68,35 @@ impl Verifier for ZeroVerifier {
 
         let verify_start = std::time::Instant::now();
 
-        // Use aligned buffer for Windows FILE_FLAG_NO_BUFFERING compatibility
-        let mut buf = allocate_aligned_buffer(DEFAULT_BLOCK_SIZE, 4096);
         let mut bytes_verified: u64 = 0;
+
+        // Create a Send-able pointer for spawn_blocking
+        let ptr_parts: [usize; 2] = unsafe { std::mem::transmute(device as *mut dyn RawDeviceIo) };
 
         while bytes_verified < total_bytes {
             let remaining = total_bytes - bytes_verified;
             let chunk_len = (remaining as usize).min(DEFAULT_BLOCK_SIZE);
-            let read_slice = &mut buf[..chunk_len];
+            
+            let pass_offset = bytes_verified;
+            
+            // Perform the read in a blocking task
+            let (read_res, read_data) = tokio::task::spawn_blocking(move || {
+                let device_ref = unsafe { 
+                    let wide_ptr: *mut dyn RawDeviceIo = std::mem::transmute(ptr_parts);
+                    &mut *wide_ptr
+                };
+                let mut temp_buf = vec![0u8; chunk_len];
+                let res = device_ref.read_at(pass_offset, &mut temp_buf);
+                (res, temp_buf)
+            }).await.map_err(|e| DriveWipeError::IoGeneric(std::io::Error::new(std::io::ErrorKind::Other, e.to_string())))?;
 
-            let bytes_read = device.read_at(bytes_verified, read_slice)?;
+            let bytes_read = read_res?;
 
-            if !Self::is_zero(&read_slice[..bytes_read]) {
+            if !Self::is_zero(&read_data[..bytes_read]) {
                 // Find the exact byte offset of the first non-zero value
-                if let Some(local_offset) = Self::first_nonzero_offset(&read_slice[..bytes_read]) {
+                if let Some(local_offset) = Self::first_nonzero_offset(&read_data[..bytes_read]) {
                     let offset = bytes_verified + local_offset as u64;
-                    let actual = read_slice[local_offset];
+                    let actual = read_data[local_offset];
 
                     let _ = progress_tx.send(ProgressEvent::VerificationCompleted {
                         session_id,

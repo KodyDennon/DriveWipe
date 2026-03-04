@@ -6,10 +6,11 @@ use drivewipe_core::config::DriveWipeConfig;
 use drivewipe_core::drive;
 
 /// Run the `partition list` subcommand.
-pub fn list(_config: &DriveWipeConfig, device: &str) -> Result<()> {
+pub async fn list(_config: &DriveWipeConfig, device: &str) -> Result<()> {
     let enumerator = drive::create_enumerator();
     let drive_info = enumerator
         .inspect(&PathBuf::from(device))
+        .await
         .context("Failed to inspect device")?;
 
     println!(
@@ -27,9 +28,10 @@ pub fn list(_config: &DriveWipeConfig, device: &str) -> Result<()> {
     let mut device_io = drivewipe_core::io::open_device(&PathBuf::from(device), false)
         .context("Failed to open device")?;
 
-    let mut buf = vec![0u8; 34 * 512]; // GPT needs at least 34 sectors
-    device_io
-        .read_at(0, &mut buf)
+    let buf = tokio::task::spawn_blocking(move || {
+        let mut b = vec![0u8; 34 * 512]; // GPT needs at least 34 sectors
+        device_io.read_at(0, &mut b).map(|_| b)
+    }).await.map_err(|e| anyhow::anyhow!("Task failed: {}", e))?
         .context("Failed to read partition table")?;
 
     match drivewipe_core::partition::PartitionTable::parse(&buf) {

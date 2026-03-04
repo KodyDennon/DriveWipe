@@ -20,7 +20,7 @@ use crate::progress::WipeProgressDisplay;
 
 /// Execute `drivewipe wipe`.
 #[allow(clippy::too_many_arguments)]
-pub fn run(
+pub async fn run(
     config: &DriveWipeConfig,
     cancel_token: &Arc<CancellationToken>,
     device: &str,
@@ -54,6 +54,7 @@ pub fn run(
     let device_path = Path::new(device);
     let drive_info = enumerator
         .inspect(device_path)
+        .await
         .with_context(|| format!("Failed to inspect device {device}"))?;
 
     // ── Safety checks ───────────────────────────────────────────────────
@@ -158,7 +159,7 @@ pub fn run(
     }
 
     let session = {
-        let method_box = find_and_clone_method_by_id(method_id)
+        let method_box = find_and_clone_method_by_id(method_id).await
             .ok_or_else(|| anyhow::anyhow!("Internal error: method {method_id} not found"))?;
         WipeSession::new(drive_info.clone(), method_box, session_config)
     };
@@ -187,7 +188,7 @@ pub fn run(
     // Spawn a thread to consume progress events and update the display.
     let display_handle = {
         let pd = progress_display.clone();
-        thread::spawn(move || {
+        tokio::task::spawn_blocking(move || {
             while let Ok(event) = progress_rx.recv() {
                 pd.update(&event);
             }
@@ -203,13 +204,14 @@ pub fn run(
         pass_count,
     );
 
-    let result = session.execute(&mut device_io, &progress_tx, cancel_token, resume_state);
+    let wipe_result = session
+        .execute(&mut device_io, &progress_tx, cancel_token, resume_state)
+        .await
+        .context("Wipe operation failed")?;
 
     // Drop the sender so the display thread terminates.
     drop(progress_tx);
-    let _ = display_handle.join();
-
-    let wipe_result = result.context("Wipe operation failed")?;
+    let _ = display_handle.await;
 
     // ── Summary ─────────────────────────────────────────────────────────
     progress_display.finish();
@@ -267,7 +269,7 @@ pub fn run(
 /// that delegates calls back to a fresh registry.  All built-in software
 /// methods are cheap, stateless unit structs so re-creating the registry on
 /// each delegated call is essentially free.
-pub fn find_and_clone_method_by_id(
+pub async fn find_and_clone_method_by_id(
     method_id: &str,
 ) -> Option<Box<dyn drivewipe_core::wipe::WipeMethod>> {
     let proxy = MethodProxy::new(method_id.to_string())?;

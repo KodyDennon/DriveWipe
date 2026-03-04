@@ -5,6 +5,7 @@
 //! - **Windows:** `IOCTL_ATA_PASS_THROUGH` with `ATA_PASS_THROUGH_EX`
 //! - **macOS:** Returns `PlatformNotSupported` (no reliable ATA passthrough)
 
+use async_trait::async_trait;
 use crossbeam_channel::Sender;
 use uuid::Uuid;
 
@@ -47,6 +48,7 @@ mod ata_consts {
 /// in the Disabled or Enabled state (not Frozen or NotSupported).
 pub struct AtaSecureErase;
 
+#[async_trait]
 impl FirmwareWipe for AtaSecureErase {
     fn id(&self) -> &str {
         "ata-erase"
@@ -68,13 +70,17 @@ impl FirmwareWipe for AtaSecureErase {
             )
     }
 
-    fn execute(
+    async fn execute(
         &self,
         drive: &DriveInfo,
         session_id: Uuid,
         progress_tx: &Sender<ProgressEvent>,
     ) -> Result<()> {
-        ata_secure_erase_impl(drive, session_id, progress_tx, false)
+        let drive = drive.clone();
+        let progress_tx = progress_tx.clone();
+        tokio::task::spawn_blocking(move || {
+            ata_secure_erase_impl(&drive, session_id, &progress_tx, false)
+        }).await.map_err(|e| DriveWipeError::IoGeneric(std::io::Error::new(std::io::ErrorKind::Other, e.to_string())))?
     }
 }
 
@@ -87,6 +93,7 @@ impl FirmwareWipe for AtaSecureErase {
 /// cryptographic erase by rotating the internal media encryption key.
 pub struct AtaEnhancedSecureErase;
 
+#[async_trait]
 impl FirmwareWipe for AtaEnhancedSecureErase {
     fn id(&self) -> &str {
         "ata-erase-enhanced"
@@ -108,13 +115,17 @@ impl FirmwareWipe for AtaEnhancedSecureErase {
             )
     }
 
-    fn execute(
+    async fn execute(
         &self,
         drive: &DriveInfo,
         session_id: Uuid,
         progress_tx: &Sender<ProgressEvent>,
     ) -> Result<()> {
-        ata_secure_erase_impl(drive, session_id, progress_tx, true)
+        let drive = drive.clone();
+        let progress_tx = progress_tx.clone();
+        tokio::task::spawn_blocking(move || {
+            ata_secure_erase_impl(&drive, session_id, &progress_tx, true)
+        }).await.map_err(|e| DriveWipeError::IoGeneric(std::io::Error::new(std::io::ErrorKind::Other, e.to_string())))?
     }
 }
 

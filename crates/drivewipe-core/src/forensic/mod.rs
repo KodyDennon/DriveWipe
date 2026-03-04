@@ -69,7 +69,7 @@ impl ForensicSession {
     }
 
     /// Run a full forensic scan according to the configuration.
-    pub fn execute(
+    pub async fn execute(
         &self,
         device: &mut dyn RawDeviceIo,
         device_path: &str,
@@ -94,34 +94,52 @@ impl ForensicSession {
         // Entropy analysis
         if self.config.entropy_analysis && !cancel_token.is_cancelled() {
             log::info!("Running entropy analysis...");
-            match entropy::analyze_entropy(device, self.config.block_size) {
-                Ok(stats) => {
+            let device_ptr = device as *mut dyn RawDeviceIo as usize;
+            let block_size = self.config.block_size;
+            match tokio::task::spawn_blocking(move || {
+                let device_ref = unsafe { &mut *(device_ptr as *mut dyn RawDeviceIo) };
+                entropy::analyze_entropy(device_ref, block_size)
+            }).await.map_err(|e| crate::error::DriveWipeError::IoGeneric(std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))) {
+                Ok(Ok(stats)) => {
                     entropy_stats = Some(stats);
                 }
-                Err(e) => log::warn!("Entropy analysis failed: {}", e),
+                Ok(Err(e)) => log::warn!("Entropy analysis failed: {}", e),
+                Err(e) => log::warn!("Entropy analysis task failed: {}", e),
             }
         }
 
         // Signature scan
         if self.config.signature_scan && !cancel_token.is_cancelled() {
             log::info!("Running signature scan...");
-            match signatures::scan_signatures(device, self.config.block_size) {
-                Ok(hits) => {
+            let device_ptr = device as *mut dyn RawDeviceIo as usize;
+            let block_size = self.config.block_size;
+            match tokio::task::spawn_blocking(move || {
+                let device_ref = unsafe { &mut *(device_ptr as *mut dyn RawDeviceIo) };
+                signatures::scan_signatures(device_ref, block_size)
+            }).await.map_err(|e| crate::error::DriveWipeError::IoGeneric(std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))) {
+                Ok(Ok(hits)) => {
                     total_findings += hits.len() as u32;
                     signature_hits = hits;
                 }
-                Err(e) => log::warn!("Signature scan failed: {}", e),
+                Ok(Err(e)) => log::warn!("Signature scan failed: {}", e),
+                Err(e) => log::warn!("Signature scan task failed: {}", e),
             }
         }
 
         // Statistical sampling
         if self.config.statistical_sampling && !cancel_token.is_cancelled() {
             log::info!("Running statistical sampling...");
-            match sampling::statistical_sample(device, self.config.sample_ratio) {
-                Ok(result) => {
+            let device_ptr = device as *mut dyn RawDeviceIo as usize;
+            let sample_ratio = self.config.sample_ratio;
+            match tokio::task::spawn_blocking(move || {
+                let device_ref = unsafe { &mut *(device_ptr as *mut dyn RawDeviceIo) };
+                sampling::statistical_sample(device_ref, sample_ratio)
+            }).await.map_err(|e| crate::error::DriveWipeError::IoGeneric(std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))) {
+                Ok(Ok(result)) => {
                     sampling_result = Some(result);
                 }
-                Err(e) => log::warn!("Statistical sampling failed: {}", e),
+                Ok(Err(e)) => log::warn!("Statistical sampling failed: {}", e),
+                Err(e) => log::warn!("Statistical sampling task failed: {}", e),
             }
         }
 

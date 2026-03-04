@@ -5,7 +5,7 @@ use drivewipe_core::report::ReportGenerator;
 use drivewipe_core::report::data::WipeReport;
 
 /// Execute `drivewipe report`.
-pub fn run(
+pub async fn run(
     _config: &DriveWipeConfig,
     input: &str,
     format: &str,

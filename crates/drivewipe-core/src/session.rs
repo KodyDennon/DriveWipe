@@ -90,7 +90,7 @@ impl WipeSession {
     /// Pass numbers in the `WipeState` and `PassResult` are 1-indexed for
     /// display purposes, but calls to `WipeMethod::pattern_for_pass()` use
     /// 0-indexed pass numbers as required by that API.
-    pub fn execute(
+    pub async fn execute(
         &self,
         device: &mut dyn RawDeviceIo,
         progress_tx: &Sender<ProgressEvent>,
@@ -184,7 +184,8 @@ impl WipeSession {
 
             let fw_result = self
                 .method
-                .execute_firmware(&self.drive_info, session_id, progress_tx);
+                .execute_firmware(&self.drive_info, session_id, progress_tx)
+                .await;
 
             if let Some(result) = fw_result {
                 let fw_duration = fw_start.elapsed().as_secs_f64();
@@ -372,7 +373,24 @@ impl WipeSession {
                         write_len
                     );
                 }
-                match device.write_at(bytes_written_this_pass, write_buf) {
+
+                // To safely pass `&mut dyn RawDeviceIo` to `spawn_blocking`, we must bypass rustc's
+                // strict pointer rules. A wide pointer consists of two words: data pointer and vtable.
+                // Transmuting it to `[usize; 2]` lets us send it across.
+                let ptr_parts: [usize; 2] = unsafe { std::mem::transmute(device as *mut dyn RawDeviceIo) };
+                
+                let write_buf_vec = write_buf.to_vec();
+                let pass_offset = bytes_written_this_pass;
+                
+                let write_res = tokio::task::spawn_blocking(move || {
+                    let device_ref = unsafe { 
+                        let wide_ptr: *mut dyn RawDeviceIo = std::mem::transmute(ptr_parts);
+                        &mut *wide_ptr
+                    };
+                    device_ref.write_at(pass_offset, &write_buf_vec)
+                }).await.unwrap();
+
+                match write_res {
                     Ok(n) => {
                         if write_count == 1 {
                             log::debug!("[SESSION] First write SUCCESS: wrote {} bytes", n);
@@ -508,7 +526,7 @@ impl WipeSession {
             let passed = if pattern_name.contains("Zero") {
                 // Deterministic zero pattern — use the optimised ZeroVerifier.
                 let verifier = ZeroVerifier;
-                match verifier.verify(device, session_id, progress_tx) {
+                match verifier.verify(device, session_id, progress_tx).await {
                     Ok(result) => result,
                     Err(DriveWipeError::VerificationFailed {
                         offset,
@@ -540,8 +558,22 @@ impl WipeSession {
                 // Use aligned buffer for Windows FILE_FLAG_NO_BUFFERING compatibility
                 let mut sample_buf = allocate_aligned_buffer(DEFAULT_BLOCK_SIZE, 4096);
                 let sample_len = (total_bytes as usize).min(DEFAULT_BLOCK_SIZE);
-                let passed = match device.read_at(0, &mut sample_buf[..sample_len]) {
+                
+                let ptr_parts: [usize; 2] = unsafe { std::mem::transmute(device as *mut dyn RawDeviceIo) };
+                
+                let read_res = tokio::task::spawn_blocking(move || {
+                    let device_ref = unsafe { 
+                        let wide_ptr: *mut dyn RawDeviceIo = std::mem::transmute(ptr_parts);
+                        &mut *wide_ptr
+                    };
+                    let mut temp_buf = vec![0u8; sample_len];
+                    let res = device_ref.read_at(0, &mut temp_buf[..]);
+                    (res, temp_buf)
+                }).await.unwrap();
+
+                let passed = match read_res.0 {
                     Ok(n) => {
+                        sample_buf[..n].copy_from_slice(&read_res.1[..n]);
                         let all_zero = sample_buf[..n].iter().all(|&b| b == 0);
                         if all_zero {
                             let msg = "Random pattern verification: first block is all \
@@ -580,7 +612,7 @@ impl WipeSession {
                 // etc.) — use PatternVerifier with a fresh copy of the pattern.
                 let fresh_pattern = self.method.pattern_for_pass(total_passes - 1);
                 let verifier = PatternVerifier::new(fresh_pattern);
-                match verifier.verify(device, session_id, progress_tx) {
+                match verifier.verify(device, session_id, progress_tx).await {
                     Ok(result) => result,
                     Err(DriveWipeError::VerificationFailed {
                         offset,

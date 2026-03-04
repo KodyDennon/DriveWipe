@@ -78,7 +78,7 @@ fn save_queue(config: &DriveWipeConfig, queue: &WipeQueue) -> Result<()> {
 // ── Commands ────────────────────────────────────────────────────────────────
 
 /// `drivewipe queue add`
-pub fn add(config: &DriveWipeConfig, device: &str, method: &str) -> Result<()> {
+pub async fn add(config: &DriveWipeConfig, device: &str, method: &str) -> Result<()> {
     // Validate that the method exists.
     let registry = drivewipe_core::wipe::WipeMethodRegistry::new();
     if registry.get(method).is_none() {
@@ -115,7 +115,7 @@ pub fn add(config: &DriveWipeConfig, device: &str, method: &str) -> Result<()> {
 }
 
 /// `drivewipe queue start`
-pub fn start(
+pub async fn start(
     config: &DriveWipeConfig,
     cancel_token: &Arc<CancellationToken>,
     parallel: Option<usize>,
@@ -144,9 +144,11 @@ pub fn start(
         max_parallel,
     );
 
-    // Process entries sequentially or in parallel using thread::scope.
+    // Process entries in parallel using tokio tasks and JoinSet.
     // For simplicity we chunk the pending indices and process each chunk
-    // concurrently using std::thread::scope.
+    // concurrently using JoinSet.
+    use tokio::task::JoinSet;
+
     for chunk in pending.chunks(max_parallel) {
         if cancel_token.is_cancelled() {
             // Mark remaining as cancelled.
@@ -163,67 +165,50 @@ pub fn start(
         }
         save_queue(config, &queue)?;
 
-        // Collect the device/method pairs for this chunk.
-        let tasks: Vec<(usize, String, String)> = chunk
-            .iter()
-            .map(|&idx| {
-                let e = &queue.entries[idx];
-                (idx, e.device.clone(), e.method.clone())
-            })
-            .collect();
-
-        // Run each wipe in a scoped thread.
-        let results: Vec<(usize, Result<()>)> = std::thread::scope(|s| {
-            let handles: Vec<_> = tasks
-                .iter()
-                .map(|(idx, device, method)| {
-                    let ct = cancel_token.clone();
-                    let cfg = config.clone();
-                    let dev = device.clone();
-                    let mth = method.clone();
-                    let i = *idx;
-                    s.spawn(move || {
-                        let r = super::wipe::run(
-                            &cfg, &ct, &dev, &mth, true,  // force
-                            true,  // yes_i_know
-                            None,  // verify override
-                            None,  // pdf report
-                            false, // dry_run
-                        );
-                        (i, r)
-                    })
-                })
-                .collect();
-
-            handles
-                .into_iter()
-                .map(|h| match h.join() {
-                    Ok(result) => result,
-                    Err(_) => {
-                        // Thread panicked — return a synthetic failure.
-                        // The index is lost when a panic occurs, so we use
-                        // a sentinel that the caller won't find; the outer
-                        // loop handles missing indices gracefully.
-                        (usize::MAX, Err(anyhow::anyhow!("Wipe thread panicked")))
-                    }
-                })
-                .collect()
-        });
-
-        // Update queue statuses.
-        for (idx, result) in results {
-            queue.entries[idx].status = match result {
-                Ok(()) => QueueEntryStatus::Completed,
-                Err(ref e) => {
-                    eprintln!(
-                        "{} Queue entry {} failed: {e}",
-                        console::style("error:").red().bold(),
-                        queue.entries[idx].device,
-                    );
-                    QueueEntryStatus::Failed
-                }
-            };
+        // Run each wipe in a tokio task using JoinSet.
+        let mut set = JoinSet::new();
+        for &idx in chunk {
+            let entry = &queue.entries[idx];
+            let ct = cancel_token.clone();
+            let cfg = config.clone();
+            let dev = entry.device.clone();
+            let mth = entry.method.clone();
+            
+            set.spawn(async move {
+                let res = super::wipe::run(
+                    &cfg, &ct, &dev, &mth, true,  // force
+                    true,  // yes_i_know
+                    None,  // verify override
+                    None,  // pdf report
+                    false, // dry_run
+                ).await;
+                (idx, res)
+            });
         }
+
+        // Collect results as they finish.
+        while let Some(res) = set.join_next().await {
+            match res {
+                Ok((idx, result)) => {
+                    queue.entries[idx].status = match result {
+                        Ok(()) => QueueEntryStatus::Completed,
+                        Err(ref e) => {
+                            eprintln!(
+                                "{} Queue entry {} failed: {e}",
+                                console::style("error:").red().bold(),
+                                queue.entries[idx].device,
+                            );
+                            QueueEntryStatus::Failed
+                        }
+                    };
+                }
+                Err(e) => {
+                    log::error!("Queue task panicked or failed: {e}");
+                }
+            }
+        }
+        
+        // Save state after each chunk.
         save_queue(config, &queue)?;
     }
 
@@ -253,7 +238,7 @@ pub fn start(
 }
 
 /// `drivewipe queue status`
-pub fn status(config: &DriveWipeConfig) -> Result<()> {
+pub async fn status(config: &DriveWipeConfig) -> Result<()> {
     let queue = load_queue(config)?;
 
     if queue.entries.is_empty() {
@@ -297,7 +282,7 @@ pub fn status(config: &DriveWipeConfig) -> Result<()> {
 }
 
 /// `drivewipe queue cancel`
-pub fn cancel(config: &DriveWipeConfig) -> Result<()> {
+pub async fn cancel(config: &DriveWipeConfig) -> Result<()> {
     let mut queue = load_queue(config)?;
 
     let mut cancelled = 0;

@@ -213,7 +213,8 @@ enum ForensicAction {
 
 // ── Entry point ─────────────────────────────────────────────────────────────
 
-fn main() {
+#[tokio::main]
+async fn main() {
     let cli = Cli::parse();
 
     // Initialise logging. With --verbose we use debug level; otherwise honour
@@ -224,7 +225,7 @@ fn main() {
             .init();
     }
 
-    if let Err(e) = run(cli) {
+    if let Err(e) = run(cli).await {
         let console = console::Term::stderr();
         let _ = console.write_line(&format!("{} {}", console::style("error:").red().bold(), e));
         // Print the full error chain with --verbose / RUST_LOG=debug.
@@ -239,7 +240,7 @@ fn main() {
     }
 }
 
-fn run(cli: Cli) -> Result<()> {
+async fn run(cli: Cli) -> Result<()> {
     // Load configuration.
     let config = if let Some(ref path) = cli.config {
         let contents = std::fs::read_to_string(path)
@@ -282,7 +283,7 @@ fn run(cli: Cli) -> Result<()> {
     }
 
     match cli.command {
-        Commands::List { format } => commands::list::run(&config, &format),
+        Commands::List { format } => commands::list::run(&config, &format).await,
         Commands::Wipe {
             device,
             method,
@@ -301,35 +302,35 @@ fn run(cli: Cli) -> Result<()> {
             verify,
             report_pdf.as_deref(),
             dry_run,
-        ),
+        ).await,
         Commands::Verify { device, pattern } => {
-            commands::verify::run(&config, &cancel_token, &device, &pattern)
+            commands::verify::run(&config, &cancel_token, &device, &pattern).await
         }
-        Commands::Info { device } => commands::info::run(&config, &device),
+        Commands::Info { device } => commands::info::run(&config, &device).await,
         Commands::Report {
             input,
             format,
             output,
-        } => commands::report::run(&config, &input, &format, output.as_deref()),
+        } => commands::report::run(&config, &input, &format, output.as_deref()).await,
         Commands::Queue { action } => match action {
-            QueueAction::Add { device, method } => commands::queue::add(&config, &device, &method),
+            QueueAction::Add { device, method } => commands::queue::add(&config, &device, &method).await,
             QueueAction::Start { parallel } => {
-                commands::queue::start(&config, &cancel_token, parallel)
+                commands::queue::start(&config, &cancel_token, parallel).await
             }
-            QueueAction::Status => commands::queue::status(&config),
-            QueueAction::Cancel => commands::queue::cancel(&config),
+            QueueAction::Status => commands::queue::status(&config).await,
+            QueueAction::Cancel => commands::queue::cancel(&config).await,
         },
         Commands::Resume {
             list,
             session,
             auto,
-        } => commands::resume::run(&config, &cancel_token, list, session.as_deref(), auto),
+        } => commands::resume::run(&config, &cancel_token, list, session.as_deref(), auto).await,
         Commands::Health {
             device,
             save,
             compare,
-        } => commands::health::run(&config, &device, save, compare.as_deref()),
-        Commands::Profile { device } => commands::profile::run(&config, &device),
+        } => commands::health::run(&config, &device, save, compare.as_deref()).await,
+        Commands::Profile { device } => commands::profile::run(&config, &device).await,
         Commands::Clone {
             source,
             target,
@@ -344,16 +345,16 @@ fn run(cli: Cli) -> Result<()> {
             &mode,
             compress,
             encrypt,
-        ),
+        ).await,
         Commands::Partition { action } => match action {
-            PartitionAction::List { device } => commands::partition::list(&config, &device),
+            PartitionAction::List { device } => commands::partition::list(&config, &device).await,
         },
         Commands::Forensic { action } => match action {
             ForensicAction::Scan { device } => {
-                commands::forensic::scan(&config, &cancel_token, &device)
+                commands::forensic::scan(&config, &cancel_token, &device).await
             }
             ForensicAction::Report { device, output } => {
-                commands::forensic::report(&config, &cancel_token, &device, output.as_deref())
+                commands::forensic::report(&config, &cancel_token, &device, output.as_deref()).await
             }
         },
     }

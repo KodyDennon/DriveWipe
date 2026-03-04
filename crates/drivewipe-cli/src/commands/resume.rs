@@ -17,7 +17,7 @@ use drivewipe_core::wipe::WipeMethodRegistry;
 use crate::progress::WipeProgressDisplay;
 
 /// Execute `drivewipe resume`.
-pub fn run(
+pub async fn run(
     config: &DriveWipeConfig,
     cancel_token: &Arc<CancellationToken>,
     list: bool,
@@ -31,11 +31,11 @@ pub fn run(
     }
 
     if let Some(sid) = session_id_str {
-        return resume_session(config, cancel_token, sessions_dir, sid);
+        return resume_session(config, cancel_token, sessions_dir, sid).await;
     }
 
     if auto {
-        return auto_resume(config, cancel_token, sessions_dir);
+        return auto_resume(config, cancel_token, sessions_dir).await;
     }
 
     // Default: show incomplete sessions if no flag given.
@@ -88,7 +88,7 @@ fn list_incomplete(sessions_dir: &Path) -> Result<()> {
 }
 
 /// Resume a specific session by its UUID string.
-fn resume_session(
+async fn resume_session(
     config: &DriveWipeConfig,
     cancel_token: &Arc<CancellationToken>,
     sessions_dir: &Path,
@@ -118,12 +118,12 @@ fn resume_session(
         state.device_path.display(),
     );
 
-    execute_resumed_session(config, cancel_token, state)
+    execute_resumed_session(config, cancel_token, state).await
 }
 
 /// Auto-resume: scan for incomplete sessions, match by device serial, and
 /// offer to resume each one.
-fn auto_resume(
+async fn auto_resume(
     config: &DriveWipeConfig,
     cancel_token: &Arc<CancellationToken>,
     sessions_dir: &Path,
@@ -137,7 +137,7 @@ fn auto_resume(
     }
 
     let enumerator = create_enumerator();
-    let current_drives = enumerator.enumerate().unwrap_or_default();
+    let current_drives = enumerator.enumerate().await.unwrap_or_default();
 
     let mut matched = Vec::new();
     for state in &states {
@@ -190,7 +190,7 @@ fn auto_resume(
             pct,
         );
 
-        match execute_resumed_session(config, cancel_token, state) {
+        match execute_resumed_session(config, cancel_token, state).await {
             Ok(()) => {
                 println!(
                     "  {} Session completed successfully.\n",
@@ -210,7 +210,7 @@ fn auto_resume(
 }
 
 /// Execute a wipe session from a loaded `WipeState`.
-fn execute_resumed_session(
+async fn execute_resumed_session(
     config: &DriveWipeConfig,
     cancel_token: &Arc<CancellationToken>,
     state: WipeState,
@@ -221,6 +221,7 @@ fn execute_resumed_session(
     let enumerator = create_enumerator();
     let drive_info = enumerator
         .inspect(device_path)
+        .await
         .with_context(|| format!("Failed to inspect device {}", device_path.display()))?;
 
     // Validate serial matches.
@@ -258,7 +259,7 @@ fn execute_resumed_session(
     session_config.auto_verify = state.verify_after;
 
     let session = {
-        let method_box = super::wipe::find_and_clone_method_by_id(method_id)
+        let method_box = super::wipe::find_and_clone_method_by_id(method_id).await
             .ok_or_else(|| anyhow::anyhow!("Method {method_id} not found in registry"))?;
         WipeSession::new(drive_info.clone(), method_box, session_config)
     };
@@ -270,7 +271,7 @@ fn execute_resumed_session(
 
     let display_handle = {
         let pd = progress_display.clone();
-        thread::spawn(move || {
+        tokio::task::spawn_blocking(move || {
             while let Ok(event) = progress_rx.recv() {
                 pd.update(&event);
             }
@@ -278,13 +279,14 @@ fn execute_resumed_session(
     };
 
     // Execute.
-    let result = session.execute(&mut device_io, &progress_tx, cancel_token, Some(state));
+    let wipe_result = session
+        .execute(&mut device_io, &progress_tx, cancel_token, Some(state))
+        .await
+        .context("Resumed wipe operation failed")?;
 
     drop(progress_tx);
-    let _ = display_handle.join();
+    let _ = display_handle.await;
     progress_display.finish();
-
-    let wipe_result = result.context("Resumed wipe operation failed")?;
 
     println!();
     println!(

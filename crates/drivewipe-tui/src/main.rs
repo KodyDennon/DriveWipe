@@ -21,7 +21,8 @@ mod event;
 mod ui;
 mod widgets;
 
-fn main() -> anyhow::Result<()> {
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
     env_logger::init();
 
     // Check privileges — warn but allow the TUI to start so users can at
@@ -46,10 +47,11 @@ fn main() -> anyhow::Result<()> {
     let mut terminal = Terminal::new(backend)?;
 
     // Create app and run — always restore the terminal even on error.
-    let result = (|| -> anyhow::Result<()> {
+    let result = (|| async {
         let mut app = app::App::new(config)?;
-        app.run(&mut terminal)
-    })();
+        app.run(&mut terminal).await
+    })()
+    .await;
 
     // Restore terminal
     disable_raw_mode()?;

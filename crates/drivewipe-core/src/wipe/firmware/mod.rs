@@ -8,6 +8,7 @@
 pub mod ata;
 pub mod nvme;
 
+use async_trait::async_trait;
 use crossbeam_channel::Sender;
 use uuid::Uuid;
 
@@ -20,6 +21,7 @@ use crate::types::DriveInfo;
 /// Unlike software overwrite methods, firmware wipes cannot be observed at the
 /// byte level from the host -- the drive's controller is responsible for the
 /// actual data destruction.
+#[async_trait]
 pub trait FirmwareWipe: Send + Sync {
     /// Machine-readable identifier (e.g. `"ata-erase"`).
     fn id(&self) -> &str;
@@ -38,7 +40,7 @@ pub trait FirmwareWipe: Send + Sync {
     ///
     /// Progress updates are sent through `progress_tx`. The implementation
     /// should block until the drive signals completion or an error occurs.
-    fn execute(
+    async fn execute(
         &self,
         drive: &DriveInfo,
         session_id: Uuid,

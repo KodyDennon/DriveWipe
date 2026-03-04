@@ -42,6 +42,8 @@ bitflags.workspace = true
 flate2.workspace = true
 zstd.workspace = true
 notify-rust.workspace = true
+tokio = { version = "1.50.0", features = ["full"] }
+async-trait = "0.1.89"
 
 [target.'cfg(unix)'.dependencies]
 nix.workspace = true

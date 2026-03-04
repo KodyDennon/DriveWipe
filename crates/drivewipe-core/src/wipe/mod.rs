@@ -7,6 +7,7 @@ pub mod firmware;
 pub mod patterns;
 pub mod software;
 
+use async_trait::async_trait;
 use crossbeam_channel::Sender;
 use uuid::Uuid;
 
@@ -26,6 +27,7 @@ use crate::types::DriveInfo;
 /// repeating sequence) across the entire device surface. Software methods
 /// implement this trait directly; firmware methods set [`is_firmware`](WipeMethod::is_firmware) to
 /// `true` and delegate to the drive controller.
+#[async_trait]
 pub trait WipeMethod: Send + Sync {
     /// Machine-readable identifier (e.g. `"dod-short"`, `"gutmann"`).
     fn id(&self) -> &str;
@@ -57,7 +59,7 @@ pub trait WipeMethod: Send + Sync {
     /// Software methods return `None` (the default). Firmware methods return
     /// `Some(Ok(()))` on success or `Some(Err(...))` on failure, causing
     /// [`WipeSession::execute()`](crate::session::WipeSession::execute) to skip the software write loop entirely.
-    fn execute_firmware(
+    async fn execute_firmware(
         &self,
         _drive: &DriveInfo,
         _session_id: Uuid,
@@ -93,6 +95,7 @@ impl FirmwareMethodAdapter {
     }
 }
 
+#[async_trait]
 impl WipeMethod for FirmwareMethodAdapter {
     fn id(&self) -> &str {
         self.inner.id()
@@ -123,13 +126,13 @@ impl WipeMethod for FirmwareMethodAdapter {
         true
     }
 
-    fn execute_firmware(
+    async fn execute_firmware(
         &self,
         drive: &DriveInfo,
         session_id: Uuid,
         progress_tx: &Sender<ProgressEvent>,
     ) -> Option<Result<()>> {
-        Some(self.inner.execute(drive, session_id, progress_tx))
+        Some(self.inner.execute(drive, session_id, progress_tx).await)
     }
 }
 

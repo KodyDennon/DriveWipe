@@ -12,7 +12,7 @@ use crate::progress::ProgressEvent;
 use crate::session::CancellationToken;
 
 /// Perform a sector-by-sector block clone from source to target.
-pub fn clone_block(
+pub async fn clone_block(
     source: &mut dyn RawDeviceIo,
     target: &mut dyn RawDeviceIo,
     config: &CloneConfig,
@@ -50,12 +50,30 @@ pub fn clone_block(
         let remaining = copy_bytes - bytes_copied;
         let read_len = (remaining as usize).min(block_size);
 
-        let n = source.read_at(bytes_copied, &mut buf[..read_len])?;
-        if n == 0 {
-            break;
+        // Use spawn_blocking for I/O since RawDeviceIo is synchronous
+        let source_ptr = source as *mut dyn RawDeviceIo as usize;
+        let target_ptr = target as *mut dyn RawDeviceIo as usize;
+        
+        let (n, read_res) = tokio::task::spawn_blocking(move || {
+            let source_ref = unsafe { &mut *(source_ptr as *mut dyn RawDeviceIo) };
+            let mut temp_buf = vec![0u8; read_len];
+            let res = source_ref.read_at(bytes_copied, &mut temp_buf);
+            (res, temp_buf)
+        }).await.map_err(|e| DriveWipeError::IoGeneric(std::io::Error::new(std::io::ErrorKind::Other, e.to_string())))?;
+
+        let n = n?;
+        if n == n { // Just to avoid unused warning for n if break happens below
+            if n == 0 {
+                break;
+            }
         }
 
-        target.write_at(bytes_copied, &buf[..n])?;
+        let write_res = tokio::task::spawn_blocking(move || {
+            let target_ref = unsafe { &mut *(target_ptr as *mut dyn RawDeviceIo) };
+            target_ref.write_at(bytes_copied, &read_res[..n])
+        }).await.map_err(|e| DriveWipeError::IoGeneric(std::io::Error::new(std::io::ErrorKind::Other, e.to_string())))?;
+
+        write_res?;
         bytes_copied += n as u64;
         throughput_bytes += n as u64;
 
@@ -83,7 +101,11 @@ pub fn clone_block(
         }
     }
 
-    target.sync()?;
+    let target_ptr = target as *mut dyn RawDeviceIo as usize;
+    tokio::task::spawn_blocking(move || {
+        let target_ref = unsafe { &mut *(target_ptr as *mut dyn RawDeviceIo) };
+        target_ref.sync()
+    }).await.map_err(|e| DriveWipeError::IoGeneric(std::io::Error::new(std::io::ErrorKind::Other, e.to_string())))??;
 
     let duration = start.elapsed().as_secs_f64();
     let throughput_mbps = if duration > 0.0 {
@@ -102,7 +124,7 @@ pub fn clone_block(
             session_id,
             progress_tx,
             cancel_token,
-        )?
+        ).await?
     } else {
         VerificationResult {
             verified: false,
@@ -144,7 +166,7 @@ pub struct VerificationResult {
     pub target_hash: Option<String>,
 }
 
-fn verify_clone(
+async fn verify_clone(
     source: &mut dyn RawDeviceIo,
     target: &mut dyn RawDeviceIo,
     total_bytes: u64,
@@ -171,11 +193,27 @@ fn verify_clone(
         let remaining = total_bytes - offset;
         let read_len = (remaining as usize).min(block_size);
 
-        let sn = source.read_at(offset, &mut source_buf[..read_len])?;
-        let tn = target.read_at(offset, &mut target_buf[..read_len])?;
+        let source_ptr = source as *mut dyn RawDeviceIo as usize;
+        let target_ptr = target as *mut dyn RawDeviceIo as usize;
 
-        source_hasher.update(&source_buf[..sn]);
-        target_hasher.update(&target_buf[..tn]);
+        let (sn_res, tn_res, s_hash_chunk, t_hash_chunk) = tokio::task::spawn_blocking(move || {
+            let source_ref = unsafe { &mut *(source_ptr as *mut dyn RawDeviceIo) };
+            let target_ref = unsafe { &mut *(target_ptr as *mut dyn RawDeviceIo) };
+            
+            let mut s_buf = vec![0u8; read_len];
+            let mut t_buf = vec![0u8; read_len];
+            
+            let sn = source_ref.read_at(offset, &mut s_buf);
+            let tn = target_ref.read_at(offset, &mut t_buf);
+            
+            (sn, tn, s_buf, t_buf)
+        }).await.map_err(|e| DriveWipeError::IoGeneric(std::io::Error::new(std::io::ErrorKind::Other, e.to_string())))?;
+
+        let sn = sn_res?;
+        let tn = tn_res?;
+
+        source_hasher.update(&s_hash_chunk[..sn]);
+        target_hasher.update(&t_hash_chunk[..tn]);
 
         offset += sn.max(tn) as u64;
 

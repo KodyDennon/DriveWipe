@@ -8,10 +8,11 @@ use crate::display;
 /// Execute `drivewipe list`.
 ///
 /// Enumerates all detected drives and displays them in the requested format.
-pub fn run(_config: &DriveWipeConfig, format: &str) -> Result<()> {
+pub async fn run(_config: &DriveWipeConfig, format: &str) -> Result<()> {
     let enumerator = create_enumerator();
     let drives = enumerator
         .enumerate()
+        .await
         .context("Failed to enumerate drives")?;
 
     if drives.is_empty() {

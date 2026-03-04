@@ -19,7 +19,7 @@ use drivewipe_core::wipe::patterns::OneFill;
 use crate::progress::WipeProgressDisplay;
 
 /// Execute `drivewipe verify`.
-pub fn run(
+pub async fn run(
     _config: &DriveWipeConfig,
     _cancel_token: &Arc<CancellationToken>,
     device: &str,
@@ -30,6 +30,7 @@ pub fn run(
     let device_path = Path::new(device);
     let drive_info = enumerator
         .inspect(device_path)
+        .await
         .with_context(|| format!("Failed to inspect device {device}"))?;
 
     println!(
@@ -78,7 +79,7 @@ pub fn run(
 
     let display_handle = {
         let pd = progress_display.clone();
-        thread::spawn(move || {
+        tokio::task::spawn_blocking(move || {
             while let Ok(event) = progress_rx.recv() {
                 pd.update(&event);
             }
@@ -87,11 +88,11 @@ pub fn run(
 
     // ── Run verification ────────────────────────────────────────────────
     let session_id = Uuid::new_v4();
-    let result = verifier.verify(&mut device_io, session_id, &progress_tx);
+    let result = verifier.verify(&mut device_io, session_id, &progress_tx).await;
 
     // Drop sender so the display thread terminates.
     drop(progress_tx);
-    let _ = display_handle.join();
+    let _ = display_handle.await;
     progress_display.finish();
 
     println!();

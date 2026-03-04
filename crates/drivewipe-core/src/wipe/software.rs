@@ -4,10 +4,11 @@
 //! well-known secure-erase standard. The actual byte patterns are provided by
 //! the generators in [`super::patterns`].
 
-use super::WipeMethod;
 use super::patterns::{
     ConstantFill, OneFill, PatternGenerator, RandomFill, RepeatingPattern, ZeroFill,
 };
+use super::WipeMethod;
+use async_trait::async_trait;
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -21,6 +22,7 @@ fn boxed<P: PatternGenerator + Send + 'static>(p: P) -> Box<dyn PatternGenerator
 /// Single-pass zero (0x00) overwrite.
 pub struct ZeroFillMethod;
 
+#[async_trait]
 impl WipeMethod for ZeroFillMethod {
     fn id(&self) -> &str {
         "zero"
@@ -47,6 +49,7 @@ impl WipeMethod for ZeroFillMethod {
 /// Single-pass one (0xFF) overwrite.
 pub struct OneFillMethod;
 
+#[async_trait]
 impl WipeMethod for OneFillMethod {
     fn id(&self) -> &str {
         "one"
@@ -73,6 +76,7 @@ impl WipeMethod for OneFillMethod {
 /// Single-pass cryptographic random overwrite.
 pub struct RandomFillMethod;
 
+#[async_trait]
 impl WipeMethod for RandomFillMethod {
     fn id(&self) -> &str {
         "random"
@@ -99,6 +103,7 @@ impl WipeMethod for RandomFillMethod {
 /// DoD 5220.22-M short: 3 passes (0x00, 0xFF, random) with verification.
 pub struct DodShortMethod;
 
+#[async_trait]
 impl WipeMethod for DodShortMethod {
     fn id(&self) -> &str {
         "dod-short"
@@ -129,6 +134,7 @@ impl WipeMethod for DodShortMethod {
 /// DoD 5220.22-M ECE: 7 passes with verification.
 pub struct DodEceMethod;
 
+#[async_trait]
 impl WipeMethod for DodEceMethod {
     fn id(&self) -> &str {
         "dod-ece"
@@ -167,6 +173,7 @@ impl WipeMethod for DodEceMethod {
 /// recording technologies.
 pub struct GutmannMethod;
 
+#[async_trait]
 impl WipeMethod for GutmannMethod {
     fn id(&self) -> &str {
         "gutmann"
@@ -242,6 +249,7 @@ impl WipeMethod for GutmannMethod {
 /// UK HMG Infosec Standard 5, Baseline: single zero pass with verification.
 pub struct HmgBaselineMethod;
 
+#[async_trait]
 impl WipeMethod for HmgBaselineMethod {
     fn id(&self) -> &str {
         "hmg-baseline"
@@ -269,6 +277,7 @@ impl WipeMethod for HmgBaselineMethod {
 /// verification.
 pub struct HmgEnhancedMethod;
 
+#[async_trait]
 impl WipeMethod for HmgEnhancedMethod {
     fn id(&self) -> &str {
         "hmg-enhanced"
@@ -300,6 +309,7 @@ impl WipeMethod for HmgEnhancedMethod {
 /// 0x00/0xFF for 6 passes, then a final random pass.
 pub struct RcmpMethod;
 
+#[async_trait]
 impl WipeMethod for RcmpMethod {
     fn id(&self) -> &str {
         "rcmp"

@@ -7,7 +7,7 @@ use drivewipe_core::drive;
 use drivewipe_core::health::snapshot::DriveHealthSnapshot;
 
 /// Run the `health` subcommand.
-pub fn run(
+pub async fn run(
     config: &DriveWipeConfig,
     device: &str,
     save: bool,
@@ -16,6 +16,7 @@ pub fn run(
     let enumerator = drive::create_enumerator();
     let drive_info = enumerator
         .inspect(&PathBuf::from(device))
+        .await
         .context("Failed to inspect device")?;
 
     println!("Drive Health: {} {}", drive_info.model, drive_info.serial);

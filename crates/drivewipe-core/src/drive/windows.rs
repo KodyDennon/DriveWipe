@@ -14,6 +14,7 @@ use crate::error::{DriveWipeError, Result};
 use crate::types::{AtaSecurityState, DriveInfo, DriveType, HiddenAreaInfo, Transport};
 
 use super::DriveEnumerator;
+use async_trait::async_trait;
 
 /// Windows drive enumerator.
 pub struct WindowsDriveEnumerator;
@@ -342,25 +343,31 @@ mod imp {
     }
 }
 
+#[async_trait]
 impl DriveEnumerator for WindowsDriveEnumerator {
     #[cfg(target_os = "windows")]
-    fn enumerate(&self) -> Result<Vec<DriveInfo>> {
-        imp::enumerate_drives()
+    async fn enumerate(&self) -> Result<Vec<DriveInfo>> {
+        tokio::task::spawn_blocking(|| imp::enumerate_drives())
+            .await
+            .unwrap_or_else(|e| Err(DriveWipeError::IoGeneric(std::io::Error::new(std::io::ErrorKind::Other, e))))
     }
 
     #[cfg(not(target_os = "windows"))]
-    fn enumerate(&self) -> Result<Vec<DriveInfo>> {
+    async fn enumerate(&self) -> Result<Vec<DriveInfo>> {
         log::warn!("Windows drive enumeration is only available on Windows");
         Ok(Vec::new())
     }
 
     #[cfg(target_os = "windows")]
-    fn inspect(&self, path: &Path) -> Result<DriveInfo> {
-        imp::inspect_drive(path)
+    async fn inspect(&self, path: &Path) -> Result<DriveInfo> {
+        let path_buf = path.to_path_buf();
+        tokio::task::spawn_blocking(move || imp::inspect_drive(&path_buf))
+            .await
+            .unwrap_or_else(|e| Err(DriveWipeError::IoGeneric(std::io::Error::new(std::io::ErrorKind::Other, e))))
     }
 
     #[cfg(not(target_os = "windows"))]
-    fn inspect(&self, path: &Path) -> Result<DriveInfo> {
+    async fn inspect(&self, path: &Path) -> Result<DriveInfo> {
         Err(DriveWipeError::PlatformNotSupported(format!(
             "Windows device inspection is only available on Windows ({})",
             path.display(),

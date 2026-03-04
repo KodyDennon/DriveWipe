@@ -18,15 +18,17 @@ pub mod windows;
 
 use crate::error::Result;
 use crate::types::DriveInfo;
+use async_trait::async_trait;
 
 /// Trait for discovering and inspecting block devices on the local system.
-pub trait DriveEnumerator {
+#[async_trait]
+pub trait DriveEnumerator: Send + Sync {
     /// Enumerate all block devices visible to the operating system.
     ///
     /// Returns a list of [`DriveInfo`] structs, one per physical device.
     /// Virtual devices, loop devices, and RAM disks are excluded where
     /// possible.
-    fn enumerate(&self) -> Result<Vec<DriveInfo>>;
+    async fn enumerate(&self) -> Result<Vec<DriveInfo>>;
 
     /// Inspect a single block device at the given path.
     ///
@@ -34,7 +36,7 @@ pub trait DriveEnumerator {
     ///
     /// * `path` - OS device path (e.g. `/dev/sda`, `/dev/rdisk2`,
     ///   `\\.\PhysicalDrive0`).
-    fn inspect(&self, path: &std::path::Path) -> Result<DriveInfo>;
+    async fn inspect(&self, path: &std::path::Path) -> Result<DriveInfo>;
 }
 
 /// Create a platform-appropriate [`DriveEnumerator`] implementation.

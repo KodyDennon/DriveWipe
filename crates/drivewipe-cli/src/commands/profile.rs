@@ -7,10 +7,11 @@ use drivewipe_core::drive;
 use drivewipe_core::profile::ProfileDatabase;
 
 /// Run the `profile` subcommand.
-pub fn run(config: &DriveWipeConfig, device: &str) -> Result<()> {
+pub async fn run(config: &DriveWipeConfig, device: &str) -> Result<()> {
     let enumerator = drive::create_enumerator();
     let drive_info = enumerator
         .inspect(&PathBuf::from(device))
+        .await
         .context("Failed to inspect device")?;
 
     println!("Drive: {} {}", drive_info.model, drive_info.serial);

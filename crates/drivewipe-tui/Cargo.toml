@@ -30,3 +30,4 @@ log.workspace = true
 env_logger.workspace = true
 ctrlc.workspace = true
 anyhow.workspace = true
+tokio = { version = "1.50.0", features = ["full"] }

@@ -8,7 +8,7 @@ use drivewipe_core::config::DriveWipeConfig;
 use drivewipe_core::session::CancellationToken;
 
 /// Run the `clone` subcommand.
-pub fn run(
+pub async fn run(
     _config: &DriveWipeConfig,
     cancel_token: &Arc<CancellationToken>,
     source: &str,
@@ -63,14 +63,14 @@ pub fn run(
             &clone_config,
             &progress_tx,
             cancel_token,
-        ),
+        ).await,
         CloneMode::Partition => drivewipe_core::clone::partition_aware::clone_partition_aware(
             source_device.as_mut(),
             target_device.as_mut(),
             &clone_config,
             &progress_tx,
             cancel_token,
-        ),
+        ).await,
     };
 
     // Drain progress events

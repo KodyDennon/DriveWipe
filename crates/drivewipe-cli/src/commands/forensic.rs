@@ -9,21 +9,22 @@ use drivewipe_core::forensic::{ForensicConfig, ForensicResult, ForensicSession};
 use drivewipe_core::session::CancellationToken;
 
 /// Run the `forensic scan` subcommand.
-pub fn scan(
+pub async fn scan(
     _config: &DriveWipeConfig,
     cancel_token: &Arc<CancellationToken>,
     device: &str,
 ) -> Result<()> {
-    let result = execute_scan(cancel_token, device)?;
+    let result = execute_scan(cancel_token, device).await?;
     print_results(&result);
     Ok(())
 }
 
 /// Execute a forensic scan and return the result.
-fn execute_scan(cancel_token: &Arc<CancellationToken>, device: &str) -> Result<ForensicResult> {
+async fn execute_scan(cancel_token: &Arc<CancellationToken>, device: &str) -> Result<ForensicResult> {
     let enumerator = drive::create_enumerator();
     let drive_info = enumerator
         .inspect(&PathBuf::from(device))
+        .await
         .context("Failed to inspect device")?;
 
     println!("Forensic scan: {} {}", drive_info.model, drive_info.serial);
@@ -44,6 +45,7 @@ fn execute_scan(cancel_token: &Arc<CancellationToken>, device: &str) -> Result<F
             &progress_tx,
             cancel_token,
         )
+        .await
         .context("Forensic scan failed")?;
 
     // Drain progress
@@ -92,13 +94,13 @@ fn print_results(result: &ForensicResult) {
 }
 
 /// Run the `forensic report` subcommand.
-pub fn report(
+pub async fn report(
     _config: &DriveWipeConfig,
     cancel_token: &Arc<CancellationToken>,
     device: &str,
     output: Option<&str>,
 ) -> Result<()> {
-    let result = execute_scan(cancel_token, device)?;
+    let result = execute_scan(cancel_token, device).await?;
     print_results(&result);
 
     // Generate and save a formal forensic report

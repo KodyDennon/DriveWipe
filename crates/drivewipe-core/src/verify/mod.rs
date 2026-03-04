@@ -8,8 +8,11 @@ use crate::error::Result;
 use crate::io::RawDeviceIo;
 use crate::progress::ProgressEvent;
 
+use async_trait::async_trait;
+
+#[async_trait]
 pub trait Verifier: Send + Sync {
-    fn verify(
+    async fn verify(
         &self,
         device: &mut dyn RawDeviceIo,
         session_id: Uuid,

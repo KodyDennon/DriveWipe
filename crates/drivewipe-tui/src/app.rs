@@ -326,9 +326,9 @@ impl App {
     }
 
     /// Refresh the list of available drives from the system.
-    pub fn refresh_drives(&mut self) {
-        let enumerator = drive::create_enumerator();
-        match enumerator.enumerate() {
+    pub async fn refresh_drives(&mut self) {
+        let enumerator = drivewipe_core::drive::create_enumerator();
+        match enumerator.enumerate().await {
             #[allow(unused_mut)]
             Ok(mut drives) => {
                 // When running in live mode on Linux, probe each SATA drive for hidden
@@ -419,10 +419,10 @@ impl App {
 
     // ── Main event loop ─────────────────────────────────────────────────
 
-    pub fn run(&mut self, terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> Result<()> {
+    pub async fn run(&mut self, terminal: &mut Terminal<CrosstermBackend<std::io::Stdout>>) -> Result<()> {
         // Take the progress receiver out of self for the event handler.
         let prx = self.progress_rx.take();
-        let event_handler = EventHandler::new(Duration::from_millis(250), prx);
+        let mut event_handler = EventHandler::new(Duration::from_millis(250), prx);
 
         while !self.should_quit {
             // Draw.
@@ -431,8 +431,8 @@ impl App {
             })?;
 
             // Wait for an event.
-            match event_handler.next() {
-                Ok(AppEvent::Key(key)) => self.handle_key(key),
+            match event_handler.next().await {
+                Ok(AppEvent::Key(key)) => self.handle_key(key).await,
                 Ok(AppEvent::Progress(evt)) => self.handle_progress(evt),
                 Ok(AppEvent::Tick) => self.handle_tick(),
                 Ok(AppEvent::Resize(_, _)) => {
@@ -455,7 +455,7 @@ impl App {
 
     // ── Key handling dispatch ────────────────────────────────────────────
 
-    fn handle_key(&mut self, key: KeyEvent) {
+    async fn handle_key(&mut self, key: KeyEvent) {
         // Keyboard lock: when locked, only buffer keys for unlock sequence.
         if self.keyboard_locked {
             if let KeyCode::Char(c) = key.code {
@@ -523,31 +523,31 @@ impl App {
         }
 
         match &self.screen.clone() {
-            AppScreen::MainMenu => self.handle_main_menu_key(key),
-            AppScreen::DriveSelection => self.handle_drive_selection_key(key),
-            AppScreen::MethodSelect => self.handle_method_select_key(key),
-            AppScreen::Confirm => self.handle_confirm_key(key),
-            AppScreen::Wiping => self.handle_wiping_key(key),
-            AppScreen::Done => self.handle_done_key(key),
-            AppScreen::Error(_) => self.handle_error_key(key),
-            AppScreen::Help => self.handle_help_key(key),
-            AppScreen::DriveHealth => self.handle_health_key(key),
-            AppScreen::HealthComparison => self.handle_health_key(key),
-            AppScreen::CloneSetup => self.handle_clone_setup_key(key),
-            AppScreen::CloneProgress => self.handle_wiping_key(key),
-            AppScreen::PartitionManager => self.handle_partition_key(key),
-            AppScreen::ForensicAnalysis => self.handle_forensic_key(key),
-            AppScreen::Settings => self.handle_settings_key(key),
+            AppScreen::MainMenu => self.handle_main_menu_key(key).await,
+            AppScreen::DriveSelection => self.handle_drive_selection_key(key).await,
+            AppScreen::MethodSelect => self.handle_method_select_key(key).await,
+            AppScreen::Confirm => self.handle_confirm_key(key).await,
+            AppScreen::Wiping => self.handle_wiping_key(key).await,
+            AppScreen::Done => self.handle_done_key(key).await,
+            AppScreen::Error(_) => self.handle_error_key(key).await,
+            AppScreen::Help => self.handle_help_key(key).await,
+            AppScreen::DriveHealth => self.handle_health_key(key).await,
+            AppScreen::HealthComparison => self.handle_health_key(key).await,
+            AppScreen::CloneSetup => self.handle_clone_setup_key(key).await,
+            AppScreen::CloneProgress => self.handle_wiping_key(key).await,
+            AppScreen::PartitionManager => self.handle_partition_key(key).await,
+            AppScreen::ForensicAnalysis => self.handle_forensic_key(key).await,
+            AppScreen::Settings => self.handle_settings_key(key).await,
             #[cfg(all(feature = "live", target_os = "linux"))]
             AppScreen::LiveDashboard
             | AppScreen::HpaDcoManager
             | AppScreen::AtaSecurityManager
-            | AppScreen::KernelModuleStatus => self.handle_live_screen_key(key),
+            | AppScreen::KernelModuleStatus => self.handle_live_screen_key(key).await,
         }
     }
 
     #[cfg(all(feature = "live", target_os = "linux"))]
-    fn handle_live_screen_key(&mut self, key: KeyEvent) {
+    async fn handle_live_screen_key(&mut self, key: KeyEvent) {
         // Handle confirmation flow first — if a destructive action is pending,
         // 'y' confirms and anything else cancels.
         if let Some(ref action) = self.live_confirm_action.clone() {
@@ -602,12 +602,12 @@ impl App {
 
             // ── Dashboard quick-nav ────────────────────────────────────
             KeyCode::Char('1') if self.screen == AppScreen::LiveDashboard => {
-                self.refresh_drives();
+                self.refresh_drives().await;
                 self.live_drive_index = 0;
                 self.screen = AppScreen::HpaDcoManager;
             }
             KeyCode::Char('2') if self.screen == AppScreen::LiveDashboard => {
-                self.refresh_drives();
+                self.refresh_drives().await;
                 self.live_drive_index = 0;
                 self.screen = AppScreen::AtaSecurityManager;
             }
@@ -864,7 +864,7 @@ impl App {
 
     // ── Drive selection keys ────────────────────────────────────────────
 
-    fn handle_drive_selection_key(&mut self, key: KeyEvent) {
+    async fn handle_drive_selection_key(&mut self, key: KeyEvent) {
         match key.code {
             KeyCode::Char('q') => {
                 self.should_quit = true;
@@ -947,7 +947,7 @@ impl App {
                 }
             }
             KeyCode::Char('r') => {
-                self.refresh_drives();
+                self.refresh_drives().await;
             }
             KeyCode::Esc => {
                 if self.show_info_popup {
@@ -962,7 +962,7 @@ impl App {
 
     // ── Method selection keys ───────────────────────────────────────────
 
-    fn handle_method_select_key(&mut self, key: KeyEvent) {
+    async fn handle_method_select_key(&mut self, key: KeyEvent) {
         let method_count = self.method_registry.list().len();
 
         match key.code {
@@ -1038,7 +1038,7 @@ impl App {
 
     // ── Confirmation keys ───────────────────────────────────────────────
 
-    fn handle_confirm_key(&mut self, key: KeyEvent) {
+    async fn handle_confirm_key(&mut self, key: KeyEvent) {
         // If countdown is active, only Escape can cancel.
         if self.confirm_countdown.is_some() {
             if key.code == KeyCode::Esc {
@@ -1075,7 +1075,7 @@ impl App {
 
     // ── Wiping keys ─────────────────────────────────────────────────────
 
-    fn handle_wiping_key(&mut self, key: KeyEvent) {
+    async fn handle_wiping_key(&mut self, key: KeyEvent) {
         match key.code {
             KeyCode::Char('q') => {
                 self.quit_confirm = true;
@@ -1093,7 +1093,7 @@ impl App {
 
     // ── Done keys ───────────────────────────────────────────────────────
 
-    fn handle_done_key(&mut self, key: KeyEvent) {
+    async fn handle_done_key(&mut self, key: KeyEvent) {
         match key.code {
             KeyCode::Char('q') => {
                 self.should_quit = true;
@@ -1118,7 +1118,7 @@ impl App {
                 self.progress_tx = Some(ptx);
                 self.progress_rx = Some(prx);
 
-                self.refresh_drives();
+                self.refresh_drives().await;
                 self.screen = AppScreen::MainMenu;
             }
             _ => {}
@@ -1127,7 +1127,7 @@ impl App {
 
     // ── Error keys ──────────────────────────────────────────────────────
 
-    fn handle_error_key(&mut self, key: KeyEvent) {
+    async fn handle_error_key(&mut self, key: KeyEvent) {
         match key.code {
             KeyCode::Char('q') | KeyCode::Esc | KeyCode::Enter => {
                 self.screen = AppScreen::MainMenu;
@@ -1138,7 +1138,7 @@ impl App {
 
     // ── Help keys ───────────────────────────────────────────────────────
 
-    fn handle_help_key(&mut self, key: KeyEvent) {
+    async fn handle_help_key(&mut self, key: KeyEvent) {
         match key.code {
             KeyCode::Char('q') | KeyCode::Esc | KeyCode::Char('?') => {
                 self.screen = AppScreen::MainMenu;
@@ -1149,7 +1149,7 @@ impl App {
 
     // ── Main menu keys ─────────────────────────────────────────────────
 
-    fn handle_main_menu_key(&mut self, key: KeyEvent) {
+    async fn handle_main_menu_key(&mut self, key: KeyEvent) {
         let menu_items = self.main_menu_item_count();
         match key.code {
             KeyCode::Char('q') | KeyCode::Esc => {
@@ -1165,28 +1165,28 @@ impl App {
                     self.main_menu_index += 1;
                 }
             }
-            KeyCode::Enter => self.activate_main_menu_item(),
+            KeyCode::Enter => self.activate_main_menu_item().await,
             // Quick access keys
             KeyCode::Char('w') | KeyCode::Char('1') => {
-                self.refresh_drives();
+                self.refresh_drives().await;
                 self.screen = AppScreen::DriveSelection;
             }
             KeyCode::Char('h') | KeyCode::Char('2') => {
-                self.refresh_drives();
+                self.refresh_drives().await;
                 self.screen = AppScreen::DriveHealth;
             }
             KeyCode::Char('c') | KeyCode::Char('3') => {
-                self.refresh_drives();
+                self.refresh_drives().await;
                 self.clone_source_index = None;
                 self.clone_target_index = None;
                 self.screen = AppScreen::CloneSetup;
             }
             KeyCode::Char('p') | KeyCode::Char('4') => {
-                self.refresh_drives();
+                self.refresh_drives().await;
                 self.screen = AppScreen::PartitionManager;
             }
             KeyCode::Char('f') | KeyCode::Char('5') => {
-                self.refresh_drives();
+                self.refresh_drives().await;
                 self.forensic_result_lines.clear();
                 self.screen = AppScreen::ForensicAnalysis;
             }
@@ -1208,29 +1208,29 @@ impl App {
     }
 
     /// Activate the currently selected main menu item.
-    fn activate_main_menu_item(&mut self) {
+    async fn activate_main_menu_item(&mut self) {
         match self.main_menu_index {
             0 => {
-                self.refresh_drives();
+                self.refresh_drives().await;
                 self.screen = AppScreen::DriveSelection;
             }
             1 => {
-                self.refresh_drives();
+                self.refresh_drives().await;
                 self.screen = AppScreen::DriveHealth;
             }
             2 => {
-                self.refresh_drives();
+                self.refresh_drives().await;
                 self.clone_source_index = None;
                 self.clone_target_index = None;
                 self.clone_mode = "block".to_string();
                 self.screen = AppScreen::CloneSetup;
             }
             3 => {
-                self.refresh_drives();
+                self.refresh_drives().await;
                 self.screen = AppScreen::PartitionManager;
             }
             4 => {
-                self.refresh_drives();
+                self.refresh_drives().await;
                 self.forensic_result_lines.clear();
                 self.forensic_progress_pct = 0.0;
                 self.screen = AppScreen::ForensicAnalysis;
@@ -1250,13 +1250,13 @@ impl App {
             }
             #[cfg(all(feature = "live", target_os = "linux"))]
             7 => {
-                self.refresh_drives();
+                self.refresh_drives().await;
                 self.live_drive_index = 0;
                 self.screen = AppScreen::HpaDcoManager;
             }
             #[cfg(all(feature = "live", target_os = "linux"))]
             8 => {
-                self.refresh_drives();
+                self.refresh_drives().await;
                 self.live_drive_index = 0;
                 self.screen = AppScreen::AtaSecurityManager;
             }
@@ -1277,7 +1277,7 @@ impl App {
 
     // ── Health keys ────────────────────────────────────────────────────
 
-    fn handle_health_key(&mut self, key: KeyEvent) {
+    async fn handle_health_key(&mut self, key: KeyEvent) {
         match key.code {
             KeyCode::Char('q') | KeyCode::Esc => {
                 self.screen = AppScreen::MainMenu;
@@ -1308,7 +1308,7 @@ impl App {
                 }
             }
             KeyCode::Char('r') => {
-                self.refresh_drives();
+                self.refresh_drives().await;
             }
             _ => {}
         }
@@ -1370,7 +1370,7 @@ impl App {
 
     // ── Clone setup keys ───────────────────────────────────────────────
 
-    fn handle_clone_setup_key(&mut self, key: KeyEvent) {
+    async fn handle_clone_setup_key(&mut self, key: KeyEvent) {
         match key.code {
             KeyCode::Char('q') | KeyCode::Esc => {
                 self.screen = AppScreen::MainMenu;
@@ -1435,7 +1435,7 @@ impl App {
 
     // ── Partition keys ─────────────────────────────────────────────────
 
-    fn handle_partition_key(&mut self, key: KeyEvent) {
+    async fn handle_partition_key(&mut self, key: KeyEvent) {
         match key.code {
             KeyCode::Char('q') | KeyCode::Esc => {
                 self.screen = AppScreen::MainMenu;
@@ -1465,7 +1465,7 @@ impl App {
                 }
             }
             KeyCode::Char('r') => {
-                self.refresh_drives();
+                self.refresh_drives().await;
             }
             _ => {}
         }
@@ -1473,7 +1473,7 @@ impl App {
 
     // ── Forensic keys ──────────────────────────────────────────────────
 
-    fn handle_forensic_key(&mut self, key: KeyEvent) {
+    async fn handle_forensic_key(&mut self, key: KeyEvent) {
         match key.code {
             KeyCode::Char('q') | KeyCode::Esc => {
                 self.screen = AppScreen::MainMenu;
@@ -1503,7 +1503,7 @@ impl App {
                 }
             }
             KeyCode::Char('r') => {
-                self.refresh_drives();
+                self.refresh_drives().await;
             }
             _ => {}
         }
@@ -1511,7 +1511,7 @@ impl App {
 
     // ── Settings keys ──────────────────────────────────────────────────
 
-    fn handle_settings_key(&mut self, key: KeyEvent) {
+    async fn handle_settings_key(&mut self, key: KeyEvent) {
         match key.code {
             KeyCode::Char('q') | KeyCode::Esc => {
                 self.screen = AppScreen::MainMenu;
@@ -1888,7 +1888,7 @@ impl App {
             self.log_push(format!("I/O log: {}", io_debug_log.display()));
             self.log_push(format!("Thread log: {}", thread_debug_log.display()));
 
-            std::thread::spawn(move || {
+            tokio::spawn(async move {
                 let debug_log = std::env::temp_dir().join("drivewipe_thread_debug.log");
                 let write_debug = |msg: &str| {
                     let _ = std::fs::OpenOptions::new()
@@ -1901,12 +1901,10 @@ impl App {
                         });
                 };
 
-                write_debug("=== WIPE THREAD STARTED ===");
+                write_debug("=== WIPE TASK STARTED ===");
                 write_debug(&format!("Device: {}", drive_info.path.display()));
                 write_debug(&format!("Method: {}", method));
-                // Build a fresh registry that contains ALL methods (software +
-                // firmware + custom). We then find our method by id and consume the
-                // registry to extract the owned Box<dyn WipeMethod>.
+                
                 write_debug("Building method registry...");
                 let mut registry = WipeMethodRegistry::new();
                 registry.register_custom_methods(&config);
@@ -1929,21 +1927,7 @@ impl App {
 
                 // Open the device for raw I/O.
                 write_debug("Opening device for I/O...");
-                #[cfg(target_os = "linux")]
-                let device_result = {
-                    use drivewipe_core::io::linux::LinuxDeviceIo;
-                    LinuxDeviceIo::open(&drive_info.path)
-                };
-                #[cfg(target_os = "macos")]
-                let device_result = {
-                    use drivewipe_core::io::macos::MacosDeviceIo;
-                    MacosDeviceIo::open(&drive_info.path)
-                };
-                #[cfg(target_os = "windows")]
-                let device_result = {
-                    use drivewipe_core::io::windows::WindowsDeviceIo;
-                    WindowsDeviceIo::open(&drive_info.path)
-                };
+                let device_result = drivewipe_core::io::open_device(&drive_info.path, true);
 
                 let mut device = match device_result {
                     Ok(d) => {
@@ -1954,7 +1938,6 @@ impl App {
                         let err_msg =
                             format!("Failed to open {}: {}", drive_info.path.display(), e);
                         write_debug(&format!("Device open FAILED: {}", err_msg));
-                        eprintln!("DEVICE OPEN ERROR: {}", err_msg); // Also print to stderr for debugging
                         let _ = progress_tx.send(ProgressEvent::Error {
                             session_id: session.session_id,
                             message: err_msg,
@@ -1968,19 +1951,13 @@ impl App {
                     }
                 };
 
-                // Use the global cancellation token directly — no need for a
-                // watcher thread that polls and leaks.
-
                 write_debug("Calling session.execute()...");
-                match session.execute(&mut device, &progress_tx, &cancel_token, None) {
+                match session.execute(device.as_mut(), &progress_tx, &cancel_token, None).await {
                     Ok(result) => {
                         write_debug(&format!(
                             "session.execute() returned OK, outcome: {}",
                             result.outcome
                         ));
-                        // Completion event already sent by the session.
-                        // Auto-generate JSON report in the thread while we
-                        // have access to the WipeResult.
                         if auto_report_json {
                             let report_dir = sessions_dir;
                             if let Err(e) = std::fs::create_dir_all(&report_dir) {
@@ -2017,7 +1994,7 @@ impl App {
                         });
                     }
                 }
-                write_debug("=== WIPE THREAD ENDING ===");
+                write_debug("=== WIPE TASK ENDING ===");
             });
         }
     }
@@ -2060,7 +2037,7 @@ impl App {
             target_info.path.display(),
         ));
 
-        std::thread::spawn(move || {
+        tokio::spawn(async move {
             use drivewipe_core::clone::{CloneConfig, CloneMode, CompressionMode};
 
             let mode = if clone_mode == "partition" {
@@ -2112,7 +2089,7 @@ impl App {
                     &config,
                     &progress_tx,
                     &cancel_token,
-                ),
+                ).await,
                 CloneMode::Partition => {
                     drivewipe_core::clone::partition_aware::clone_partition_aware(
                         source.as_mut(),
@@ -2120,24 +2097,15 @@ impl App {
                         &config,
                         &progress_tx,
                         &cancel_token,
-                    )
+                    ).await
                 }
             };
 
-            match result {
-                Ok(clone_result) => {
-                    let _ = progress_tx.send(ProgressEvent::CloneCompleted {
-                        session_id: clone_result.session_id,
-                        duration_secs: clone_result.duration_secs,
-                        verified: clone_result.verification_passed.unwrap_or(false),
-                    });
-                }
-                Err(e) => {
-                    let _ = progress_tx.send(ProgressEvent::Error {
-                        session_id: Uuid::new_v4(),
-                        message: format!("Clone failed: {}", e),
-                    });
-                }
+            if let Err(e) = result {
+                let _ = progress_tx.send(ProgressEvent::Error {
+                    session_id: Uuid::new_v4(),
+                    message: format!("Clone failed: {}", e),
+                });
             }
         });
     }
@@ -2168,7 +2136,7 @@ impl App {
             drive_info.path.display()
         ));
 
-        std::thread::spawn(move || {
+        tokio::spawn(async move {
             use drivewipe_core::forensic::{ForensicConfig, ForensicSession};
 
             let config = ForensicConfig::default();
@@ -2192,7 +2160,7 @@ impl App {
                 &drive_info.serial,
                 &progress_tx,
                 &cancel_token,
-            ) {
+            ).await {
                 Ok(result) => {
                     let _ = progress_tx.send(ProgressEvent::ForensicScanCompleted {
                         session_id: Uuid::new_v4(),
