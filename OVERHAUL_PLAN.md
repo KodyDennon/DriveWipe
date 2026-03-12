@@ -571,7 +571,7 @@ A dedicated section covering how all new features should be tested.
 | 2  | Custom high-security wipe method ("DriveWipe Secure")                | Phase 1 | ✅ |
 | 3  | Drive profile system (auto-detect, community-contributed)            | Phase 1 | ✅ |
 | 4  | Time estimate full overhaul                                          | Phase 1 | ✅ |
-| 5  | TUI overhaul (framework research + all new screens)                  | Phase 1 | 🔶 |
+| 5  | TUI overhaul (framework research + all new screens)                  | Phase 1 | ✅ |
 | 6  | Unified audit log expansion (typed events for all operations)        | Phase 1 | ✅ |
 | 7  | Sleep prevention / keep-alive (OS-native)                            | Phase 1 | ✅ |
 | 8  | Kitty Cat Keyboard Mode (keyboard lock)                              | Phase 1 | ✅ |
@@ -582,5 +582,5 @@ A dedicated section covering how all new features should be tested.
 | 13 | Forensic drive evaluation toolkit (full analysis + formal reports)   | Phase 2 | ✅ |
 | 14 | Documentation overhaul (user guides + API docs + doc site)           | Phase 3 | 🔶 |
 | 15 | Build system & installer (smart script + GitHub releases)            | Phase 3 | ✅ |
-| 16 | GUI foundation (iced, modular, extensible)                           | Phase 3 | 🔶 |
+| 16 | GUI foundation (iced, modular, extensible)                           | Phase 3 | ✅ |
 | 17 | Bootable live USB environment                                        | Phase 3 | ✅ |

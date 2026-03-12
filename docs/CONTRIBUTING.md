@@ -49,7 +49,7 @@ cargo fmt --all
 ### Testing
 
 - **Unit tests**: `cargo test --workspace`
-- Current version: **v1.1.2**
+- Current version: **v1.2.0**
 - **Integration tests**: `cargo test --workspace -- --include-ignored` (some tests require temp files)
 - **Live crate tests**: `cargo test -p drivewipe-live`
 - **Real device tests**: `DRIVEWIPE_TEST_DEVICE=/dev/sdX cargo test --features real-device-tests` (DANGEROUS — only on disposable drives)

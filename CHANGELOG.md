@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-03-11
+
+### Added
+- **Partition Persistence** — Native GPT/MBR partition table writing with automatic CRC32 recalculation and protective MBR generation.
+- **Image-Based Cloning** — New cloning engine supporting backup to and restore from `.dwc` compressed image files using Zstd or Gzip.
+- **GUI Engine Integration** — Fully wired the `iced` graphical interface to the core library, enabling real-time wipe progress, async health checks, and partition visualization.
+- **Partition CLI/TUI** — Added `create`, `delete`, and `resize` subcommands to the CLI and interactive triggers to the TUI Partition Manager.
+- **Memory Safety Core** — Introduced `DeviceWrapper` to safely handle fat-pointer trait objects across async/thread boundaries, resolving critical `E0606` casting errors.
+
+### Changed
+- **Async Test Suite** — Migrated the entire test suite (112+ tests) to `tokio::test` for full async compatibility.
+- **Dependency Refactor** — Resolved cyclic dependencies between `core` and `live` crates by decoupling forensic orchestration.
+
+### Fixed
+- **Build Quality** — Resolved all compiler warnings and lint issues across the entire workspace.
+- **CLI/TUI Stability** — Fixed borrow-after-move errors in partition management commands.
+
 ## [1.1.13] - 2026-03-03
 
 ### Fixed
@@ -259,8 +276,9 @@ Initial release of DriveWipe.
 - **Test suite**: 130 tests covering types, config, errors, patterns, PRNG, aligned buffers, wipe sessions, verification, cancellation, method registry, and report serialization.
 - GitHub Actions CI (build, test, clippy, fmt, docs, security audit) across Linux, macOS, and Windows.
 
-[Unreleased]: https://github.com/KodyDennon/DriveWipe/compare/v1.1.12...HEAD
-[1.1.12]: https://github.com/KodyDennon/DriveWipe/compare/v1.1.11...v1.1.12
+[Unreleased]: https://github.com/KodyDennon/DriveWipe/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/KodyDennon/DriveWipe/compare/v1.1.13...v1.2.0
+[1.1.13]: https://github.com/KodyDennon/DriveWipe/compare/v1.1.12...v1.1.13
 [1.1.11]: https://github.com/KodyDennon/DriveWipe/compare/v1.1.10...v1.1.11
 [1.1.10]: https://github.com/KodyDennon/DriveWipe/compare/v1.1.9...v1.1.10
 [1.1.9]: https://github.com/KodyDennon/DriveWipe/compare/v1.1.8...v1.1.9
