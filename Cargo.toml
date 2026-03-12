@@ -43,7 +43,7 @@ crossbeam-channel = "0.5"
 # Crypto
 aes = "0.8"
 ctr = "0.9"
-cipher = "0.4"
+cipher = "0.5"
 rand = "0.9"
 zeroize = { version = "1", features = ["derive"] }
 
