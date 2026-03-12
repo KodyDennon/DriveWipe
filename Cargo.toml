@@ -53,7 +53,7 @@ blake3 = "1"
 
 # Data formats
 regex = "1"
-quick-xml = "0.37"
+quick-xml = "0.38"
 byteorder = "1"
 crc32fast = "1"
 bitflags = "2"
