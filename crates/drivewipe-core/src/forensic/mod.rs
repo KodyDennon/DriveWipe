@@ -94,10 +94,10 @@ impl ForensicSession {
         // Entropy analysis
         if self.config.entropy_analysis && !cancel_token.is_cancelled() {
             log::info!("Running entropy analysis...");
-            let device_ptr = device as *mut dyn RawDeviceIo as usize;
+            let device_wrapper = crate::io::DeviceWrapper::new(device);
             let block_size = self.config.block_size;
             match tokio::task::spawn_blocking(move || {
-                let device_ref = unsafe { &mut *(device_ptr as *mut dyn RawDeviceIo) };
+                let device_ref = unsafe { device_wrapper.get_mut() };
                 entropy::analyze_entropy(device_ref, block_size)
             }).await.map_err(|e| crate::error::DriveWipeError::IoGeneric(std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))) {
                 Ok(Ok(stats)) => {
@@ -111,10 +111,10 @@ impl ForensicSession {
         // Signature scan
         if self.config.signature_scan && !cancel_token.is_cancelled() {
             log::info!("Running signature scan...");
-            let device_ptr = device as *mut dyn RawDeviceIo as usize;
+            let device_wrapper = crate::io::DeviceWrapper::new(device);
             let block_size = self.config.block_size;
             match tokio::task::spawn_blocking(move || {
-                let device_ref = unsafe { &mut *(device_ptr as *mut dyn RawDeviceIo) };
+                let device_ref = unsafe { device_wrapper.get_mut() };
                 signatures::scan_signatures(device_ref, block_size)
             }).await.map_err(|e| crate::error::DriveWipeError::IoGeneric(std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))) {
                 Ok(Ok(hits)) => {
@@ -129,10 +129,10 @@ impl ForensicSession {
         // Statistical sampling
         if self.config.statistical_sampling && !cancel_token.is_cancelled() {
             log::info!("Running statistical sampling...");
-            let device_ptr = device as *mut dyn RawDeviceIo as usize;
+            let device_wrapper = crate::io::DeviceWrapper::new(device);
             let sample_ratio = self.config.sample_ratio;
             match tokio::task::spawn_blocking(move || {
-                let device_ref = unsafe { &mut *(device_ptr as *mut dyn RawDeviceIo) };
+                let device_ref = unsafe { device_wrapper.get_mut() };
                 sampling::statistical_sample(device_ref, sample_ratio)
             }).await.map_err(|e| crate::error::DriveWipeError::IoGeneric(std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))) {
                 Ok(Ok(result)) => {
@@ -141,6 +141,12 @@ impl ForensicSession {
                 Ok(Err(e)) => log::warn!("Statistical sampling failed: {}", e),
                 Err(e) => log::warn!("Statistical sampling task failed: {}", e),
             }
+        }
+
+        // Hidden area detection
+        let hidden_areas = None;
+        if self.config.hidden_area_check && !cancel_token.is_cancelled() {
+            // Moved to UI orchestration to avoid cyclic dependencies
         }
 
         let duration = start.elapsed().as_secs_f64();
@@ -158,7 +164,7 @@ impl ForensicSession {
             entropy_stats,
             signature_hits,
             sampling_result,
-            hidden_areas: None,
+            hidden_areas,
             duration_secs: duration,
             timestamp: chrono::Utc::now(),
         })

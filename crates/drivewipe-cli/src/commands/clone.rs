@@ -20,8 +20,9 @@ pub async fn run(
     let clone_mode = match mode {
         "block" => CloneMode::Block,
         "partition" => CloneMode::Partition,
+        "image" => CloneMode::Image,
         _ => {
-            anyhow::bail!("Unknown clone mode: {}. Use 'block' or 'partition'.", mode);
+            anyhow::bail!("Unknown clone mode: {}. Use 'block', 'partition', or 'image'.", mode);
         }
     };
 
@@ -50,27 +51,63 @@ pub async fn run(
 
     let (progress_tx, progress_rx) = crossbeam_channel::unbounded();
 
-    // Open source and target devices
-    let mut source_device = drivewipe_core::io::open_device(&PathBuf::from(source), false)
-        .context("Failed to open source device")?;
-    let mut target_device = drivewipe_core::io::open_device(&PathBuf::from(target), true)
-        .context("Failed to open target device")?;
-
     let result = match clone_mode {
-        CloneMode::Block => drivewipe_core::clone::block::clone_block(
-            source_device.as_mut(),
-            target_device.as_mut(),
-            &clone_config,
-            &progress_tx,
-            cancel_token,
-        ).await,
-        CloneMode::Partition => drivewipe_core::clone::partition_aware::clone_partition_aware(
-            source_device.as_mut(),
-            target_device.as_mut(),
-            &clone_config,
-            &progress_tx,
-            cancel_token,
-        ).await,
+        CloneMode::Block => {
+            let mut source_device = drivewipe_core::io::open_device(&PathBuf::from(source), false)
+                .context("Failed to open source device")?;
+            let mut target_device = drivewipe_core::io::open_device(&PathBuf::from(target), true)
+                .context("Failed to open target device")?;
+            drivewipe_core::clone::block::clone_block(
+                source_device.as_mut(),
+                target_device.as_mut(),
+                &clone_config,
+                &progress_tx,
+                cancel_token,
+            ).await
+        }
+        CloneMode::Partition => {
+            let mut source_device = drivewipe_core::io::open_device(&PathBuf::from(source), false)
+                .context("Failed to open source device")?;
+            let mut target_device = drivewipe_core::io::open_device(&PathBuf::from(target), true)
+                .context("Failed to open target device")?;
+            drivewipe_core::clone::partition_aware::clone_partition_aware(
+                source_device.as_mut(),
+                target_device.as_mut(),
+                &clone_config,
+                &progress_tx,
+                cancel_token,
+            ).await
+        }
+        CloneMode::Image => {
+            // Determine if we are creating or restoring
+            let source_path = PathBuf::from(source);
+            let target_path = PathBuf::from(target);
+            
+            if target_path.extension().and_then(|s| s.to_str()) == Some("dwc") || 
+               (!target_path.exists() || target_path.is_file()) {
+                // Clone to image
+                let mut source_device = drivewipe_core::io::open_device(&source_path, false)
+                    .context("Failed to open source device")?;
+                drivewipe_core::clone::ops::clone_device_to_image(
+                    source_device.as_mut(),
+                    &target_path,
+                    &clone_config,
+                    &progress_tx,
+                    cancel_token,
+                ).await
+            } else {
+                // Restore from image
+                let mut target_device = drivewipe_core::io::open_device(&target_path, true)
+                    .context("Failed to open target device")?;
+                drivewipe_core::clone::ops::restore_image_to_device(
+                    &source_path,
+                    target_device.as_mut(),
+                    &clone_config,
+                    &progress_tx,
+                    cancel_token,
+                ).await
+            }
+        }
     };
 
     // Drain progress events

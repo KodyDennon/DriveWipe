@@ -1364,6 +1364,7 @@ dependencies = [
  "env_logger",
  "flate2",
  "genpdf",
+ "hex",
  "hostname",
  "libc",
  "log",
@@ -1389,8 +1390,10 @@ dependencies = [
 name = "drivewipe-gui"
 version = "1.1.13"
 dependencies = [
+ "crossbeam-channel",
  "drivewipe-core",
  "iced",
+ "tokio",
 ]
 
 [[package]]

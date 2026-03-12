@@ -35,7 +35,6 @@ pub async fn clone_block(
     });
 
     let block_size = config.block_size;
-    let mut buf = vec![0u8; block_size];
     let mut bytes_copied: u64 = 0;
     let start = Instant::now();
     let mut last_progress = Instant::now();
@@ -51,25 +50,23 @@ pub async fn clone_block(
         let read_len = (remaining as usize).min(block_size);
 
         // Use spawn_blocking for I/O since RawDeviceIo is synchronous
-        let source_ptr = source as *mut dyn RawDeviceIo as usize;
-        let target_ptr = target as *mut dyn RawDeviceIo as usize;
+        let source_wrapper = crate::io::DeviceWrapper::new(source);
         
         let (n, read_res) = tokio::task::spawn_blocking(move || {
-            let source_ref = unsafe { &mut *(source_ptr as *mut dyn RawDeviceIo) };
+            let source_ref = unsafe { source_wrapper.get_mut() };
             let mut temp_buf = vec![0u8; read_len];
             let res = source_ref.read_at(bytes_copied, &mut temp_buf);
             (res, temp_buf)
         }).await.map_err(|e| DriveWipeError::IoGeneric(std::io::Error::new(std::io::ErrorKind::Other, e.to_string())))?;
 
         let n = n?;
-        if n == n { // Just to avoid unused warning for n if break happens below
-            if n == 0 {
-                break;
-            }
+        if n == 0 {
+            break;
         }
 
+        let target_wrapper = crate::io::DeviceWrapper::new(target);
         let write_res = tokio::task::spawn_blocking(move || {
-            let target_ref = unsafe { &mut *(target_ptr as *mut dyn RawDeviceIo) };
+            let target_ref = unsafe { target_wrapper.get_mut() };
             target_ref.write_at(bytes_copied, &read_res[..n])
         }).await.map_err(|e| DriveWipeError::IoGeneric(std::io::Error::new(std::io::ErrorKind::Other, e.to_string())))?;
 
@@ -101,9 +98,9 @@ pub async fn clone_block(
         }
     }
 
-    let target_ptr = target as *mut dyn RawDeviceIo as usize;
+    let target_wrapper = crate::io::DeviceWrapper::new(target);
     tokio::task::spawn_blocking(move || {
-        let target_ref = unsafe { &mut *(target_ptr as *mut dyn RawDeviceIo) };
+        let target_ref = unsafe { target_wrapper.get_mut() };
         target_ref.sync()
     }).await.map_err(|e| DriveWipeError::IoGeneric(std::io::Error::new(std::io::ErrorKind::Other, e.to_string())))??;
 
@@ -181,8 +178,6 @@ async fn verify_clone(
 
     let mut source_hasher = Hasher::new();
     let mut target_hasher = Hasher::new();
-    let mut source_buf = vec![0u8; block_size];
-    let mut target_buf = vec![0u8; block_size];
     let mut offset: u64 = 0;
 
     while offset < total_bytes {
@@ -193,12 +188,12 @@ async fn verify_clone(
         let remaining = total_bytes - offset;
         let read_len = (remaining as usize).min(block_size);
 
-        let source_ptr = source as *mut dyn RawDeviceIo as usize;
-        let target_ptr = target as *mut dyn RawDeviceIo as usize;
+        let source_wrapper = crate::io::DeviceWrapper::new(source);
+        let target_wrapper = crate::io::DeviceWrapper::new(target);
 
         let (sn_res, tn_res, s_hash_chunk, t_hash_chunk) = tokio::task::spawn_blocking(move || {
-            let source_ref = unsafe { &mut *(source_ptr as *mut dyn RawDeviceIo) };
-            let target_ref = unsafe { &mut *(target_ptr as *mut dyn RawDeviceIo) };
+            let source_ref = unsafe { source_wrapper.get_mut() };
+            let target_ref = unsafe { target_wrapper.get_mut() };
             
             let mut s_buf = vec![0u8; read_len];
             let mut t_buf = vec![0u8; read_len];

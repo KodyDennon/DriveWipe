@@ -76,8 +76,8 @@ fn make_drive_info(capacity: u64) -> DriveInfo {
     }
 }
 
-#[test]
-fn wipe_session_zero_fill_10mib() {
+#[tokio::test]
+async fn wipe_session_zero_fill_10mib() {
     let size = 10 * 1024 * 1024; // 10 MiB
     let mut device = MockDevice::new(size);
     let drive_info = make_drive_info(size as u64);
@@ -93,7 +93,7 @@ fn wipe_session_zero_fill_10mib() {
     let (tx, _rx) = crossbeam_channel::unbounded::<ProgressEvent>();
     let cancel = CancellationToken::new();
 
-    let result = session.execute(&mut device, &tx, &cancel, None).unwrap();
+    let result = session.execute(&mut device, &tx, &cancel, None).await.unwrap();
 
     assert_eq!(result.outcome, WipeOutcome::Success);
     assert_eq!(result.total_bytes_written, size as u64);
@@ -104,8 +104,8 @@ fn wipe_session_zero_fill_10mib() {
     assert!(device.data.iter().all(|&b| b == 0x00));
 }
 
-#[test]
-fn wipe_session_with_verification() {
+#[tokio::test]
+async fn wipe_session_with_verification() {
     let size = 1024 * 1024; // 1 MiB
     let mut device = MockDevice::new(size);
     let drive_info = make_drive_info(size as u64);
@@ -121,14 +121,14 @@ fn wipe_session_with_verification() {
     let (tx, _rx) = crossbeam_channel::unbounded::<ProgressEvent>();
     let cancel = CancellationToken::new();
 
-    let result = session.execute(&mut device, &tx, &cancel, None).unwrap();
+    let result = session.execute(&mut device, &tx, &cancel, None).await.unwrap();
 
     assert_eq!(result.outcome, WipeOutcome::Success);
     assert_eq!(result.verification_passed, Some(true));
 }
 
-#[test]
-fn wipe_session_cancellation() {
+#[tokio::test]
+async fn wipe_session_cancellation() {
     let size = 10 * 1024 * 1024; // 10 MiB
     let mut device = MockDevice::new(size);
     let drive_info = make_drive_info(size as u64);
@@ -143,7 +143,7 @@ fn wipe_session_cancellation() {
     // Cancel immediately before execution.
     cancel.cancel();
 
-    let result = session.execute(&mut device, &tx, &cancel, None);
+    let result = session.execute(&mut device, &tx, &cancel, None).await;
     // The session should either return Cancelled or Interrupted.
     match result {
         Ok(r) => {
@@ -159,8 +159,8 @@ fn wipe_session_cancellation() {
     }
 }
 
-#[test]
-fn wipe_session_progress_events() {
+#[tokio::test]
+async fn wipe_session_progress_events() {
     let size = 2 * 1024 * 1024; // 2 MiB
     let mut device = MockDevice::new(size);
     let drive_info = make_drive_info(size as u64);
@@ -176,7 +176,7 @@ fn wipe_session_progress_events() {
     let (tx, rx) = crossbeam_channel::unbounded::<ProgressEvent>();
     let cancel = CancellationToken::new();
 
-    session.execute(&mut device, &tx, &cancel, None).unwrap();
+    session.execute(&mut device, &tx, &cancel, None).await.unwrap();
     drop(tx);
 
     let events: Vec<ProgressEvent> = rx.iter().collect();
@@ -190,8 +190,8 @@ fn wipe_session_progress_events() {
     ));
 }
 
-#[test]
-fn wipe_session_multiple_passes() {
+#[tokio::test]
+async fn wipe_session_multiple_passes() {
     use drivewipe_core::wipe::software::DodShortMethod;
 
     let size = 1024 * 1024; // 1 MiB
@@ -209,7 +209,7 @@ fn wipe_session_multiple_passes() {
     let (tx, _rx) = crossbeam_channel::unbounded::<ProgressEvent>();
     let cancel = CancellationToken::new();
 
-    let result = session.execute(&mut device, &tx, &cancel, None).unwrap();
+    let result = session.execute(&mut device, &tx, &cancel, None).await.unwrap();
 
     assert_eq!(result.outcome, WipeOutcome::Success);
     assert_eq!(result.passes.len(), 3);

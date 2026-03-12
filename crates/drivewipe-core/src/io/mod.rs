@@ -193,3 +193,34 @@ pub fn open_device(path: &std::path::Path, _writable: bool) -> Result<Box<dyn Ra
 pub fn allocate_aligned_buffer(size: usize, alignment: usize) -> AlignedBuffer {
     AlignedBuffer::new(size, alignment)
 }
+
+/// Wrapper to safely pass a raw pointer to a device across threads.
+///
+/// SAFETY: This allows passing `&mut dyn RawDeviceIo` to `spawn_blocking` tasks
+/// bypassing the `'static` lifetime requirement. The caller must ensure that:
+/// 1. The underlying device object outlives the thread/task using this wrapper.
+/// 2. Exclusive access is maintained (e.g. by awaiting the task immediately).
+#[derive(Clone, Copy)]
+pub struct DeviceWrapper(pub [usize; 2]);
+
+unsafe impl Send for DeviceWrapper {}
+unsafe impl Sync for DeviceWrapper {}
+
+impl DeviceWrapper {
+    /// Create a new wrapper from a mutable reference.
+    pub fn new(device: &mut dyn RawDeviceIo) -> Self {
+        // SAFETY: Transmuting a fat pointer to [usize; 2] is safe for the same run.
+        unsafe { Self(std::mem::transmute(device)) }
+    }
+
+    /// Get a mutable reference to the underlying device.
+    ///
+    /// # SAFETY
+    ///
+    /// The caller must ensure that the pointer is still valid and that
+    /// exclusive access is maintained.
+    pub unsafe fn get_mut<'a>(&self) -> &'a mut dyn RawDeviceIo {
+        // SAFETY: Transmuting [usize; 2] back to a fat pointer.
+        unsafe { std::mem::transmute(self.0) }
+    }
+}

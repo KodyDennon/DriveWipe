@@ -341,3 +341,18 @@ pub fn preview_operation(description: &str, affected: &[u32], data_loss: bool) -
         data_loss_risk: data_loss,
     }
 }
+
+/// Write the partition table to the device.
+///
+/// This persists all changes made to the in-memory `PartitionTable` struct.
+/// For GPT, this writes both the Primary (LBA 1) and Backup (Last LBA) tables.
+/// For MBR, this writes the MBR at LBA 0.
+pub fn write_table(
+    device: &mut dyn RawDeviceIo,
+    table: &PartitionTable,
+) -> Result<()> {
+    match table {
+        PartitionTable::Gpt(gpt) => gpt.write(device),
+        PartitionTable::Mbr(mbr) => mbr.write(device),
+    }
+}

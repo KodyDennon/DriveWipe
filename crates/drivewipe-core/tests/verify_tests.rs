@@ -55,33 +55,33 @@ impl RawDeviceIo for MockDevice {
     }
 }
 
-#[test]
-fn zero_verify_passes_on_all_zeros() {
+#[tokio::test]
+async fn zero_verify_passes_on_all_zeros() {
     let mut device = MockDevice::all_zeros(4096);
     let (tx, _rx) = crossbeam_channel::unbounded::<ProgressEvent>();
     let verifier = ZeroVerifier;
-    let result = verifier.verify(&mut device, Uuid::new_v4(), &tx);
+    let result = verifier.verify(&mut device, Uuid::new_v4(), &tx).await;
     assert!(result.is_ok());
     assert!(result.unwrap());
 }
 
-#[test]
-fn zero_verify_fails_on_non_zero_data() {
+#[tokio::test]
+async fn zero_verify_fails_on_non_zero_data() {
     let mut data = vec![0u8; 4096];
     data[2048] = 0xFF;
     let mut device = MockDevice::new(data);
     let (tx, _rx) = crossbeam_channel::unbounded::<ProgressEvent>();
     let verifier = ZeroVerifier;
-    let result = verifier.verify(&mut device, Uuid::new_v4(), &tx);
+    let result = verifier.verify(&mut device, Uuid::new_v4(), &tx).await;
     assert!(result.is_err());
 }
 
-#[test]
-fn zero_verify_progress_events() {
+#[tokio::test]
+async fn zero_verify_progress_events() {
     let mut device = MockDevice::all_zeros(2 * 1024 * 1024); // 2 MiB
     let (tx, rx) = crossbeam_channel::unbounded::<ProgressEvent>();
     let verifier = ZeroVerifier;
-    verifier.verify(&mut device, Uuid::new_v4(), &tx).unwrap();
+    verifier.verify(&mut device, Uuid::new_v4(), &tx).await.unwrap();
     drop(tx);
 
     let events: Vec<ProgressEvent> = rx.iter().collect();
@@ -101,23 +101,23 @@ fn zero_verify_progress_events() {
     ));
 }
 
-#[test]
-fn zero_verify_empty_device() {
+#[tokio::test]
+async fn zero_verify_empty_device() {
     let mut device = MockDevice::all_zeros(0);
     let (tx, _rx) = crossbeam_channel::unbounded::<ProgressEvent>();
     let verifier = ZeroVerifier;
-    let result = verifier.verify(&mut device, Uuid::new_v4(), &tx);
+    let result = verifier.verify(&mut device, Uuid::new_v4(), &tx).await;
     assert!(result.is_ok());
 }
 
-#[test]
-fn zero_verify_fails_at_first_byte() {
+#[tokio::test]
+async fn zero_verify_fails_at_first_byte() {
     let mut data = vec![0u8; 1024];
     data[0] = 0x42;
     let mut device = MockDevice::new(data);
     let (tx, _rx) = crossbeam_channel::unbounded::<ProgressEvent>();
     let verifier = ZeroVerifier;
-    let result = verifier.verify(&mut device, Uuid::new_v4(), &tx);
+    let result = verifier.verify(&mut device, Uuid::new_v4(), &tx).await;
     match result {
         Err(drivewipe_core::DriveWipeError::VerificationFailed {
             offset,
@@ -132,14 +132,14 @@ fn zero_verify_fails_at_first_byte() {
     }
 }
 
-#[test]
-fn zero_verify_fails_at_last_byte() {
+#[tokio::test]
+async fn zero_verify_fails_at_last_byte() {
     let mut data = vec![0u8; 1024];
     data[1023] = 0x01;
     let mut device = MockDevice::new(data);
     let (tx, _rx) = crossbeam_channel::unbounded::<ProgressEvent>();
     let verifier = ZeroVerifier;
-    let result = verifier.verify(&mut device, Uuid::new_v4(), &tx);
+    let result = verifier.verify(&mut device, Uuid::new_v4(), &tx).await;
     match result {
         Err(drivewipe_core::DriveWipeError::VerificationFailed {
             offset,

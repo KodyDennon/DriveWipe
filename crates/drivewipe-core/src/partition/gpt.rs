@@ -158,6 +158,199 @@ impl GptTable {
 
         stored_entry_crc == computed_entry_crc
     }
+
+    /// Serialize the GPT table to bytes (Header + Entries).
+    ///
+    /// This generates the data for LBA 1 (Primary Header) and the partition entries.
+    /// It automatically recalculates CRC32 checksums.
+    ///
+    /// Returns (Header Bytes, Entry Array Bytes).
+    pub fn to_bytes(&self, header_lba: u64, backup_lba: u64, entries_lba: u64) -> Result<(Vec<u8>, Vec<u8>)> {
+        // 1. Serialize Partition Entries
+        let mut entries_bytes = vec![0u8; (self.entry_count * self.entry_size) as usize];
+        
+        for (i, part) in self.partitions.iter().enumerate() {
+            if i as u32 >= self.entry_count {
+                break;
+            }
+            let offset = (i as u32 * self.entry_size) as usize;
+            let entry = &mut entries_bytes[offset..offset + self.entry_size as usize];
+
+            // Type GUID
+            let type_guid = parse_guid(&part.type_id).unwrap_or([0; 16]);
+            entry[0..16].copy_from_slice(&type_guid);
+
+            // Unique GUID
+            let unique_guid = parse_guid(part.unique_id.as_deref().unwrap_or_default()).unwrap_or([0; 16]);
+            entry[16..32].copy_from_slice(&unique_guid);
+
+            // LBAs
+            entry[32..40].copy_from_slice(&part.start_lba.to_le_bytes());
+            entry[40..48].copy_from_slice(&part.end_lba.to_le_bytes());
+
+            // Attributes
+            entry[48..56].copy_from_slice(&part.attributes.to_le_bytes());
+
+            // Name (UTF-16LE)
+            let name_utf16: Vec<u16> = part.name.encode_utf16().take(36).collect(); // Max 36 chars (72 bytes)
+            for (j, char_code) in name_utf16.iter().enumerate() {
+                let char_bytes = char_code.to_le_bytes();
+                entry[56 + j * 2] = char_bytes[0];
+                entry[56 + j * 2 + 1] = char_bytes[1];
+            }
+        }
+
+        let entries_crc = crc32fast::hash(&entries_bytes);
+
+        // 2. Serialize Header
+        let mut header = vec![0u8; 512]; // Standard 512-byte header
+        
+        // Signature "EFI PART"
+        header[0..8].copy_from_slice(GPT_SIGNATURE);
+        
+        // Revision 1.0 (00 00 01 00)
+        header[8..12].copy_from_slice(&[0x00, 0x00, 0x01, 0x00]);
+        
+        // Header size (92 bytes)
+        header[12..16].copy_from_slice(&92u32.to_le_bytes());
+        
+        // CRC32 (zero initially)
+        header[16..20].fill(0);
+        
+        // Reserved
+        header[20..24].fill(0);
+        
+        // Current LBA (Primary: 1, Backup: Last LBA)
+        header[24..32].copy_from_slice(&header_lba.to_le_bytes());
+        
+        // Backup LBA (Primary: Last LBA, Backup: 1)
+        header[32..40].copy_from_slice(&backup_lba.to_le_bytes());
+        
+        // Usable LBAs
+        header[40..48].copy_from_slice(&self.first_usable_lba.to_le_bytes());
+        header[48..56].copy_from_slice(&self.last_usable_lba.to_le_bytes());
+        
+        // Disk GUID
+        let disk_guid = parse_guid(&self.disk_guid).unwrap_or([0; 16]);
+        header[56..72].copy_from_slice(&disk_guid);
+        
+        // Partition Entries Starting LBA
+        header[72..80].copy_from_slice(&entries_lba.to_le_bytes());
+        
+        // Number of Partition Entries
+        header[80..84].copy_from_slice(&self.entry_count.to_le_bytes());
+        
+        // Size of Partition Entry
+        header[84..88].copy_from_slice(&self.entry_size.to_le_bytes());
+        
+        // Partition Entries CRC32
+        header[88..92].copy_from_slice(&entries_crc.to_le_bytes());
+
+        // Calculate Header CRC32
+        // We only checksum the first 92 bytes as per spec (header_size)
+        let header_crc = crc32fast::hash(&header[0..92]);
+        header[16..20].copy_from_slice(&header_crc.to_le_bytes());
+
+        Ok((header, entries_bytes))
+    }
+
+    /// Write the GPT table to the device (Primary and Backup).
+    pub fn write(&self, device: &mut dyn crate::io::RawDeviceIo) -> Result<()> {
+        let capacity_sectors = device.capacity() / 512;
+        let last_lba = capacity_sectors - 1;
+
+        // 1. Write Protective MBR at LBA 0
+        let pmbr = generate_protective_mbr(capacity_sectors);
+        device.write_at(0, &pmbr)?;
+
+        // 2. Write Primary GPT (LBA 1)
+        let (primary_header, entries) = self.to_bytes(1, last_lba, 2)?;
+        
+        // Write Primary Header at LBA 1
+        device.write_at(512, &primary_header)?;
+        
+        // Write Partition Entries starting at LBA 2
+        device.write_at(1024, &entries)?;
+
+        // 3. Write Backup GPT (Last LBA)
+        // Entries usually start at Last LBA - 33 (for 128 entries of 128 bytes = 16KB = 32 sectors)
+        let entries_sectors = (entries.len() as u64 + 511) / 512;
+        let backup_entries_lba = last_lba - entries_sectors;
+        
+        let (backup_header, _) = self.to_bytes(last_lba, 1, backup_entries_lba)?;
+
+        // Write Backup Entries
+        device.write_at(backup_entries_lba * 512, &entries)?;
+        
+        // Write Backup Header at Last LBA
+        device.write_at(last_lba * 512, &backup_header)?;
+        
+        device.sync()?;
+
+        Ok(())
+    }
+}
+
+/// Generate a standard protective MBR for a GPT-partitioned disk.
+fn generate_protective_mbr(capacity_sectors: u64) -> [u8; 512] {
+    let mut mbr = [0u8; 512];
+    
+    // Partition 1 entry at offset 446
+    let entry = &mut mbr[446..462];
+    entry[0] = 0x00; // Status
+    entry[1] = 0x00; // CHS Start
+    entry[2] = 0x02;
+    entry[3] = 0x00;
+    entry[4] = 0xEE; // Type GPT Protective
+    entry[5] = 0xFF; // CHS End
+    entry[6] = 0xFF;
+    entry[7] = 0xFF;
+    
+    // LBA Start (1)
+    entry[8..12].copy_from_slice(&1u32.to_le_bytes());
+    
+    // Size in sectors (min(total-1, 0xFFFFFFFF))
+    let size = (capacity_sectors - 1).min(0xFFFFFFFF) as u32;
+    entry[12..16].copy_from_slice(&size.to_le_bytes());
+    
+    // Signature
+    mbr[510] = 0x55;
+    mbr[511] = 0xAA;
+    
+    mbr
+}
+
+/// Parse a mixed-endian GUID string into 16 bytes.
+fn parse_guid(guid: &str) -> Option<[u8; 16]> {
+    let hex_str = guid.replace('-', "");
+    if hex_str.len() != 32 {
+        return None;
+    }
+
+    let bytes = hex::decode(hex_str).ok()?;
+    if bytes.len() != 16 {
+        return None;
+    }
+
+    // Mixed endian conversion
+    let mut out = [0u8; 16];
+    out[0] = bytes[3];
+    out[1] = bytes[2];
+    out[2] = bytes[1];
+    out[3] = bytes[0];
+    out[4] = bytes[5];
+    out[5] = bytes[4];
+    out[6] = bytes[7];
+    out[7] = bytes[6];
+    out[8] = bytes[8];
+    out[9] = bytes[9];
+    out[10] = bytes[10];
+    out[11] = bytes[11];
+    out[12] = bytes[12];
+    out[13] = bytes[13];
+    out[14] = bytes[14];
+    out[15] = bytes[15];
+    Some(out)
 }
 
 /// Format a mixed-endian GUID from 16 bytes.

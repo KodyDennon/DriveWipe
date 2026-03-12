@@ -1,5 +1,6 @@
 pub mod block;
 pub mod image;
+pub mod ops;
 pub mod partition_aware;
 
 use std::path::PathBuf;
@@ -15,6 +16,8 @@ pub enum CloneMode {
     Block,
     /// Partition-aware copy with resize support.
     Partition,
+    /// Copy to/from a compressed/encrypted image file.
+    Image,
 }
 
 /// Compression mode for clone images.

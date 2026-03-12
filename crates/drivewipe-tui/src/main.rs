@@ -48,7 +48,7 @@ async fn main() -> anyhow::Result<()> {
 
     // Create app and run — always restore the terminal even on error.
     let result = (|| async {
-        let mut app = app::App::new(config)?;
+        let mut app = app::App::new(config).await?;
         app.run(&mut terminal).await
     })()
     .await;

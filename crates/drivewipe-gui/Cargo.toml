@@ -1,6 +1,6 @@
 [package]
 name = "drivewipe-gui"
-version = "1.1.13"
+version = "1.2.0"
 edition.workspace = true
 rust-version.workspace = true
 authors.workspace = true
@@ -12,5 +12,7 @@ name = "drivewipe-gui"
 path = "src/main.rs"
 
 [dependencies]
+crossbeam-channel.workspace = true
 drivewipe-core = { path = "../drivewipe-core" }
 iced.workspace = true
+tokio = { version = "1.50.0", features = ["full"] }

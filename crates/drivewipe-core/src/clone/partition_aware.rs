@@ -36,9 +36,9 @@ pub async fn clone_partition_aware(
     });
 
     // Read and parse source partition table
-    let source_ptr = source as *mut dyn RawDeviceIo as usize;
+    let source_wrapper = crate::io::DeviceWrapper::new(source);
     let header_buf = tokio::task::spawn_blocking(move || {
-        let source_ref = unsafe { &mut *(source_ptr as *mut dyn RawDeviceIo) };
+        let source_ref = unsafe { source_wrapper.get_mut() };
         let mut buf = vec![0u8; 34 * 512]; // Read enough for GPT header + entries
         let res = source_ref.read_at(0, &mut buf);
         (res, buf)

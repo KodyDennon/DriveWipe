@@ -75,6 +75,73 @@ impl MbrTable {
             partitions,
         })
     }
+
+    /// Serialize the MBR table to 512 bytes.
+    pub fn to_bytes(&self) -> Vec<u8> {
+        let mut buffer = vec![0u8; 512];
+
+        // 1. Boot code (0-440) - filled with zeros for now, or could preserve existing if read
+        // For a wipe tool, zeroing boot code is safer unless we explicitly want to preserve it.
+        // We'll leave it as zeros.
+
+        // 2. Disk signature (440-444)
+        buffer[440..444].copy_from_slice(&self.disk_signature.to_le_bytes());
+
+        // 3. Nulls (444-446)
+        buffer[444] = 0;
+        buffer[445] = 0;
+
+        // 4. Partition entries (446-510)
+        // We have up to 4 partitions.
+        for (i, part) in self.partitions.iter().enumerate() {
+            if i >= 4 {
+                break;
+            }
+            let offset = 446 + (i * 16);
+            let entry = &mut buffer[offset..offset + 16];
+
+            // Status (0x80 = bootable, 0x00 = inactive)
+            entry[0] = if part.bootable { 0x80 } else { 0x00 };
+
+            // CHS Start (1-4) - We'll use 0xFFFFFF for LBA addressing if possible,
+            // or calculate valid CHS if < 8GB. For modern drives, LBA is king.
+            // A simple approach is to max out CHS to indicate LBA usage.
+            entry[1] = 0xFE;
+            entry[2] = 0xFF;
+            entry[3] = 0xFF;
+
+            // Partition Type (4)
+            // Parse from hex string "0x83" or name
+            let type_byte = u8::from_str_radix(part.type_id.trim_start_matches("0x"), 16).unwrap_or(0x83);
+            entry[4] = type_byte;
+
+            // CHS End (5-8)
+            entry[5] = 0xFE;
+            entry[6] = 0xFF;
+            entry[7] = 0xFF;
+
+            // LBA Start (8-12)
+            let start_lba = part.start_lba as u32; // MBR uses 32-bit LBA
+            entry[8..12].copy_from_slice(&start_lba.to_le_bytes());
+
+            // Number of Sectors (12-16)
+            let sectors = (part.end_lba - part.start_lba + 1) as u32;
+            entry[12..16].copy_from_slice(&sectors.to_le_bytes());
+        }
+
+        // 5. Boot signature (510-512)
+        buffer[510] = 0x55;
+        buffer[511] = 0xAA;
+
+        buffer
+    }
+    /// Write the MBR table to the device (LBA 0).
+    pub fn write(&self, device: &mut dyn crate::io::RawDeviceIo) -> Result<()> {
+        let bytes = self.to_bytes();
+        device.write_at(0, &bytes)?;
+        device.sync()?;
+        Ok(())
+    }
 }
 
 /// Well-known MBR partition type bytes.

@@ -1,5 +1,4 @@
 use std::collections::{HashMap, VecDeque};
-use std::io;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -12,7 +11,6 @@ use ratatui::widgets::{ListState, TableState};
 use uuid::Uuid;
 
 use drivewipe_core::config::DriveWipeConfig;
-use drivewipe_core::drive;
 use drivewipe_core::progress::ProgressEvent;
 use drivewipe_core::session::{CancellationToken, WipeSession};
 use drivewipe_core::types::*;
@@ -237,7 +235,7 @@ pub struct App {
 }
 
 impl App {
-    pub fn new(config: DriveWipeConfig) -> Result<Self> {
+    pub async fn new(config: DriveWipeConfig) -> Result<Self> {
         let method_registry = WipeMethodRegistry::new();
 
         // Create the progress channel pair.
@@ -321,7 +319,7 @@ impl App {
         // Populate the drive list. Errors are logged into the TUI rather
         // than propagated — this lets users see a helpful message on-screen
         // instead of crashing with a raw OS error.
-        app.refresh_drives();
+        app.refresh_drives().await;
         Ok(app)
     }
 
@@ -1467,6 +1465,16 @@ impl App {
             KeyCode::Char('r') => {
                 self.refresh_drives().await;
             }
+            KeyCode::Char('d') => {
+                if let (Some(drive_idx), Some(part_idx)) = (self.focused_drive_index, self.table_state.selected()) {
+                    self.log_push(format!("Deleting partition {} on drive {}...", part_idx, drive_idx));
+                }
+            }
+            KeyCode::Char('n') => {
+                if let Some(drive_idx) = self.focused_drive_index {
+                    self.log_push(format!("Create new partition on drive {}...", drive_idx));
+                }
+            }
             _ => {}
         }
     }
@@ -2098,6 +2106,11 @@ impl App {
                         &progress_tx,
                         &cancel_token,
                     ).await
+                }
+                CloneMode::Image => {
+                    Err(drivewipe_core::error::DriveWipeError::Clone(
+                        "Image mode not supported in TUI yet".to_string(),
+                    ))
                 }
             };
 

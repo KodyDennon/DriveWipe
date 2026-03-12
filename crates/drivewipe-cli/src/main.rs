@@ -193,6 +193,35 @@ enum PartitionAction {
         #[arg(short, long)]
         device: String,
     },
+    /// Create a new partition
+    Create {
+        #[arg(short, long)]
+        device: String,
+        #[arg(long)]
+        start: u64,
+        #[arg(long)]
+        end: u64,
+        #[arg(long)]
+        type_id: String,
+        #[arg(long)]
+        name: String,
+    },
+    /// Delete a partition
+    Delete {
+        #[arg(short, long)]
+        device: String,
+        #[arg(short, long)]
+        index: u32,
+    },
+    /// Resize a partition
+    Resize {
+        #[arg(short, long)]
+        device: String,
+        #[arg(short, long)]
+        index: u32,
+        #[arg(long)]
+        new_end: u64,
+    },
 }
 
 #[derive(Subcommand)]
@@ -348,6 +377,23 @@ async fn run(cli: Cli) -> Result<()> {
         ).await,
         Commands::Partition { action } => match action {
             PartitionAction::List { device } => commands::partition::list(&config, &device).await,
+            PartitionAction::Create {
+                device,
+                start,
+                end,
+                type_id,
+                name,
+            } => {
+                commands::partition::create(&config, &device, start, end, &type_id, &name).await
+            }
+            PartitionAction::Delete { device, index } => {
+                commands::partition::delete(&config, &device, index).await
+            }
+            PartitionAction::Resize {
+                device,
+                index,
+                new_end,
+            } => commands::partition::resize(&config, &device, index, new_end).await,
         },
         Commands::Forensic { action } => match action {
             ForensicAction::Scan { device } => {
