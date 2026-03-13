@@ -93,7 +93,10 @@ async fn wipe_session_zero_fill_10mib() {
     let (tx, _rx) = crossbeam_channel::unbounded::<ProgressEvent>();
     let cancel = CancellationToken::new();
 
-    let result = session.execute(&mut device, &tx, &cancel, None).await.unwrap();
+    let result = session
+        .execute(&mut device, &tx, &cancel, None)
+        .await
+        .unwrap();
 
     assert_eq!(result.outcome, WipeOutcome::Success);
     assert_eq!(result.total_bytes_written, size as u64);
@@ -121,7 +124,10 @@ async fn wipe_session_with_verification() {
     let (tx, _rx) = crossbeam_channel::unbounded::<ProgressEvent>();
     let cancel = CancellationToken::new();
 
-    let result = session.execute(&mut device, &tx, &cancel, None).await.unwrap();
+    let result = session
+        .execute(&mut device, &tx, &cancel, None)
+        .await
+        .unwrap();
 
     assert_eq!(result.outcome, WipeOutcome::Success);
     assert_eq!(result.verification_passed, Some(true));
@@ -176,7 +182,10 @@ async fn wipe_session_progress_events() {
     let (tx, rx) = crossbeam_channel::unbounded::<ProgressEvent>();
     let cancel = CancellationToken::new();
 
-    session.execute(&mut device, &tx, &cancel, None).await.unwrap();
+    session
+        .execute(&mut device, &tx, &cancel, None)
+        .await
+        .unwrap();
     drop(tx);
 
     let events: Vec<ProgressEvent> = rx.iter().collect();
@@ -209,7 +218,10 @@ async fn wipe_session_multiple_passes() {
     let (tx, _rx) = crossbeam_channel::unbounded::<ProgressEvent>();
     let cancel = CancellationToken::new();
 
-    let result = session.execute(&mut device, &tx, &cancel, None).await.unwrap();
+    let result = session
+        .execute(&mut device, &tx, &cancel, None)
+        .await
+        .unwrap();
 
     assert_eq!(result.outcome, WipeOutcome::Success);
     assert_eq!(result.passes.len(), 3);

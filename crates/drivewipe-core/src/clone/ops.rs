@@ -1,5 +1,5 @@
-use std::io::{BufReader, BufWriter, Write};
 use std::fs::File;
+use std::io::{BufReader, BufWriter, Write};
 use std::time::Instant;
 
 use chrono::Utc;
@@ -11,8 +11,8 @@ use crate::io::RawDeviceIo;
 use crate::progress::ProgressEvent;
 use crate::session::CancellationToken;
 
-use super::{CloneConfig, CloneMode, CloneResult};
 use super::image::{CloneImage, CloneImageHeader};
+use super::{CloneConfig, CloneMode, CloneResult};
 
 /// Clone a block device to a compressed/encrypted image file.
 pub async fn clone_device_to_image(
@@ -40,7 +40,7 @@ pub async fn clone_device_to_image(
     let mut writer = BufWriter::new(file);
 
     let block_size = config.block_size;
-    let chunk_count = (source_capacity + block_size as u64 - 1) / block_size as u64;
+    let chunk_count = source_capacity.div_ceil(block_size as u64);
 
     let header = CloneImageHeader {
         version: 1,
@@ -77,7 +77,9 @@ pub async fn clone_device_to_image(
             let mut temp_buf = vec![0u8; read_len];
             let res = source_ref.read_at(offset, &mut temp_buf);
             (res, temp_buf)
-        }).await.map_err(|e| DriveWipeError::IoGeneric(std::io::Error::new(std::io::ErrorKind::Other, e.to_string())))?;
+        })
+        .await
+        .map_err(|e| DriveWipeError::IoGeneric(std::io::Error::other(e.to_string())))?;
 
         let n = n?;
         if n == 0 {
@@ -186,7 +188,9 @@ pub async fn restore_image_to_device(
         let write_res = tokio::task::spawn_blocking(move || {
             let target_ref = unsafe { target_wrapper.get_mut() };
             target_ref.write_at(offset, &chunk_data)
-        }).await.map_err(|e| DriveWipeError::IoGeneric(std::io::Error::new(std::io::ErrorKind::Other, e.to_string())))?;
+        })
+        .await
+        .map_err(|e| DriveWipeError::IoGeneric(std::io::Error::other(e.to_string())))?;
 
         write_res?;
         bytes_restored += n as u64;
@@ -205,7 +209,9 @@ pub async fn restore_image_to_device(
     let sync_res = tokio::task::spawn_blocking(move || {
         let target_ref = unsafe { target_wrapper.get_mut() };
         target_ref.sync()
-    }).await.map_err(|e| DriveWipeError::IoGeneric(std::io::Error::new(std::io::ErrorKind::Other, e.to_string())))?;
+    })
+    .await
+    .map_err(|e| DriveWipeError::IoGeneric(std::io::Error::other(e.to_string())))?;
     sync_res?;
 
     let duration = start.elapsed().as_secs_f64();

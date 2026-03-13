@@ -22,16 +22,18 @@ impl DriveEnumerator for LinuxDriveEnumerator {
     async fn enumerate(&self) -> Result<Vec<DriveInfo>> {
         let mut drives = Vec::new();
 
-        let mut entries = tokio::fs::read_dir("/sys/block").await.map_err(|e| DriveWipeError::Io {
-            path: PathBuf::from("/sys/block"),
-            source: e,
-        })?;
+        let mut entries =
+            tokio::fs::read_dir("/sys/block")
+                .await
+                .map_err(|e| DriveWipeError::Io {
+                    path: PathBuf::from("/sys/block"),
+                    source: e,
+                })?;
 
         while let Some(entry) = entries.next_entry().await.map_err(|e| DriveWipeError::Io {
             path: PathBuf::from("/sys/block"),
             source: e,
         })? {
-
             let name = entry.file_name();
             let name_str = name.to_string_lossy();
 
@@ -108,12 +110,14 @@ async fn build_drive_info(name: &str, dev_path: &Path) -> Result<DriveInfo> {
     let capacity = size_sectors * 512;
 
     // Logical block size.
-    let block_size =
-        read_sysfs_u64(&sys_block.join("queue/logical_block_size")).await.unwrap_or(512) as u32;
+    let block_size = read_sysfs_u64(&sys_block.join("queue/logical_block_size"))
+        .await
+        .unwrap_or(512) as u32;
 
     // Physical block size.
-    let physical_block_size =
-        read_sysfs_u64(&sys_block.join("queue/physical_block_size")).await.map(|v| v as u32);
+    let physical_block_size = read_sysfs_u64(&sys_block.join("queue/physical_block_size"))
+        .await
+        .map(|v| v as u32);
 
     // rotational: 0 = SSD/NVMe, 1 = HDD.
     let rotational = read_sysfs_u64(&sys_block.join("queue/rotational")).await;
@@ -130,7 +134,9 @@ async fn build_drive_info(name: &str, dev_path: &Path) -> Result<DriveInfo> {
     let transport = detect_transport(name, &sys_block).await;
 
     // Removable flag.
-    let is_removable = read_sysfs_u64(&sys_block.join("removable")).await.is_some_and(|v| v == 1);
+    let is_removable = read_sysfs_u64(&sys_block.join("removable"))
+        .await
+        .is_some_and(|v| v == 1);
 
     // Boot drive detection.
     let is_boot_drive = detect_boot_drive(dev_path);

@@ -4,10 +4,10 @@
 //! well-known secure-erase standard. The actual byte patterns are provided by
 //! the generators in [`super::patterns`].
 
+use super::WipeMethod;
 use super::patterns::{
     ConstantFill, OneFill, PatternGenerator, RandomFill, RepeatingPattern, ZeroFill,
 };
-use super::WipeMethod;
 use async_trait::async_trait;
 
 // ── Helpers ──────────────────────────────────────────────────────────────────

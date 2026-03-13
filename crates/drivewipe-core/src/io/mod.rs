@@ -210,7 +210,11 @@ impl DeviceWrapper {
     /// Create a new wrapper from a mutable reference.
     pub fn new(device: &mut dyn RawDeviceIo) -> Self {
         // SAFETY: Transmuting a fat pointer to [usize; 2] is safe for the same run.
-        unsafe { Self(std::mem::transmute(device)) }
+        unsafe {
+            Self(std::mem::transmute::<&mut dyn RawDeviceIo, [usize; 2]>(
+                device,
+            ))
+        }
     }
 
     /// Get a mutable reference to the underlying device.

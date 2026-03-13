@@ -1,7 +1,6 @@
 use std::path::Path;
 use std::sync::Arc;
 
-
 use anyhow::{Context, Result, bail};
 use crossbeam_channel;
 use uuid::Uuid;
@@ -88,7 +87,9 @@ pub async fn run(
 
     // ── Run verification ────────────────────────────────────────────────
     let session_id = Uuid::new_v4();
-    let result = verifier.verify(&mut device_io, session_id, &progress_tx).await;
+    let result = verifier
+        .verify(&mut device_io, session_id, &progress_tx)
+        .await;
 
     // Drop sender so the display thread terminates.
     drop(progress_tx);

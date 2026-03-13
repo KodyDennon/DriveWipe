@@ -321,17 +321,20 @@ async fn run(cli: Cli) -> Result<()> {
             verify,
             report_pdf,
             dry_run,
-        } => commands::wipe::run(
-            &config,
-            &cancel_token,
-            &device,
-            &method,
-            force,
-            yes_i_know_what_im_doing,
-            verify,
-            report_pdf.as_deref(),
-            dry_run,
-        ).await,
+        } => {
+            commands::wipe::run(
+                &config,
+                &cancel_token,
+                &device,
+                &method,
+                force,
+                yes_i_know_what_im_doing,
+                verify,
+                report_pdf.as_deref(),
+                dry_run,
+            )
+            .await
+        }
         Commands::Verify { device, pattern } => {
             commands::verify::run(&config, &cancel_token, &device, &pattern).await
         }
@@ -342,7 +345,9 @@ async fn run(cli: Cli) -> Result<()> {
             output,
         } => commands::report::run(&config, &input, &format, output.as_deref()).await,
         Commands::Queue { action } => match action {
-            QueueAction::Add { device, method } => commands::queue::add(&config, &device, &method).await,
+            QueueAction::Add { device, method } => {
+                commands::queue::add(&config, &device, &method).await
+            }
             QueueAction::Start { parallel } => {
                 commands::queue::start(&config, &cancel_token, parallel).await
             }
@@ -366,15 +371,18 @@ async fn run(cli: Cli) -> Result<()> {
             mode,
             compress,
             encrypt,
-        } => commands::clone::run(
-            &config,
-            &cancel_token,
-            &source,
-            &target,
-            &mode,
-            compress,
-            encrypt,
-        ).await,
+        } => {
+            commands::clone::run(
+                &config,
+                &cancel_token,
+                &source,
+                &target,
+                &mode,
+                compress,
+                encrypt,
+            )
+            .await
+        }
         Commands::Partition { action } => match action {
             PartitionAction::List { device } => commands::partition::list(&config, &device).await,
             PartitionAction::Create {
@@ -383,9 +391,7 @@ async fn run(cli: Cli) -> Result<()> {
                 end,
                 type_id,
                 name,
-            } => {
-                commands::partition::create(&config, &device, start, end, &type_id, &name).await
-            }
+            } => commands::partition::create(&config, &device, start, end, &type_id, &name).await,
             PartitionAction::Delete { device, index } => {
                 commands::partition::delete(&config, &device, index).await
             }

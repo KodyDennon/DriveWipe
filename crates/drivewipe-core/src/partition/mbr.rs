@@ -112,7 +112,8 @@ impl MbrTable {
 
             // Partition Type (4)
             // Parse from hex string "0x83" or name
-            let type_byte = u8::from_str_radix(part.type_id.trim_start_matches("0x"), 16).unwrap_or(0x83);
+            let type_byte =
+                u8::from_str_radix(part.type_id.trim_start_matches("0x"), 16).unwrap_or(0x83);
             entry[4] = type_byte;
 
             // CHS End (5-8)

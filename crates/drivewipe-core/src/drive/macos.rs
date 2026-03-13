@@ -170,7 +170,10 @@ async fn build_drive_info_from_diskutil(disk_name: &str, dev_path: &Path) -> Res
 
 /// Count partitions for a disk by listing its slices.
 async fn count_partitions_macos(disk_name: &str) -> u32 {
-    let output = Command::new("diskutil").args(["list", disk_name]).output().await;
+    let output = Command::new("diskutil")
+        .args(["list", disk_name])
+        .output()
+        .await;
 
     let Ok(output) = output else {
         return 0;

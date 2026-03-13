@@ -42,7 +42,9 @@ pub async fn clone_partition_aware(
         let mut buf = vec![0u8; 34 * 512]; // Read enough for GPT header + entries
         let res = source_ref.read_at(0, &mut buf);
         (res, buf)
-    }).await.map_err(|e| crate::error::DriveWipeError::IoGeneric(std::io::Error::new(std::io::ErrorKind::Other, e.to_string())))?;
+    })
+    .await
+    .map_err(|e| crate::error::DriveWipeError::IoGeneric(std::io::Error::other(e.to_string())))?;
 
     let (read_res, header_buf) = header_buf;
     read_res?;

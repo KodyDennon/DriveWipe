@@ -33,8 +33,10 @@ pub async fn list(_config: &DriveWipeConfig, device: &str) -> Result<()> {
         let device_ref = unsafe { device_wrapper.get_mut() };
         let mut b = vec![0u8; 34 * 512]; // GPT needs at least 34 sectors
         device_ref.read_at(0, &mut b).map(|_| b)
-    }).await.map_err(|e| anyhow::anyhow!("Task failed: {}", e))?
-        .context("Failed to read partition table")?;
+    })
+    .await
+    .map_err(|e| anyhow::anyhow!("Task failed: {}", e))?
+    .context("Failed to read partition table")?;
 
     match drivewipe_core::partition::PartitionTable::parse(&buf) {
         Ok(table) => {
@@ -136,7 +138,12 @@ pub async fn delete(_config: &DriveWipeConfig, device: &str, index: u32) -> Resu
 }
 
 /// Run the `partition resize` subcommand.
-pub async fn resize(_config: &DriveWipeConfig, device: &str, index: u32, new_end: u64) -> Result<()> {
+pub async fn resize(
+    _config: &DriveWipeConfig,
+    device: &str,
+    index: u32,
+    new_end: u64,
+) -> Result<()> {
     let mut device_io = drivewipe_core::io::open_device(&PathBuf::from(device), true)
         .context("Failed to open device for writing")?;
 

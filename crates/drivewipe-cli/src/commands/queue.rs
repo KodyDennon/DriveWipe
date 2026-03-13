@@ -173,7 +173,7 @@ pub async fn start(
             let cfg = config.clone();
             let dev = entry.device.clone();
             let mth = entry.method.clone();
-            
+
             set.spawn(async move {
                 let res = super::wipe::run(
                     &cfg, &ct, &dev, &mth, true,  // force
@@ -181,7 +181,8 @@ pub async fn start(
                     None,  // verify override
                     None,  // pdf report
                     false, // dry_run
-                ).await;
+                )
+                .await;
                 (idx, res)
             });
         }
@@ -207,7 +208,7 @@ pub async fn start(
                 }
             }
         }
-        
+
         // Save state after each chunk.
         save_queue(config, &queue)?;
     }

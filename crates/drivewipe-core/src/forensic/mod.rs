@@ -99,7 +99,11 @@ impl ForensicSession {
             match tokio::task::spawn_blocking(move || {
                 let device_ref = unsafe { device_wrapper.get_mut() };
                 entropy::analyze_entropy(device_ref, block_size)
-            }).await.map_err(|e| crate::error::DriveWipeError::IoGeneric(std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))) {
+            })
+            .await
+            .map_err(|e| {
+                crate::error::DriveWipeError::IoGeneric(std::io::Error::other(e.to_string()))
+            }) {
                 Ok(Ok(stats)) => {
                     entropy_stats = Some(stats);
                 }
@@ -116,7 +120,11 @@ impl ForensicSession {
             match tokio::task::spawn_blocking(move || {
                 let device_ref = unsafe { device_wrapper.get_mut() };
                 signatures::scan_signatures(device_ref, block_size)
-            }).await.map_err(|e| crate::error::DriveWipeError::IoGeneric(std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))) {
+            })
+            .await
+            .map_err(|e| {
+                crate::error::DriveWipeError::IoGeneric(std::io::Error::other(e.to_string()))
+            }) {
                 Ok(Ok(hits)) => {
                     total_findings += hits.len() as u32;
                     signature_hits = hits;
@@ -134,7 +142,11 @@ impl ForensicSession {
             match tokio::task::spawn_blocking(move || {
                 let device_ref = unsafe { device_wrapper.get_mut() };
                 sampling::statistical_sample(device_ref, sample_ratio)
-            }).await.map_err(|e| crate::error::DriveWipeError::IoGeneric(std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))) {
+            })
+            .await
+            .map_err(|e| {
+                crate::error::DriveWipeError::IoGeneric(std::io::Error::other(e.to_string()))
+            }) {
                 Ok(Ok(result)) => {
                     sampling_result = Some(result);
                 }

@@ -32,7 +32,7 @@ pub fn view<'a>(
 
     let input = text_input("Type YES", confirm_text)
         .on_input(Message::ConfirmInput)
-        .size(theme::FONT_SIZE_LG as f32);
+        .size(theme::FONT_SIZE_LG);
 
     let is_confirmed = confirm_text.trim() == "YES";
 

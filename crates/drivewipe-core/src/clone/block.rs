@@ -51,13 +51,15 @@ pub async fn clone_block(
 
         // Use spawn_blocking for I/O since RawDeviceIo is synchronous
         let source_wrapper = crate::io::DeviceWrapper::new(source);
-        
+
         let (n, read_res) = tokio::task::spawn_blocking(move || {
             let source_ref = unsafe { source_wrapper.get_mut() };
             let mut temp_buf = vec![0u8; read_len];
             let res = source_ref.read_at(bytes_copied, &mut temp_buf);
             (res, temp_buf)
-        }).await.map_err(|e| DriveWipeError::IoGeneric(std::io::Error::new(std::io::ErrorKind::Other, e.to_string())))?;
+        })
+        .await
+        .map_err(|e| DriveWipeError::IoGeneric(std::io::Error::other(e.to_string())))?;
 
         let n = n?;
         if n == 0 {
@@ -68,7 +70,9 @@ pub async fn clone_block(
         let write_res = tokio::task::spawn_blocking(move || {
             let target_ref = unsafe { target_wrapper.get_mut() };
             target_ref.write_at(bytes_copied, &read_res[..n])
-        }).await.map_err(|e| DriveWipeError::IoGeneric(std::io::Error::new(std::io::ErrorKind::Other, e.to_string())))?;
+        })
+        .await
+        .map_err(|e| DriveWipeError::IoGeneric(std::io::Error::other(e.to_string())))?;
 
         write_res?;
         bytes_copied += n as u64;
@@ -102,7 +106,9 @@ pub async fn clone_block(
     tokio::task::spawn_blocking(move || {
         let target_ref = unsafe { target_wrapper.get_mut() };
         target_ref.sync()
-    }).await.map_err(|e| DriveWipeError::IoGeneric(std::io::Error::new(std::io::ErrorKind::Other, e.to_string())))??;
+    })
+    .await
+    .map_err(|e| DriveWipeError::IoGeneric(std::io::Error::other(e.to_string())))??;
 
     let duration = start.elapsed().as_secs_f64();
     let throughput_mbps = if duration > 0.0 {
@@ -121,7 +127,8 @@ pub async fn clone_block(
             session_id,
             progress_tx,
             cancel_token,
-        ).await?
+        )
+        .await?
     } else {
         VerificationResult {
             verified: false,
@@ -194,15 +201,17 @@ async fn verify_clone(
         let (sn_res, tn_res, s_hash_chunk, t_hash_chunk) = tokio::task::spawn_blocking(move || {
             let source_ref = unsafe { source_wrapper.get_mut() };
             let target_ref = unsafe { target_wrapper.get_mut() };
-            
+
             let mut s_buf = vec![0u8; read_len];
             let mut t_buf = vec![0u8; read_len];
-            
+
             let sn = source_ref.read_at(offset, &mut s_buf);
             let tn = target_ref.read_at(offset, &mut t_buf);
-            
+
             (sn, tn, s_buf, t_buf)
-        }).await.map_err(|e| DriveWipeError::IoGeneric(std::io::Error::new(std::io::ErrorKind::Other, e.to_string())))?;
+        })
+        .await
+        .map_err(|e| DriveWipeError::IoGeneric(std::io::Error::other(e.to_string())))?;
 
         let sn = sn_res?;
         let tn = tn_res?;

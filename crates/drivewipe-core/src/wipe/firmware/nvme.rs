@@ -74,7 +74,9 @@ impl FirmwareWipe for NvmeFormatUserData {
         let progress_tx = progress_tx.clone();
         tokio::task::spawn_blocking(move || {
             nvme_format_impl(&drive, session_id, &progress_tx, 1) // SES=1
-        }).await.map_err(|e| DriveWipeError::IoGeneric(std::io::Error::new(std::io::ErrorKind::Other, e.to_string())))?
+        })
+        .await
+        .map_err(|e| DriveWipeError::IoGeneric(std::io::Error::other(e.to_string())))?
     }
 }
 
@@ -115,7 +117,9 @@ impl FirmwareWipe for NvmeFormatCrypto {
         let progress_tx = progress_tx.clone();
         tokio::task::spawn_blocking(move || {
             nvme_format_impl(&drive, session_id, &progress_tx, 2) // SES=2
-        }).await.map_err(|e| DriveWipeError::IoGeneric(std::io::Error::new(std::io::ErrorKind::Other, e.to_string())))?
+        })
+        .await
+        .map_err(|e| DriveWipeError::IoGeneric(std::io::Error::other(e.to_string())))?
     }
 }
 
@@ -158,7 +162,9 @@ impl FirmwareWipe for NvmeSanitizeBlock {
                 SANITIZE_ACT_BLOCK_ERASE,
                 None,
             )
-        }).await.map_err(|e| DriveWipeError::IoGeneric(std::io::Error::new(std::io::ErrorKind::Other, e.to_string())))?
+        })
+        .await
+        .map_err(|e| DriveWipeError::IoGeneric(std::io::Error::other(e.to_string())))?
     }
 }
 
@@ -201,7 +207,9 @@ impl FirmwareWipe for NvmeSanitizeCrypto {
                 SANITIZE_ACT_CRYPTO_ERASE,
                 None,
             )
-        }).await.map_err(|e| DriveWipeError::IoGeneric(std::io::Error::new(std::io::ErrorKind::Other, e.to_string())))?
+        })
+        .await
+        .map_err(|e| DriveWipeError::IoGeneric(std::io::Error::other(e.to_string())))?
     }
 }
 
@@ -245,7 +253,9 @@ impl FirmwareWipe for NvmeSanitizeOverwrite {
                 SANITIZE_ACT_OVERWRITE,
                 Some(0),
             )
-        }).await.map_err(|e| DriveWipeError::IoGeneric(std::io::Error::new(std::io::ErrorKind::Other, e.to_string())))?
+        })
+        .await
+        .map_err(|e| DriveWipeError::IoGeneric(std::io::Error::other(e.to_string())))?
     }
 }
 

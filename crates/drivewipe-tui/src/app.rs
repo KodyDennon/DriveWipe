@@ -417,7 +417,10 @@ impl App {
 
     // ── Main event loop ─────────────────────────────────────────────────
 
-    pub async fn run(&mut self, terminal: &mut Terminal<CrosstermBackend<std::io::Stdout>>) -> Result<()> {
+    pub async fn run(
+        &mut self,
+        terminal: &mut Terminal<CrosstermBackend<std::io::Stdout>>,
+    ) -> Result<()> {
         // Take the progress receiver out of self for the event handler.
         let prx = self.progress_rx.take();
         let mut event_handler = EventHandler::new(Duration::from_millis(250), prx);
@@ -1466,8 +1469,13 @@ impl App {
                 self.refresh_drives().await;
             }
             KeyCode::Char('d') => {
-                if let (Some(drive_idx), Some(part_idx)) = (self.focused_drive_index, self.table_state.selected()) {
-                    self.log_push(format!("Deleting partition {} on drive {}...", part_idx, drive_idx));
+                if let (Some(drive_idx), Some(part_idx)) =
+                    (self.focused_drive_index, self.table_state.selected())
+                {
+                    self.log_push(format!(
+                        "Deleting partition {} on drive {}...",
+                        part_idx, drive_idx
+                    ));
                 }
             }
             KeyCode::Char('n') => {
@@ -1912,7 +1920,7 @@ impl App {
                 write_debug("=== WIPE TASK STARTED ===");
                 write_debug(&format!("Device: {}", drive_info.path.display()));
                 write_debug(&format!("Method: {}", method));
-                
+
                 write_debug("Building method registry...");
                 let mut registry = WipeMethodRegistry::new();
                 registry.register_custom_methods(&config);
@@ -1960,7 +1968,10 @@ impl App {
                 };
 
                 write_debug("Calling session.execute()...");
-                match session.execute(device.as_mut(), &progress_tx, &cancel_token, None).await {
+                match session
+                    .execute(device.as_mut(), &progress_tx, &cancel_token, None)
+                    .await
+                {
                     Ok(result) => {
                         write_debug(&format!(
                             "session.execute() returned OK, outcome: {}",
@@ -2091,13 +2102,16 @@ impl App {
             };
 
             let result = match mode {
-                CloneMode::Block => drivewipe_core::clone::block::clone_block(
-                    source.as_mut(),
-                    target.as_mut(),
-                    &config,
-                    &progress_tx,
-                    &cancel_token,
-                ).await,
+                CloneMode::Block => {
+                    drivewipe_core::clone::block::clone_block(
+                        source.as_mut(),
+                        target.as_mut(),
+                        &config,
+                        &progress_tx,
+                        &cancel_token,
+                    )
+                    .await
+                }
                 CloneMode::Partition => {
                     drivewipe_core::clone::partition_aware::clone_partition_aware(
                         source.as_mut(),
@@ -2105,13 +2119,12 @@ impl App {
                         &config,
                         &progress_tx,
                         &cancel_token,
-                    ).await
+                    )
+                    .await
                 }
-                CloneMode::Image => {
-                    Err(drivewipe_core::error::DriveWipeError::Clone(
-                        "Image mode not supported in TUI yet".to_string(),
-                    ))
-                }
+                CloneMode::Image => Err(drivewipe_core::error::DriveWipeError::Clone(
+                    "Image mode not supported in TUI yet".to_string(),
+                )),
             };
 
             if let Err(e) = result {
@@ -2167,13 +2180,16 @@ impl App {
                 }
             };
 
-            match session.execute(
-                device.as_mut(),
-                &drive_info.path.display().to_string(),
-                &drive_info.serial,
-                &progress_tx,
-                &cancel_token,
-            ).await {
+            match session
+                .execute(
+                    device.as_mut(),
+                    &drive_info.path.display().to_string(),
+                    &drive_info.serial,
+                    &progress_tx,
+                    &cancel_token,
+                )
+                .await
+            {
                 Ok(result) => {
                     let _ = progress_tx.send(ProgressEvent::ForensicScanCompleted {
                         session_id: Uuid::new_v4(),

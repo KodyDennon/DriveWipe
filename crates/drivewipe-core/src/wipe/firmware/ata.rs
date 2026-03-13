@@ -80,7 +80,9 @@ impl FirmwareWipe for AtaSecureErase {
         let progress_tx = progress_tx.clone();
         tokio::task::spawn_blocking(move || {
             ata_secure_erase_impl(&drive, session_id, &progress_tx, false)
-        }).await.map_err(|e| DriveWipeError::IoGeneric(std::io::Error::new(std::io::ErrorKind::Other, e.to_string())))?
+        })
+        .await
+        .map_err(|e| DriveWipeError::IoGeneric(std::io::Error::other(e.to_string())))?
     }
 }
 
@@ -125,7 +127,9 @@ impl FirmwareWipe for AtaEnhancedSecureErase {
         let progress_tx = progress_tx.clone();
         tokio::task::spawn_blocking(move || {
             ata_secure_erase_impl(&drive, session_id, &progress_tx, true)
-        }).await.map_err(|e| DriveWipeError::IoGeneric(std::io::Error::new(std::io::ErrorKind::Other, e.to_string())))?
+        })
+        .await
+        .map_err(|e| DriveWipeError::IoGeneric(std::io::Error::other(e.to_string())))?
     }
 }
 

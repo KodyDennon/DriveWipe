@@ -1,9 +1,9 @@
 //! User-defined wipe methods loaded from configuration.
 
+use super::WipeMethod;
 use super::patterns::{
     ConstantFill, OneFill, PatternGenerator, RandomFill, RepeatingPattern, ZeroFill,
 };
-use super::WipeMethod;
 use crate::config::CustomMethodConfig;
 use async_trait::async_trait;
 

@@ -1,7 +1,7 @@
-use std::time::Duration;
-use tokio::sync::mpsc::{self, Receiver};
 use crossterm::event::{self, Event, KeyEvent, KeyEventKind};
 use drivewipe_core::progress::ProgressEvent;
+use std::time::Duration;
+use tokio::sync::mpsc::{self, Receiver};
 
 /// All events the application loop can receive.
 pub enum AppEvent {
@@ -24,7 +24,10 @@ pub struct EventHandler {
 
 impl EventHandler {
     /// Create a new event handler.
-    pub fn new(tick_rate: Duration, progress_rx: Option<crossbeam_channel::Receiver<ProgressEvent>>) -> Self {
+    pub fn new(
+        tick_rate: Duration,
+        progress_rx: Option<crossbeam_channel::Receiver<ProgressEvent>>,
+    ) -> Self {
         let (tx, rx) = mpsc::channel::<AppEvent>(256);
 
         // Task for terminal input and ticks
@@ -76,7 +79,10 @@ impl EventHandler {
                 while let Ok(evt) = tokio::task::spawn_blocking({
                     let prx = prx.clone();
                     move || prx.recv()
-                }).await.unwrap_or(Err(crossbeam_channel::RecvError)) {
+                })
+                .await
+                .unwrap_or(Err(crossbeam_channel::RecvError))
+                {
                     if progress_tx.send(AppEvent::Progress(evt)).await.is_err() {
                         break;
                     }
@@ -94,6 +100,9 @@ impl EventHandler {
 }
 
 /// Create a progress channel pair (sender for wipe threads, receiver for the event handler).
-pub fn progress_channel() -> (crossbeam_channel::Sender<ProgressEvent>, crossbeam_channel::Receiver<ProgressEvent>) {
+pub fn progress_channel() -> (
+    crossbeam_channel::Sender<ProgressEvent>,
+    crossbeam_channel::Receiver<ProgressEvent>,
+) {
     crossbeam_channel::bounded::<ProgressEvent>(512)
 }

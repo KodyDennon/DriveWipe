@@ -73,7 +73,9 @@ impl FirmwareWipe for TcgOpalCryptoErase {
                         .into(),
                 ))
             }
-        }).await.map_err(|e| DriveWipeError::IoGeneric(std::io::Error::new(std::io::ErrorKind::Other, e.to_string())))?
+        })
+        .await
+        .map_err(|e| DriveWipeError::IoGeneric(std::io::Error::other(e.to_string())))?
     }
 }
 

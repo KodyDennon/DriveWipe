@@ -20,7 +20,10 @@ pub async fn scan(
 }
 
 /// Execute a forensic scan and return the result.
-async fn execute_scan(cancel_token: &Arc<CancellationToken>, device: &str) -> Result<ForensicResult> {
+async fn execute_scan(
+    cancel_token: &Arc<CancellationToken>,
+    device: &str,
+) -> Result<ForensicResult> {
     let enumerator = drive::create_enumerator();
     let drive_info = enumerator
         .inspect(&PathBuf::from(device))

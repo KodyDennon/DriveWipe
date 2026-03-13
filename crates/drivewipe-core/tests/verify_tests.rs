@@ -81,7 +81,10 @@ async fn zero_verify_progress_events() {
     let mut device = MockDevice::all_zeros(2 * 1024 * 1024); // 2 MiB
     let (tx, rx) = crossbeam_channel::unbounded::<ProgressEvent>();
     let verifier = ZeroVerifier;
-    verifier.verify(&mut device, Uuid::new_v4(), &tx).await.unwrap();
+    verifier
+        .verify(&mut device, Uuid::new_v4(), &tx)
+        .await
+        .unwrap();
     drop(tx);
 
     let events: Vec<ProgressEvent> = rx.iter().collect();

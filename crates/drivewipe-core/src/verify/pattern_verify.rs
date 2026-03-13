@@ -73,14 +73,16 @@ impl Verifier for PatternVerifier {
 
             // Perform the read in a blocking task
             let (read_res, read_data) = tokio::task::spawn_blocking(move || {
-                let device_ref = unsafe { 
+                let device_ref = unsafe {
                     let wide_ptr: *mut dyn RawDeviceIo = std::mem::transmute(ptr_parts);
                     &mut *wide_ptr
                 };
                 let mut temp_buf = vec![0u8; chunk_len];
                 let res = device_ref.read_at(pass_offset, &mut temp_buf);
                 (res, temp_buf)
-            }).await.map_err(|e| DriveWipeError::IoGeneric(std::io::Error::new(std::io::ErrorKind::Other, e.to_string())))?;
+            })
+            .await
+            .map_err(|e| DriveWipeError::IoGeneric(std::io::Error::other(e.to_string())))?;
 
             let bytes_read = read_res?;
 

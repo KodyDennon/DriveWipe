@@ -22,7 +22,10 @@ pub async fn run(
         "partition" => CloneMode::Partition,
         "image" => CloneMode::Image,
         _ => {
-            anyhow::bail!("Unknown clone mode: {}. Use 'block', 'partition', or 'image'.", mode);
+            anyhow::bail!(
+                "Unknown clone mode: {}. Use 'block', 'partition', or 'image'.",
+                mode
+            );
         }
     };
 
@@ -63,7 +66,8 @@ pub async fn run(
                 &clone_config,
                 &progress_tx,
                 cancel_token,
-            ).await
+            )
+            .await
         }
         CloneMode::Partition => {
             let mut source_device = drivewipe_core::io::open_device(&PathBuf::from(source), false)
@@ -76,15 +80,17 @@ pub async fn run(
                 &clone_config,
                 &progress_tx,
                 cancel_token,
-            ).await
+            )
+            .await
         }
         CloneMode::Image => {
             // Determine if we are creating or restoring
             let source_path = PathBuf::from(source);
             let target_path = PathBuf::from(target);
-            
-            if target_path.extension().and_then(|s| s.to_str()) == Some("dwc") || 
-               (!target_path.exists() || target_path.is_file()) {
+
+            if target_path.extension().and_then(|s| s.to_str()) == Some("dwc")
+                || (!target_path.exists() || target_path.is_file())
+            {
                 // Clone to image
                 let mut source_device = drivewipe_core::io::open_device(&source_path, false)
                     .context("Failed to open source device")?;
@@ -94,7 +100,8 @@ pub async fn run(
                     &clone_config,
                     &progress_tx,
                     cancel_token,
-                ).await
+                )
+                .await
             } else {
                 // Restore from image
                 let mut target_device = drivewipe_core::io::open_device(&target_path, true)
@@ -105,7 +112,8 @@ pub async fn run(
                     &clone_config,
                     &progress_tx,
                     cancel_token,
-                ).await
+                )
+                .await
             }
         }
     };

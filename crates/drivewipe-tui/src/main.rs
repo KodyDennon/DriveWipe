@@ -47,10 +47,10 @@ async fn main() -> anyhow::Result<()> {
     let mut terminal = Terminal::new(backend)?;
 
     // Create app and run — always restore the terminal even on error.
-    let result = (|| async {
+    let result = async {
         let mut app = app::App::new(config).await?;
         app.run(&mut terminal).await
-    })()
+    }
     .await;
 
     // Restore terminal

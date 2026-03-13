@@ -8,9 +8,9 @@
 mod screens;
 mod theme;
 
+use iced::futures::SinkExt;
 use iced::widget::{column, container, text};
 use iced::{Element, Length, Task as IcedTask};
-use iced::futures::SinkExt;
 
 /// Application screen states.
 #[derive(Debug, Clone, PartialEq)]
@@ -202,15 +202,13 @@ impl DriveWipeApp {
                 }
                 IcedTask::none()
             }
-            Message::RefreshDrives => {
-                IcedTask::perform(
-                    async {
-                        let enumerator = drivewipe_core::drive::create_enumerator();
-                        enumerator.enumerate().await.map_err(|e| e.to_string())
-                    },
-                    Message::DrivesLoaded,
-                )
-            }
+            Message::RefreshDrives => IcedTask::perform(
+                async {
+                    let enumerator = drivewipe_core::drive::create_enumerator();
+                    enumerator.enumerate().await.map_err(|e| e.to_string())
+                },
+                Message::DrivesLoaded,
+            ),
             Message::DrivesLoaded(result) => {
                 match result {
                     Ok(drives) => {
@@ -253,8 +251,9 @@ impl DriveWipeApp {
                     self.wipe_fraction = 0.0;
                     self.wipe_complete = false;
                     self.wipe_running = true;
-                    self.cancel_token = std::sync::Arc::new(drivewipe_core::session::CancellationToken::new());
-                    
+                    self.cancel_token =
+                        std::sync::Arc::new(drivewipe_core::session::CancellationToken::new());
+
                     if let Some(mi) = self.selected_method {
                         if let Some((id, name, _)) = self.methods.get(mi) {
                             self.selected_method_id = id.clone();
@@ -262,17 +261,21 @@ impl DriveWipeApp {
                         }
                     }
 
-                    self.selected_device_paths = self.drives.iter()
+                    self.selected_device_paths = self
+                        .drives
+                        .iter()
                         .zip(self.selected_drives.iter())
                         .filter(|(_, sel)| **sel)
                         .map(|(d, _)| d.path.clone())
                         .collect();
 
-                    self.wipe_device = self.selected_device_paths.iter()
+                    self.wipe_device = self
+                        .selected_device_paths
+                        .iter()
                         .map(|p| p.to_string_lossy().into_owned())
                         .collect::<Vec<_>>()
                         .join(", ");
-                    
+
                     self.screen = Screen::WipeProgress;
 
                     let method_id = self.selected_method_id.clone();
@@ -280,43 +283,49 @@ impl DriveWipeApp {
                     let cancel_token = self.cancel_token.clone();
 
                     return IcedTask::run(
-                        iced::stream::channel(100, move |output: iced::futures::channel::mpsc::Sender<Message>| async move {
-                            let (tx, rx) = crossbeam_channel::unbounded();
+                        iced::stream::channel(
+                            100,
+                            move |output: iced::futures::channel::mpsc::Sender<Message>| async move {
+                                let (tx, rx) = crossbeam_channel::unbounded();
 
-                            let mut output_clone = output.clone();
-                            tokio::spawn(async move {
-                                while let Ok(event) = rx.recv() {
-                                    let _ = output_clone.send(Message::WipeEvent(event)).await;
+                                let mut output_clone = output.clone();
+                                tokio::spawn(async move {
+                                    while let Ok(event) = rx.recv() {
+                                        let _ = output_clone.send(Message::WipeEvent(event)).await;
+                                    }
+                                });
+
+                                for path in device_paths {
+                                    let enumerator = drivewipe_core::drive::create_enumerator();
+                                    let drive_info = match enumerator.inspect(&path).await {
+                                        Ok(info) => info,
+                                        Err(_) => continue,
+                                    };
+
+                                    let local_reg = drivewipe_core::wipe::WipeMethodRegistry::new();
+                                    let method = match local_reg.into_method(&method_id) {
+                                        Some(m) => m,
+                                        None => continue,
+                                    };
+
+                                    let session = drivewipe_core::session::WipeSession::new(
+                                        drive_info,
+                                        method,
+                                        drivewipe_core::config::DriveWipeConfig::default(),
+                                    );
+
+                                    let mut device =
+                                        match drivewipe_core::io::open_device(&path, true) {
+                                            Ok(d) => d,
+                                            Err(_) => continue,
+                                        };
+
+                                    let _ = session
+                                        .execute(device.as_mut(), &tx, &cancel_token, None)
+                                        .await;
                                 }
-                            });
-
-                            for path in device_paths {
-                                let enumerator = drivewipe_core::drive::create_enumerator();
-                                let drive_info = match enumerator.inspect(&path).await {
-                                    Ok(info) => info,
-                                    Err(_) => continue,
-                                };
-
-                                let local_reg = drivewipe_core::wipe::WipeMethodRegistry::new();
-                                let method = match local_reg.into_method(&method_id) {
-                                    Some(m) => m,
-                                    None => continue,
-                                };
-
-                                let session = drivewipe_core::session::WipeSession::new(
-                                    drive_info, 
-                                    method, 
-                                    drivewipe_core::config::DriveWipeConfig::default()
-                                );
-                                
-                                let mut device = match drivewipe_core::io::open_device(&path, true) {
-                                    Ok(d) => d,
-                                    Err(_) => continue,
-                                };
-
-                                let _ = session.execute(device.as_mut(), &tx, &cancel_token, None).await;
-                            }
-                        }),
+                            },
+                        ),
                         |msg| msg,
                     );
                 }
@@ -331,9 +340,15 @@ impl DriveWipeApp {
                     ProgressEvent::PassStarted { pass_number, .. } => {
                         self.wipe_pass_info = format!("Pass {}", pass_number);
                     }
-                    ProgressEvent::BlockWritten { bytes_written, total_bytes, throughput_bps, .. } => {
+                    ProgressEvent::BlockWritten {
+                        bytes_written,
+                        total_bytes,
+                        throughput_bps,
+                        ..
+                    } => {
                         self.wipe_fraction = bytes_written as f32 / total_bytes as f32;
-                        self.wipe_throughput = format!("{:.1} MB/s", throughput_bps / (1024.0 * 1024.0));
+                        self.wipe_throughput =
+                            format!("{:.1} MB/s", throughput_bps / (1024.0 * 1024.0));
                     }
                     ProgressEvent::Completed { .. } => {
                         self.wipe_fraction = 1.0;
@@ -352,8 +367,10 @@ impl DriveWipeApp {
                     let path = drive.path.clone();
                     return IcedTask::perform(
                         async move {
-                            let snapshot = drivewipe_core::health::get_health(&path).await
-                                .map_err(|e: drivewipe_core::error::DriveWipeError| e.to_string())?;
+                            let snapshot =
+                                drivewipe_core::health::get_health(&path).await.map_err(
+                                    |e: drivewipe_core::error::DriveWipeError| e.to_string(),
+                                )?;
                             let mut lines = Vec::new();
                             lines.push(format!("Model: {}", snapshot.device_model));
                             if let Some(temp) = snapshot.temperature_celsius {
@@ -399,17 +416,24 @@ impl DriveWipeApp {
                     return IcedTask::perform(
                         async move {
                             let mut device = drivewipe_core::io::open_device(&path, false)
-                                .map_err(|e: drivewipe_core::error::DriveWipeError| e.to_string())?;
+                                .map_err(|e: drivewipe_core::error::DriveWipeError| {
+                                    e.to_string()
+                                })?;
                             let mut buf = vec![0u8; 34 * 512];
                             device.read_at(0, &mut buf).map_err(|e| e.to_string())?;
-                            let table = drivewipe_core::partition::PartitionTable::parse(&buf).map_err(|e| e.to_string())?;
-                            
+                            let table = drivewipe_core::partition::PartitionTable::parse(&buf)
+                                .map_err(|e| e.to_string())?;
+
                             let mut lines = Vec::new();
                             lines.push(format!("Table: {:?}", table.table_type()));
                             for part in table.partitions() {
-                                lines.push(format!("  #{}: {} - {} ({})", 
-                                    part.index, part.start_lba, part.end_lba, 
-                                    drivewipe_core::format_bytes(part.size_bytes)));
+                                lines.push(format!(
+                                    "  #{}: {} - {} ({})",
+                                    part.index,
+                                    part.start_lba,
+                                    part.end_lba,
+                                    drivewipe_core::format_bytes(part.size_bytes)
+                                ));
                             }
                             Ok(lines)
                         },
@@ -549,13 +573,9 @@ impl DriveWipeApp {
 }
 
 fn main() -> iced::Result {
-    iced::application(
-        DriveWipeApp::new,
-        DriveWipeApp::update,
-        DriveWipeApp::view,
-    )
-    .title(DriveWipeApp::title)
-    .subscription(DriveWipeApp::subscription)
-    .window_size((900.0, 650.0))
-    .run()
+    iced::application(DriveWipeApp::new, DriveWipeApp::update, DriveWipeApp::view)
+        .title(DriveWipeApp::title)
+        .subscription(DriveWipeApp::subscription)
+        .window_size((900.0, 650.0))
+        .run()
 }

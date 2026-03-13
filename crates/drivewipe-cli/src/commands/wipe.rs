@@ -1,7 +1,6 @@
 use std::path::Path;
 use std::sync::Arc;
 
-
 use anyhow::{Context, Result, bail};
 use crossbeam_channel;
 
@@ -159,7 +158,8 @@ pub async fn run(
     }
 
     let session = {
-        let method_box = find_and_clone_method_by_id(method_id).await
+        let method_box = find_and_clone_method_by_id(method_id)
+            .await
             .ok_or_else(|| anyhow::anyhow!("Internal error: method {method_id} not found"))?;
         WipeSession::new(drive_info.clone(), method_box, session_config)
     };

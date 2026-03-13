@@ -1,7 +1,6 @@
 use std::path::Path;
 use std::sync::Arc;
 
-
 use anyhow::{Context, Result, bail};
 use crossbeam_channel;
 use uuid::Uuid;
@@ -259,7 +258,8 @@ async fn execute_resumed_session(
     session_config.auto_verify = state.verify_after;
 
     let session = {
-        let method_box = super::wipe::find_and_clone_method_by_id(method_id).await
+        let method_box = super::wipe::find_and_clone_method_by_id(method_id)
+            .await
             .ok_or_else(|| anyhow::anyhow!("Method {method_id} not found in registry"))?;
         WipeSession::new(drive_info.clone(), method_box, session_config)
     };
