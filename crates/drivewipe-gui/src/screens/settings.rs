@@ -15,16 +15,20 @@ pub fn view<'a>(
         .size(theme::FONT_SIZE_XL)
         .color(theme::TEXT_PRIMARY);
 
-    let auto_report_cb = checkbox("Auto JSON Reports", auto_report)
+    let auto_report_cb = checkbox(auto_report)
+        .label("Auto JSON Reports")
         .on_toggle(|v| Message::ToggleSetting("auto_report".into(), v));
 
-    let notifications_cb = checkbox("Desktop Notifications", notifications)
+    let notifications_cb = checkbox(notifications)
+        .label("Desktop Notifications")
         .on_toggle(|v| Message::ToggleSetting("notifications".into(), v));
 
-    let sleep_cb = checkbox("Sleep Prevention", sleep_prevention)
+    let sleep_cb = checkbox(sleep_prevention)
+        .label("Sleep Prevention")
         .on_toggle(|v| Message::ToggleSetting("sleep_prevention".into(), v));
 
-    let health_cb = checkbox("Auto Health Check Before Wipe", auto_health)
+    let health_cb = checkbox(auto_health)
+        .label("Auto Health Check Before Wipe")
         .on_toggle(|v| Message::ToggleSetting("auto_health".into(), v));
 
     let back_btn = button(text("Back").size(theme::FONT_SIZE_MD)).on_press(Message::NavigateToMenu);

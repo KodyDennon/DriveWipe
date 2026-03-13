@@ -35,7 +35,7 @@ pub fn view<'a>(
         .size(theme::FONT_SIZE_MD)
         .color(theme::TEXT_SECONDARY);
 
-    let bar = progress_bar(0.0..=1.0, fraction).height(20);
+    let bar = progress_bar(0.0..=1.0, fraction);
 
     let pct_text = text(format!("{:.1}%", fraction * 100.0))
         .size(theme::FONT_SIZE_LG)

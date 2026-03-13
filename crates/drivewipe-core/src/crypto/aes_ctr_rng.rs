@@ -23,9 +23,10 @@ impl AesCtrRng {
     /// Creates a new `AesCtrRng` seeded from the operating system's CSPRNG
     /// via `rand::rng()`.
     pub fn new() -> Self {
+        use rand::RngExt;
         let mut rng = rand::rng();
-        let key: [u8; 32] = rand::Rng::random(&mut rng);
-        let nonce: [u8; 16] = rand::Rng::random(&mut rng);
+        let key: [u8; 32] = rng.random();
+        let nonce: [u8; 16] = rng.random();
         Self::from_seed(key, nonce)
     }
 
