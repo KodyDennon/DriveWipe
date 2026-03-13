@@ -26,14 +26,14 @@ pub const STATUS_ERROR: Color = Color::from_rgb(0.9, 0.2, 0.2);
 pub const STATUS_INFO: Color = Color::from_rgb(0.3, 0.6, 0.9);
 
 // Spacing constants
-pub const SPACING_SM: u16 = 4;
-pub const SPACING_MD: u16 = 8;
-pub const SPACING_LG: u16 = 16;
-pub const SPACING_XL: u16 = 24;
+pub const SPACING_SM: f32 = 4.0;
+pub const SPACING_MD: f32 = 8.0;
+pub const SPACING_LG: f32 = 16.0;
+pub const SPACING_XL: f32 = 24.0;
 
 // Font sizes
-pub const FONT_SIZE_SM: u16 = 12;
-pub const FONT_SIZE_MD: u16 = 14;
-pub const FONT_SIZE_LG: u16 = 18;
-pub const FONT_SIZE_XL: u16 = 24;
-pub const FONT_SIZE_TITLE: u16 = 32;
+pub const FONT_SIZE_SM: f32 = 12.0;
+pub const FONT_SIZE_MD: f32 = 14.0;
+pub const FONT_SIZE_LG: f32 = 18.0;
+pub const FONT_SIZE_XL: f32 = 24.0;
+pub const FONT_SIZE_TITLE: f32 = 32.0;

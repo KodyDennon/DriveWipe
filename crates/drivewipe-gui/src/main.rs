@@ -280,9 +280,9 @@ impl DriveWipeApp {
                     let cancel_token = self.cancel_token.clone();
 
                     return IcedTask::run(
-                        iced::stream::channel(100, move |output| async move {
+                        iced::stream::channel(100, move |output: iced::futures::channel::mpsc::Sender<Message>| async move {
                             let (tx, rx) = crossbeam_channel::unbounded();
-                            
+
                             let mut output_clone = output.clone();
                             tokio::spawn(async move {
                                 while let Ok(event) = rx.recv() {
@@ -550,11 +550,12 @@ impl DriveWipeApp {
 
 fn main() -> iced::Result {
     iced::application(
-        DriveWipeApp::title,
+        DriveWipeApp::new,
         DriveWipeApp::update,
         DriveWipeApp::view,
     )
+    .title(DriveWipeApp::title)
     .subscription(DriveWipeApp::subscription)
     .window_size((900.0, 650.0))
-    .run_with(DriveWipeApp::new)
+    .run()
 }
