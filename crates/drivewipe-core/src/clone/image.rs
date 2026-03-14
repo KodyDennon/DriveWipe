@@ -24,6 +24,10 @@ pub struct CloneImageHeader {
     pub compression: CompressionMode,
     /// Whether the data is encrypted.
     pub encrypted: bool,
+    /// Salt for key derivation (hex-encoded), if encrypted.
+    pub encryption_salt: Option<String>,
+    /// Initial nonce for AES-CTR (hex-encoded), if encrypted. Per-chunk nonce is incremented.
+    pub encryption_nonce: Option<String>,
     /// BLAKE3 hash of the uncompressed source data.
     pub source_hash: Option<String>,
     /// Creation timestamp.
@@ -158,6 +162,35 @@ impl CloneImage {
             })?,
         };
 
+        Ok(data)
+    }
+
+    /// Write a chunk with optional encryption applied before compression.
+    pub fn write_encrypted_chunk<W: Write>(
+        writer: &mut W,
+        data: &[u8],
+        compression: CompressionMode,
+        key: Option<&[u8; 32]>,
+        nonce: Option<&[u8; 16]>,
+    ) -> crate::error::Result<()> {
+        let mut buf = data.to_vec();
+        if let (Some(key), Some(nonce)) = (key, nonce) {
+            crate::crypto::encrypt::encrypt_chunk(&mut buf, key, nonce);
+        }
+        Self::write_chunk(writer, &buf, compression)
+    }
+
+    /// Read a chunk with optional decryption applied after decompression.
+    pub fn read_encrypted_chunk<R: Read>(
+        reader: &mut R,
+        compression: CompressionMode,
+        key: Option<&[u8; 32]>,
+        nonce: Option<&[u8; 16]>,
+    ) -> crate::error::Result<Vec<u8>> {
+        let mut data = Self::read_chunk(reader, compression)?;
+        if let (Some(key), Some(nonce)) = (key, nonce) {
+            crate::crypto::encrypt::decrypt_chunk(&mut data, key, nonce);
+        }
         Ok(data)
     }
 }

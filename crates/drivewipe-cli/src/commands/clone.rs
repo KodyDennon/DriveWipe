@@ -41,8 +41,10 @@ pub async fn run(
         mode: clone_mode,
         compression,
         encrypt,
+        password: None,
         verify: true,
         block_size: 4 * 1024 * 1024,
+        bandwidth_limit_bps: None,
     };
 
     println!("Clone operation:");

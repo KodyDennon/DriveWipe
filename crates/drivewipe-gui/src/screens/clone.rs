@@ -1,16 +1,32 @@
-use iced::widget::{button, column, container, text};
+use iced::widget::{button, column, container, progress_bar, text};
 use iced::{Element, Length};
 
 use crate::Message;
 use crate::theme;
 
+/// Clone screen state passed as a single struct to stay within clippy's arg limit.
+pub struct CloneViewState<'a> {
+    pub drives: &'a [drivewipe_core::types::DriveInfo],
+    pub source: Option<usize>,
+    pub target: Option<usize>,
+    pub mode: &'a str,
+    pub running: bool,
+    pub progress: f32,
+    pub throughput: &'a str,
+    pub complete: bool,
+}
+
 /// View for the clone setup screen.
-pub fn view<'a>(
-    drives: &[drivewipe_core::types::DriveInfo],
-    source: Option<usize>,
-    target: Option<usize>,
-    mode: &'a str,
-) -> Element<'a, Message> {
+pub fn view<'a>(state: &CloneViewState<'a>) -> Element<'a, Message> {
+    let drives = state.drives;
+    let source = state.source;
+    let target = state.target;
+    let mode = state.mode;
+    let running = state.running;
+    let progress = state.progress;
+    let throughput = state.throughput;
+    let complete = state.complete;
+
     let title = text("Drive Clone")
         .size(theme::FONT_SIZE_XL)
         .color(theme::TEXT_PRIMARY);
@@ -59,26 +75,58 @@ pub fn view<'a>(
             drive.model,
             drive.capacity_display()
         );
-        drive_col = drive_col.push(
-            button(text(label).size(theme::FONT_SIZE_SM))
-                .on_press(Message::SelectCloneDrive(i))
-                .width(Length::Fill),
-        );
+        let btn = button(text(label).size(theme::FONT_SIZE_SM)).width(Length::Fill);
+        let btn = if running {
+            btn // Disable drive selection while clone is running
+        } else {
+            btn.on_press(Message::SelectCloneDrive(i))
+        };
+        drive_col = drive_col.push(btn);
     }
 
     let back_btn = button(text("Back").size(theme::FONT_SIZE_MD)).on_press(Message::NavigateToMenu);
 
-    let content = column![
-        title,
-        source_text,
-        target_text,
-        mode_text,
-        info,
-        drive_col,
-        back_btn,
-    ]
-    .spacing(theme::SPACING_LG)
-    .padding(theme::SPACING_XL);
+    let mut content = column![title, source_text, target_text, mode_text, info, drive_col,]
+        .spacing(theme::SPACING_LG)
+        .padding(theme::SPACING_XL);
+
+    // Show start button when both drives selected and not running
+    if source.is_some() && target.is_some() && !running && !complete {
+        let start_btn = button(
+            text("Start Clone")
+                .size(theme::FONT_SIZE_LG)
+                .color(theme::TEXT_PRIMARY),
+        )
+        .on_press(Message::StartClone)
+        .width(Length::Fixed(200.0));
+        content = content.push(start_btn);
+    }
+
+    // Show progress when running
+    if running {
+        let pbar = progress_bar(0.0..=1.0, progress);
+        let pct_text = text(format!("{:.1}%", progress * 100.0))
+            .size(theme::FONT_SIZE_MD)
+            .color(theme::STATUS_INFO);
+        content = content.push(pbar);
+        content = content.push(pct_text);
+        if !throughput.is_empty() {
+            let tp_text = text(throughput.to_string())
+                .size(theme::FONT_SIZE_SM)
+                .color(theme::TEXT_SECONDARY);
+            content = content.push(tp_text);
+        }
+    }
+
+    // Show completion status
+    if complete {
+        let done_text = text("Clone completed successfully!")
+            .size(theme::FONT_SIZE_LG)
+            .color(theme::STATUS_HEALTHY);
+        content = content.push(done_text);
+    }
+
+    content = content.push(back_btn);
 
     container(content)
         .width(Length::Fill)

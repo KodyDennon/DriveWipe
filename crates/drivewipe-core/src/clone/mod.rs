@@ -37,8 +37,11 @@ pub struct CloneConfig {
     pub mode: CloneMode,
     pub compression: CompressionMode,
     pub encrypt: bool,
+    pub password: Option<String>,
     pub verify: bool,
     pub block_size: usize,
+    /// Bandwidth limit in bytes per second. None = unlimited.
+    pub bandwidth_limit_bps: Option<u64>,
 }
 
 impl Default for CloneConfig {
@@ -49,8 +52,10 @@ impl Default for CloneConfig {
             mode: CloneMode::Block,
             compression: CompressionMode::None,
             encrypt: false,
+            password: None,
             verify: true,
             block_size: 4 * 1024 * 1024, // 4 MiB
+            bandwidth_limit_bps: None,
         }
     }
 }

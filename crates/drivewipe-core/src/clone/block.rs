@@ -78,6 +78,16 @@ pub async fn clone_block(
         bytes_copied += n as u64;
         throughput_bytes += n as u64;
 
+        // Bandwidth throttling
+        if let Some(limit_bps) = config.bandwidth_limit_bps {
+            let elapsed = start.elapsed().as_secs_f64();
+            let target_elapsed = bytes_copied as f64 / limit_bps as f64;
+            if target_elapsed > elapsed {
+                let sleep_ms = ((target_elapsed - elapsed) * 1000.0) as u64;
+                tokio::time::sleep(std::time::Duration::from_millis(sleep_ms)).await;
+            }
+        }
+
         // Progress update every 500ms
         if last_progress.elapsed().as_secs_f64() >= 0.5 {
             let elapsed = throughput_timer.elapsed().as_secs_f64();

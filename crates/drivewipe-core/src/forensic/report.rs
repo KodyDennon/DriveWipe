@@ -67,6 +67,34 @@ impl ForensicReport {
             }
         }
 
+        if let Some(ref hidden) = results.hidden_areas {
+            if !hidden.hidden_partitions.is_empty() {
+                conclusions.push(format!(
+                    "{} hidden partition(s) detected",
+                    hidden.hidden_partitions.len()
+                ));
+            }
+            let gaps_with_data = hidden
+                .unallocated_gaps
+                .iter()
+                .filter(|g| g.has_data)
+                .count();
+            if gaps_with_data > 0 {
+                conclusions.push(format!(
+                    "Data remnants found in {} unallocated gap(s) between partitions",
+                    gaps_with_data
+                ));
+            }
+            if hidden.hpa_detected {
+                conclusions.push(
+                    "Host Protected Area (HPA) detected — may contain hidden data".to_string(),
+                );
+            }
+            if hidden.dco_detected {
+                conclusions.push("Device Configuration Overlay (DCO) detected — device may be reporting reduced capacity".to_string());
+            }
+        }
+
         if conclusions.is_empty() {
             conclusions.push("No significant findings".to_string());
         }

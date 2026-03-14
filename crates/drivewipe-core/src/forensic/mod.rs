@@ -156,9 +156,34 @@ impl ForensicSession {
         }
 
         // Hidden area detection
-        let hidden_areas = None;
+        let mut hidden_areas = None;
         if self.config.hidden_area_check && !cancel_token.is_cancelled() {
-            // Moved to UI orchestration to avoid cyclic dependencies
+            log::info!("Running hidden area detection...");
+            let device_wrapper = crate::io::DeviceWrapper::new(device);
+            match tokio::task::spawn_blocking(move || {
+                let device_ref = unsafe { device_wrapper.get_mut() };
+                hidden::detect_hidden_areas(device_ref)
+            })
+            .await
+            .map_err(|e| {
+                crate::error::DriveWipeError::IoGeneric(std::io::Error::other(e.to_string()))
+            }) {
+                Ok(Ok(result)) => {
+                    if !result.hidden_partitions.is_empty()
+                        || result.unallocated_gaps.iter().any(|g| g.has_data)
+                    {
+                        total_findings += result.hidden_partitions.len() as u32;
+                        total_findings += result
+                            .unallocated_gaps
+                            .iter()
+                            .filter(|g| g.has_data)
+                            .count() as u32;
+                    }
+                    hidden_areas = Some(result);
+                }
+                Ok(Err(e)) => log::warn!("Hidden area detection failed: {}", e),
+                Err(e) => log::warn!("Hidden area detection task failed: {}", e),
+            }
         }
 
         let duration = start.elapsed().as_secs_f64();

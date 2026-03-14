@@ -42,6 +42,23 @@ pub async fn clone_device_to_image(
     let block_size = config.block_size;
     let chunk_count = source_capacity.div_ceil(block_size as u64);
 
+    // Encryption setup
+    let use_encryption = config.encrypt && config.password.is_some();
+    let (enc_key, mut enc_nonce, enc_salt_hex, enc_nonce_hex) = if use_encryption {
+        let password = config.password.as_ref().unwrap();
+        let salt = crate::crypto::encrypt::generate_salt();
+        let nonce = crate::crypto::encrypt::generate_nonce();
+        let key = crate::crypto::encrypt::derive_key(password.as_bytes(), &salt, 100_000);
+        (
+            Some(key),
+            Some(nonce),
+            Some(hex::encode(salt)),
+            Some(hex::encode(nonce)),
+        )
+    } else {
+        (None, None, None, None)
+    };
+
     let header = CloneImageHeader {
         version: 1,
         source_model: "Unknown".to_string(), // In a real impl, we'd pass DriveInfo
@@ -50,7 +67,9 @@ pub async fn clone_device_to_image(
         block_size: block_size as u32,
         chunk_count,
         compression: config.compression,
-        encrypted: false, // Encryption not yet fully wired in config
+        encrypted: use_encryption,
+        encryption_salt: enc_salt_hex,
+        encryption_nonce: enc_nonce_hex,
         source_hash: None,
         created_at: started_at,
     };
@@ -86,9 +105,31 @@ pub async fn clone_device_to_image(
             break;
         }
 
-        CloneImage::write_chunk(&mut writer, &read_res[..n], config.compression)?;
+        if use_encryption {
+            let chunk_nonce = enc_nonce.as_ref().unwrap();
+            CloneImage::write_encrypted_chunk(
+                &mut writer,
+                &read_res[..n],
+                config.compression,
+                enc_key.as_ref(),
+                Some(chunk_nonce),
+            )?;
+            crate::crypto::encrypt::increment_nonce(enc_nonce.as_mut().unwrap());
+        } else {
+            CloneImage::write_chunk(&mut writer, &read_res[..n], config.compression)?;
+        }
 
         bytes_copied += n as u64;
+
+        // Bandwidth throttling
+        if let Some(limit_bps) = config.bandwidth_limit_bps {
+            let elapsed = start.elapsed().as_secs_f64();
+            let target_elapsed = bytes_copied as f64 / limit_bps as f64;
+            if target_elapsed > elapsed {
+                let sleep_ms = ((target_elapsed - elapsed) * 1000.0) as u64;
+                tokio::time::sleep(std::time::Duration::from_millis(sleep_ms)).await;
+            }
+        }
 
         if last_progress.elapsed().as_secs_f64() >= 0.5 {
             let _ = progress_tx.send(ProgressEvent::CloneProgress {
@@ -163,6 +204,31 @@ pub async fn restore_image_to_device(
         )));
     }
 
+    // Decryption setup
+    let (dec_key, mut dec_nonce) = if header.encrypted {
+        let password = config.password.as_ref().ok_or_else(|| {
+            DriveWipeError::Encryption(
+                "Image is encrypted but no password was provided".to_string(),
+            )
+        })?;
+        let salt_hex = header.encryption_salt.as_ref().ok_or_else(|| {
+            DriveWipeError::Encryption("Encrypted image missing salt in header".to_string())
+        })?;
+        let nonce_hex = header.encryption_nonce.as_ref().ok_or_else(|| {
+            DriveWipeError::Encryption("Encrypted image missing nonce in header".to_string())
+        })?;
+        let salt = hex::decode(salt_hex)
+            .map_err(|e| DriveWipeError::Encryption(format!("Invalid salt hex: {e}")))?;
+        let nonce_vec = hex::decode(nonce_hex)
+            .map_err(|e| DriveWipeError::Encryption(format!("Invalid nonce hex: {e}")))?;
+        let key = crate::crypto::encrypt::derive_key(password.as_bytes(), &salt, 100_000);
+        let mut nonce = [0u8; 16];
+        nonce.copy_from_slice(&nonce_vec);
+        (Some(key), Some(nonce))
+    } else {
+        (None, None)
+    };
+
     let _ = progress_tx.send(ProgressEvent::CloneStarted {
         session_id,
         source: image_path.display().to_string(),
@@ -181,7 +247,20 @@ pub async fn restore_image_to_device(
             return Err(DriveWipeError::Cancelled);
         }
 
-        let chunk_data = CloneImage::read_chunk(&mut reader, header.compression)?;
+        let chunk_data = if header.encrypted {
+            let chunk_nonce = dec_nonce.as_ref().unwrap();
+            let data = CloneImage::read_encrypted_chunk(
+                &mut reader,
+                header.compression,
+                dec_key.as_ref(),
+                Some(chunk_nonce),
+            )?;
+            crate::crypto::encrypt::increment_nonce(dec_nonce.as_mut().unwrap());
+            data
+        } else {
+            CloneImage::read_chunk(&mut reader, header.compression)?
+        };
+
         let n = chunk_data.len();
         let offset = i * header.block_size as u64;
 

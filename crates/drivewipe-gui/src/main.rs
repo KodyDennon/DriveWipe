@@ -56,6 +56,8 @@ pub enum Message {
 
     // Clone
     SelectCloneDrive(usize),
+    StartClone,
+    CloneEvent(drivewipe_core::progress::ProgressEvent),
 
     // Partition
     ViewPartitions(usize),
@@ -63,6 +65,8 @@ pub enum Message {
 
     // Forensic
     RunForensicScan(usize),
+    ForensicEvent(drivewipe_core::progress::ProgressEvent),
+    ForensicCompleted(Result<Vec<String>, String>),
 
     // Settings
     ToggleSetting(String, bool),
@@ -106,6 +110,14 @@ struct DriveWipeApp {
 
     // Forensic
     forensic_results: Vec<String>,
+    forensic_running: bool,
+    forensic_progress: f32,
+
+    // Clone progress
+    clone_running: bool,
+    clone_progress: f32,
+    clone_throughput: String,
+    clone_complete: bool,
 
     // Settings
     setting_auto_report: bool,
@@ -148,6 +160,12 @@ impl Default for DriveWipeApp {
             clone_mode: "Block".into(),
             partition_info: Vec::new(),
             forensic_results: Vec::new(),
+            forensic_running: false,
+            forensic_progress: 0.0,
+            clone_running: false,
+            clone_progress: 0.0,
+            clone_throughput: String::new(),
+            clone_complete: false,
             setting_auto_report: false,
             setting_notifications: true,
             setting_sleep_prevention: true,
@@ -407,6 +425,98 @@ impl DriveWipeApp {
                 }
                 IcedTask::none()
             }
+            Message::StartClone => {
+                if let (Some(src_idx), Some(tgt_idx)) = (self.clone_source, self.clone_target) {
+                    if let (Some(src_drive), Some(tgt_drive)) =
+                        (self.drives.get(src_idx), self.drives.get(tgt_idx))
+                    {
+                        self.clone_running = true;
+                        self.clone_progress = 0.0;
+                        self.clone_complete = false;
+                        self.clone_throughput.clear();
+
+                        let source_path = src_drive.path.clone();
+                        let target_path = tgt_drive.path.clone();
+                        let cancel_token = self.cancel_token.clone();
+
+                        return IcedTask::run(
+                            iced::stream::channel(
+                                100,
+                                move |output: iced::futures::channel::mpsc::Sender<Message>| async move {
+                                    let (tx, rx) = crossbeam_channel::unbounded();
+
+                                    let mut output_clone = output.clone();
+                                    tokio::spawn(async move {
+                                        while let Ok(event) = rx.recv() {
+                                            let _ =
+                                                output_clone.send(Message::CloneEvent(event)).await;
+                                        }
+                                    });
+
+                                    let config = drivewipe_core::clone::CloneConfig {
+                                        source: source_path.clone(),
+                                        target: target_path.clone(),
+                                        mode: drivewipe_core::clone::CloneMode::Block,
+                                        compression: drivewipe_core::clone::CompressionMode::None,
+                                        encrypt: false,
+                                        password: None,
+                                        verify: true,
+                                        block_size: 4 * 1024 * 1024,
+                                        bandwidth_limit_bps: None,
+                                    };
+
+                                    let mut source_dev = match drivewipe_core::io::open_device(
+                                        &source_path,
+                                        false,
+                                    ) {
+                                        Ok(d) => d,
+                                        Err(_) => return,
+                                    };
+                                    let mut target_dev =
+                                        match drivewipe_core::io::open_device(&target_path, true) {
+                                            Ok(d) => d,
+                                            Err(_) => return,
+                                        };
+
+                                    let _ = drivewipe_core::clone::block::clone_block(
+                                        source_dev.as_mut(),
+                                        target_dev.as_mut(),
+                                        &config,
+                                        &tx,
+                                        &cancel_token,
+                                    )
+                                    .await;
+                                },
+                            ),
+                            |msg| msg,
+                        );
+                    }
+                }
+                IcedTask::none()
+            }
+            Message::CloneEvent(event) => {
+                use drivewipe_core::progress::ProgressEvent;
+                match event {
+                    ProgressEvent::CloneStarted { .. } => {}
+                    ProgressEvent::CloneProgress {
+                        bytes_copied,
+                        total_bytes,
+                        throughput_bps,
+                        ..
+                    } => {
+                        self.clone_progress = bytes_copied as f32 / total_bytes.max(1) as f32;
+                        self.clone_throughput =
+                            format!("{:.1} MB/s", throughput_bps / (1024.0 * 1024.0));
+                    }
+                    ProgressEvent::CloneCompleted { .. } => {
+                        self.clone_progress = 1.0;
+                        self.clone_complete = true;
+                        self.clone_running = false;
+                    }
+                    _ => {}
+                }
+                IcedTask::none()
+            }
 
             // Partition
             Message::ViewPartitions(i) => {
@@ -453,11 +563,100 @@ impl DriveWipeApp {
             // Forensic
             Message::RunForensicScan(i) => {
                 self.forensic_results.clear();
+                self.forensic_running = true;
+                self.forensic_progress = 0.0;
                 if let Some(drive) = self.drives.get(i) {
-                    self.forensic_results.push(format!(
-                        "Starting forensic scan of {}...",
-                        drive.path.display()
-                    ));
+                    let path = drive.path.clone();
+                    let serial = drive.serial.clone();
+                    self.forensic_results
+                        .push(format!("Scanning {}...", drive.path.display()));
+
+                    return IcedTask::perform(
+                        async move {
+                            let enumerator = drivewipe_core::drive::create_enumerator();
+                            let _drive_info =
+                                enumerator.inspect(&path).await.map_err(|e| e.to_string())?;
+
+                            let config = drivewipe_core::forensic::ForensicConfig::default();
+                            let session = drivewipe_core::forensic::ForensicSession::new(config);
+                            let cancel_token = drivewipe_core::session::CancellationToken::new();
+                            let (tx, _rx) = crossbeam_channel::unbounded();
+
+                            let mut device = drivewipe_core::io::open_device(&path, false)
+                                .map_err(|e| e.to_string())?;
+
+                            let result = session
+                                .execute(
+                                    device.as_mut(),
+                                    &path.to_string_lossy(),
+                                    &serial,
+                                    &tx,
+                                    &cancel_token,
+                                )
+                                .await
+                                .map_err(|e| e.to_string())?;
+
+                            // Format results as lines
+                            let mut lines = Vec::new();
+                            lines.push(format!("Scan completed in {:.1}s", result.duration_secs));
+
+                            if let Some(ref entropy) = result.entropy_stats {
+                                lines.push(format!(
+                                    "Entropy: avg={:.2}, zero={:.1}%, high={:.1}%",
+                                    entropy.average_entropy,
+                                    entropy.zero_pct,
+                                    entropy.high_entropy_pct
+                                ));
+                            }
+
+                            if !result.signature_hits.is_empty() {
+                                lines.push(format!(
+                                    "{} file signatures found",
+                                    result.signature_hits.len()
+                                ));
+                                for hit in result.signature_hits.iter().take(10) {
+                                    lines.push(format!(
+                                        "  {} at offset {}",
+                                        hit.file_type, hit.offset
+                                    ));
+                                }
+                                if result.signature_hits.len() > 10 {
+                                    lines.push(format!(
+                                        "  ... and {} more",
+                                        result.signature_hits.len() - 10
+                                    ));
+                                }
+                            } else {
+                                lines.push("No file signatures detected".to_string());
+                            }
+
+                            if let Some(ref sampling) = result.sampling_result {
+                                lines.push(format!(
+                                    "Sampling: {:.1}% zero, {:.1}% random, {:.1}% data remnants (confidence: {:.0}%)",
+                                    sampling.zero_pct,
+                                    sampling.high_entropy_pct,
+                                    sampling.data_remnant_pct,
+                                    sampling.confidence * 100.0
+                                ));
+                            }
+
+                            if let Some(ref hidden) = result.hidden_areas {
+                                lines.push(format!("Hidden areas: {}", hidden.summary));
+                            }
+
+                            Ok(lines)
+                        },
+                        Message::ForensicCompleted,
+                    );
+                }
+                IcedTask::none()
+            }
+            Message::ForensicEvent(_event) => IcedTask::none(),
+            Message::ForensicCompleted(result) => {
+                self.forensic_running = false;
+                match result {
+                    Ok(lines) => self.forensic_results = lines,
+                    Err(e) => self.forensic_results = vec![format!("Error: {}", e)],
                 }
                 IcedTask::none()
             }
@@ -501,12 +700,16 @@ impl DriveWipeApp {
                 self.wipe_complete,
             ),
             Screen::Health => screens::health::view(&self.drives, &self.health_info),
-            Screen::Clone => screens::clone::view(
-                &self.drives,
-                self.clone_source,
-                self.clone_target,
-                &self.clone_mode,
-            ),
+            Screen::Clone => screens::clone::view(&screens::clone::CloneViewState {
+                drives: &self.drives,
+                source: self.clone_source,
+                target: self.clone_target,
+                mode: &self.clone_mode,
+                running: self.clone_running,
+                progress: self.clone_progress,
+                throughput: &self.clone_throughput,
+                complete: self.clone_complete,
+            }),
             Screen::Partition => screens::partition::view(&self.drives, &self.partition_info),
             Screen::Forensic => screens::forensic::view(&self.drives, &self.forensic_results),
             Screen::Settings => screens::settings::view(

@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-03-13
+
+### Added
+- **Clone Image Encryption** — AES-256-CTR stream encryption for `.dwc` image files with SHA-256 iterated key derivation, per-chunk incrementing nonces, and password-based encrypt/decrypt workflow.
+- **Partition-Aware Cloning** — Intelligent clone mode that parses GPT/MBR tables, copies partition table headers and each partition individually, skips unallocated space, and warns when partitions exceed target capacity.
+- **Bandwidth Throttling** — Configurable rate limiting (`bandwidth_limit_bps`) for block, image, and partition-aware clone operations to prevent I/O saturation.
+- **Forensic Hidden Area Detection** — Partition gap analysis that detects unallocated regions between partitions, scans for data remnants in gaps, identifies hidden/diagnostic MBR partitions, and reports HPA/DCO status.
+- **GUI Forensic Execution** — Fully wired forensic scanning in the iced GUI with entropy stats, signature hits, sampling results, and hidden area findings displayed in real time.
+- **GUI Clone Execution** — End-to-end clone workflow in the GUI with drive selection, start button, live progress bar, throughput display, and completion status.
+- **TUI Partition CRUD** — Interactive partition management in the TUI: `d` to delete partitions, `n` to create partitions in the largest unallocated gap with 1 MiB alignment.
+- **Enriched DFXML Export** — Forensic exports now include hidden area analysis, entropy statistics, and statistical sampling data alongside signature hits.
+
+### Changed
+- **Dependencies** — Updated console 0.16, iced 0.14, toml 1.0, quick-xml 0.38, nix 0.31, rand 0.10, toml_edit 0.23, upload-artifact v7, download-artifact v8.
+- **Forensic Reports** — Conclusions now include hidden partition findings, unallocated gap data remnants, and HPA/DCO detection status.
+- **Cross-Platform Tooling** — Added `scripts/cross-check.sh` for local Linux/Windows cross-compilation validation using `cargo-zigbuild`.
+
+### Fixed
+- **Clippy Compliance** — Resolved all clippy lints including `io_other_error`, `manual_div_ceil`, `missing_transmute_annotations`, and `redundant_closure_call`.
+- **iced 0.14 Migration** — Fixed checkbox API, Pixels type (u16→f32), application builder, and stream channel typing for iced 0.14 compatibility.
+- **rand 0.10 Migration** — Updated trait imports from `Rng::random` to `RngExt::random` and `RngExt::random_range`.
+
 ## [1.2.0] - 2026-03-11
 
 ### Added
