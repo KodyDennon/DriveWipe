@@ -347,13 +347,10 @@ mod imp {
 impl DriveEnumerator for WindowsDriveEnumerator {
     #[cfg(target_os = "windows")]
     async fn enumerate(&self) -> Result<Vec<DriveInfo>> {
-        tokio::task::spawn_blocking(|| imp::enumerate_drives())
+        tokio::task::spawn_blocking(imp::enumerate_drives)
             .await
             .unwrap_or_else(|e| {
-                Err(DriveWipeError::IoGeneric(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    e,
-                )))
+                Err(DriveWipeError::IoGeneric(std::io::Error::other(e)))
             })
     }
 
@@ -369,10 +366,7 @@ impl DriveEnumerator for WindowsDriveEnumerator {
         tokio::task::spawn_blocking(move || imp::inspect_drive(&path_buf))
             .await
             .unwrap_or_else(|e| {
-                Err(DriveWipeError::IoGeneric(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    e,
-                )))
+                Err(DriveWipeError::IoGeneric(std::io::Error::other(e)))
             })
     }
 
