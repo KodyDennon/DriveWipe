@@ -9,10 +9,12 @@ DriveWipe/
 │   ├── drivewipe-cli/      # CLI binary (thin wrapper)
 │   ├── drivewipe-tui/      # TUI binary (ratatui)
 │   ├── drivewipe-gui/      # GUI binary (iced)
+│   ├── drivewipe-live/     # Live environment (HPA/DCO, kernel module, ATA security)
 │   └── xtask/              # Build automation
-├── profiles/               # Drive profile TOML files
+├── kernel/                 # Custom Linux kernel module for ATA/NVMe passthrough
+├── live/                   # Live ISO boot configs (grub, syslinux, PXE, Alpine)
 ├── docs/                   # Documentation
-└── scripts/                # Build and packaging scripts
+└── scripts/                # Build, release, and cross-check scripts
 ```
 
 ## Core Library (`drivewipe-core`)
@@ -56,7 +58,7 @@ All business logic lives in the core crate. The CLI, TUI, and GUI are thin prese
 | `audit` | JSONL audit trail with date rotation |
 | `clone` | Block/partition-aware cloning, image I/O |
 | `config` | TOML config loading |
-| `crypto` | AES-256-CTR for pattern generation and image encryption |
+| `crypto` | AES-256-CTR PRNG for pattern generation; AES-256-CTR stream cipher for image encryption with SHA-256 KDF |
 | `drive` | Enumeration, DriveInfo, boot detection |
 | `forensic` | Entropy, signatures, sampling, hidden areas, reports |
 | `health` | SMART/NVMe parsing, snapshots, diffs, benchmarks |
@@ -77,11 +79,11 @@ All business logic lives in the core crate. The CLI, TUI, and GUI are thin prese
 
 ## TUI (`drivewipe-tui`)
 
-Built on ratatui 0.30. Uses an `AppScreen` enum state machine with 15 states. The main event loop handles terminal events (key/mouse/resize) and progress events from core.
+Built on ratatui 0.30. Uses an `AppScreen` enum state machine with 19+ states (including live environment screens). The main event loop handles terminal events (key/mouse/resize) and progress events from core. Supports interactive partition CRUD (create/delete) and forensic scan execution.
 
 ## GUI (`drivewipe-gui`)
 
-Built on iced 0.13. Uses a `Screen` enum for navigation, `Message` enum for all events, and delegates to screen view functions.
+Built on iced 0.14. Uses a `Screen` enum for navigation, `Message` enum for all events, and delegates to screen view functions. Supports wipe execution, clone execution with progress, forensic scanning, health checks, and partition viewing.
 
 ## CLI (`drivewipe-cli`)
 

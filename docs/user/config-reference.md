@@ -6,8 +6,8 @@ Default location: `~/.config/drivewipe/config.toml`
 
 | Key | Type | Default | Description |
 |---|---|---|---|
-| `default_method` | string | `"dod-short"` | Default wipe method ID |
-| `parallel_drives` | integer | `2` | Max concurrent wipe operations |
+| `default_method` | string | `"zero"` | Default wipe method ID |
+| `parallel_drives` | integer | `1` | Max concurrent wipe operations |
 | `auto_verify` | bool | `true` | Automatically verify after wipe |
 | `auto_report_json` | bool | `true` | Generate JSON report after wipe |
 | `log_level` | string | `"info"` | Logging level (trace, debug, info, warn, error) |
@@ -20,8 +20,8 @@ Default location: `~/.config/drivewipe/config.toml`
 |---|---|---|---|
 | `notifications_enabled` | bool | `true` | Desktop notifications on completion |
 | `sleep_prevention_enabled` | bool | `true` | Prevent system sleep during operations |
-| `auto_health_pre_wipe` | bool | `true` | Health check before wipe |
-| `keyboard_lock_sequence` | string | `"unlock"` | Character sequence to unlock keyboard |
+| `auto_health_pre_wipe` | bool | `false` | Health check before wipe |
+| `keyboard_lock_sequence` | string | `"UNLOCK"` | Character sequence to unlock keyboard |
 | `profiles_dir` | string | `"~/.config/drivewipe/profiles"` | Custom drive profiles directory |
 | `audit_dir` | string | `"~/.local/share/drivewipe/audit"` | Audit log output directory |
 | `performance_history_dir` | string | `"~/.local/share/drivewipe/performance"` | Historical performance data |
