@@ -4,7 +4,6 @@
 //! metadata from the sysfs pseudo-filesystem.  This avoids shelling out to
 //! external commands and works on minimal Linux environments.
 
-use std::fs;
 use std::path::{Path, PathBuf};
 
 use crate::error::{DriveWipeError, Result};

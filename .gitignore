@@ -24,6 +24,9 @@ Thumbs.db
 # DriveWipe session data (local only)
 sessions/
 
+# Wiki repo (separate git repo, managed independently)
+wiki_repo/
+
 # Release build artifacts (script is committed, artifacts are not)
 drivewipe-v*.tar.gz
 drivewipe-v*.zip
