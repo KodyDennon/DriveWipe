@@ -391,7 +391,11 @@ impl WipeSession {
                     device_ref.write_at(pass_offset, &write_buf_vec)
                 })
                 .await
-                .unwrap();
+                .map_err(|e| {
+                    DriveWipeError::IoGeneric(std::io::Error::other(format!(
+                        "Task join error: {e}"
+                    )))
+                })?;
 
                 match write_res {
                     Ok(n) => {
@@ -575,7 +579,11 @@ impl WipeSession {
                     (res, temp_buf)
                 })
                 .await
-                .unwrap();
+                .map_err(|e| {
+                    DriveWipeError::IoGeneric(std::io::Error::other(format!(
+                        "Task join error: {e}"
+                    )))
+                })?;
 
                 let passed = match read_res.0 {
                     Ok(n) => {

@@ -35,6 +35,13 @@ impl GptTable {
         // GPT header is at LBA 1 (offset 512)
         let header = &data[512..];
 
+        // Validate header is large enough for all fields we access (minimum 92 bytes)
+        if header.len() < 92 {
+            return Err(DriveWipeError::InvalidPartitionTable(
+                "GPT header too short".to_string(),
+            ));
+        }
+
         // Check signature
         if &header[0..8] != GPT_SIGNATURE {
             return Err(DriveWipeError::InvalidPartitionTable(
@@ -42,22 +49,58 @@ impl GptTable {
             ));
         }
 
-        let first_usable_lba = u64::from_le_bytes(header[40..48].try_into().unwrap());
-        let last_usable_lba = u64::from_le_bytes(header[48..56].try_into().unwrap());
+        let first_usable_lba = u64::from_le_bytes(header[40..48].try_into().map_err(|_| {
+            DriveWipeError::InvalidPartitionTable("Malformed GPT header".to_string())
+        })?);
+        let last_usable_lba = u64::from_le_bytes(header[48..56].try_into().map_err(|_| {
+            DriveWipeError::InvalidPartitionTable("Malformed GPT header".to_string())
+        })?);
 
         let mut disk_guid_bytes = [0u8; 16];
         disk_guid_bytes.copy_from_slice(&header[56..72]);
         let disk_guid = format_guid(&disk_guid_bytes);
 
-        let partition_entry_lba = u64::from_le_bytes(header[72..80].try_into().unwrap());
-        let entry_count = u32::from_le_bytes(header[80..84].try_into().unwrap());
-        let entry_size = u32::from_le_bytes(header[84..88].try_into().unwrap());
+        let partition_entry_lba = u64::from_le_bytes(header[72..80].try_into().map_err(|_| {
+            DriveWipeError::InvalidPartitionTable("Malformed GPT header".to_string())
+        })?);
+        let entry_count = u32::from_le_bytes(header[80..84].try_into().map_err(|_| {
+            DriveWipeError::InvalidPartitionTable("Malformed GPT header".to_string())
+        })?);
+        let entry_size = u32::from_le_bytes(header[84..88].try_into().map_err(|_| {
+            DriveWipeError::InvalidPartitionTable("Malformed GPT header".to_string())
+        })?);
 
-        // Parse partition entries
-        let entries_offset = (partition_entry_lba * 512) as usize;
+        // Validate entry_size per UEFI spec (minimum 128 bytes)
+        if entry_size < 128 {
+            return Err(DriveWipeError::InvalidPartitionTable(format!(
+                "GPT entry_size {} is below the 128-byte minimum",
+                entry_size
+            )));
+        }
+
+        // Cap entry_count to prevent DoS from malicious data (spec minimum is 128)
+        const MAX_GPT_ENTRIES: u32 = 1024;
+        let effective_entry_count = entry_count.min(MAX_GPT_ENTRIES);
+
+        // Validate entries offset with checked arithmetic to prevent overflow
+        let entries_offset = partition_entry_lba
+            .checked_mul(512)
+            .and_then(|v| usize::try_from(v).ok())
+            .ok_or_else(|| {
+                DriveWipeError::InvalidPartitionTable(
+                    "GPT partition_entry_lba overflows address space".to_string(),
+                )
+            })?;
+
+        if entries_offset >= data.len() {
+            return Err(DriveWipeError::InvalidPartitionTable(
+                "GPT partition entries offset beyond available data".to_string(),
+            ));
+        }
+
         let mut partitions = Vec::new();
 
-        for i in 0..entry_count {
+        for i in 0..effective_entry_count {
             let offset = entries_offset + (i as usize * entry_size as usize);
             if offset + entry_size as usize > data.len() {
                 break;
@@ -71,15 +114,31 @@ impl GptTable {
                 continue;
             }
 
-            let type_id = format_guid(type_guid_bytes.try_into().unwrap());
+            let type_guid_arr: [u8; 16] = match type_guid_bytes.try_into() {
+                Ok(a) => a,
+                Err(_) => continue,
+            };
+            let type_id = format_guid(&type_guid_arr);
 
             let mut unique_guid_bytes = [0u8; 16];
+            if entry.len() < 56 {
+                continue; // Entry too short, skip
+            }
             unique_guid_bytes.copy_from_slice(&entry[16..32]);
             let unique_id = format_guid(&unique_guid_bytes);
 
-            let start_lba = u64::from_le_bytes(entry[32..40].try_into().unwrap());
-            let end_lba = u64::from_le_bytes(entry[40..48].try_into().unwrap());
-            let attributes = u64::from_le_bytes(entry[48..56].try_into().unwrap());
+            let start_lba = u64::from_le_bytes(match entry[32..40].try_into() {
+                Ok(a) => a,
+                Err(_) => continue,
+            });
+            let end_lba = u64::from_le_bytes(match entry[40..48].try_into() {
+                Ok(a) => a,
+                Err(_) => continue,
+            });
+            let attributes = u64::from_le_bytes(match entry[48..56].try_into() {
+                Ok(a) => a,
+                Err(_) => continue,
+            });
 
             // Name is UTF-16LE in bytes 56..128
             let name_bytes = &entry[56..entry_size.min(128) as usize];
@@ -97,7 +156,10 @@ impl GptTable {
                 unique_id: Some(unique_id),
                 start_lba,
                 end_lba,
-                size_bytes: (end_lba - start_lba + 1) * 512,
+                size_bytes: end_lba
+                    .saturating_sub(start_lba)
+                    .saturating_add(1)
+                    .saturating_mul(512),
                 attributes,
                 bootable: false,
             });

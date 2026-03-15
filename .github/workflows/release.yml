@@ -197,13 +197,17 @@ jobs:
           TAG="${{ steps.version.outputs.tag }}"
           mkdir -p live-dist
 
-          # Copy ISO if it was built
-          cp output/*.iso live-dist/drivewipe-live-${TAG}.iso 2>/dev/null || true
+          # Copy ISO if it was built (check multiple possible output paths)
+          cp output/*.iso live-dist/drivewipe-live-${TAG}.iso 2>/dev/null || \
+          cp target/pxe-server/*.iso live-dist/drivewipe-live-${TAG}.iso 2>/dev/null || \
+          cp drivewipe-live*.iso live-dist/drivewipe-live-${TAG}.iso 2>/dev/null || true
 
-          # Package PXE boot files
+          # Package PXE boot files (check multiple possible output paths)
           mkdir -p live-dist/pxe
-          cp output/vmlinuz live-dist/pxe/ 2>/dev/null || true
-          cp output/initramfs.img live-dist/pxe/ 2>/dev/null || true
+          cp output/vmlinuz live-dist/pxe/ 2>/dev/null || \
+          cp target/pxe-server/tftpboot/vmlinuz-lts live-dist/pxe/vmlinuz 2>/dev/null || true
+          cp output/initramfs.img live-dist/pxe/ 2>/dev/null || \
+          cp target/pxe-server/tftpboot/initramfs-lts live-dist/pxe/initramfs.img 2>/dev/null || true
           cp live/pxe/ipxe/*.ipxe live-dist/pxe/
           cp live/pxe/dnsmasq.conf live-dist/pxe/
           cp live/pxe/README.md live-dist/pxe/
@@ -216,7 +220,7 @@ jobs:
         with:
           name: drivewipe-live
           path: |
-            drivewipe-live.img
+            live-dist/drivewipe-live-*.iso
             drivewipe-live-*-pxe.tar.gz
 
   release:

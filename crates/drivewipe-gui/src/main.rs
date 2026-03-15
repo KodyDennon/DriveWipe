@@ -48,6 +48,7 @@ pub enum Message {
     // Confirmation
     ConfirmInput(String),
     StartWipe,
+    CancelWipe,
     WipeEvent(drivewipe_core::progress::ProgressEvent),
 
     // Health
@@ -215,6 +216,13 @@ impl DriveWipeApp {
 
             // Drive selection
             Message::ToggleDrive(i) => {
+                // Prevent selecting boot drives — safety check
+                if let Some(drive) = self.drives.get(i) {
+                    if drive.is_boot_drive {
+                        // Silently refuse to select boot drive
+                        return IcedTask::none();
+                    }
+                }
                 if let Some(val) = self.selected_drives.get_mut(i) {
                     *val = !*val;
                 }
@@ -264,6 +272,12 @@ impl DriveWipeApp {
                 self.confirm_text = val;
                 IcedTask::none()
             }
+            Message::CancelWipe => {
+                self.cancel_token.cancel();
+                self.wipe_running = false;
+                self.wipe_pass_info = "Cancelled".into();
+                IcedTask::none()
+            }
             Message::StartWipe => {
                 if self.confirm_text.trim() == "YES" {
                     self.wipe_fraction = 0.0;
@@ -299,6 +313,10 @@ impl DriveWipeApp {
                     let method_id = self.selected_method_id.clone();
                     let device_paths = self.selected_device_paths.clone();
                     let cancel_token = self.cancel_token.clone();
+                    let auto_report = self.setting_auto_report;
+                    let notifications = self.setting_notifications;
+                    let sleep_prevention = self.setting_sleep_prevention;
+                    let auto_health = self.setting_auto_health;
 
                     return IcedTask::run(
                         iced::stream::channel(
@@ -326,10 +344,18 @@ impl DriveWipeApp {
                                         None => continue,
                                     };
 
+                                    let wipe_config = drivewipe_core::config::DriveWipeConfig {
+                                        auto_report_json: auto_report,
+                                        notifications_enabled: notifications,
+                                        sleep_prevention_enabled: sleep_prevention,
+                                        auto_health_pre_wipe: auto_health,
+                                        ..Default::default()
+                                    };
+
                                     let session = drivewipe_core::session::WipeSession::new(
                                         drive_info,
                                         method,
-                                        drivewipe_core::config::DriveWipeConfig::default(),
+                                        wipe_config,
                                     );
 
                                     let mut device =
@@ -371,6 +397,7 @@ impl DriveWipeApp {
                     ProgressEvent::Completed { .. } => {
                         self.wipe_fraction = 1.0;
                         self.wipe_complete = true;
+                        self.wipe_running = false;
                         self.wipe_pass_info = "Completed".into();
                     }
                     _ => {}
@@ -651,7 +678,30 @@ impl DriveWipeApp {
                 }
                 IcedTask::none()
             }
-            Message::ForensicEvent(_event) => IcedTask::none(),
+            Message::ForensicEvent(event) => {
+                use drivewipe_core::progress::ProgressEvent;
+                match event {
+                    ProgressEvent::ForensicScanStarted { .. } => {
+                        self.forensic_running = true;
+                        self.forensic_progress = 0.0;
+                    }
+                    ProgressEvent::ForensicScanProgress {
+                        bytes_scanned,
+                        total_bytes,
+                        ..
+                    } => {
+                        if total_bytes > 0 {
+                            self.forensic_progress = bytes_scanned as f32 / total_bytes as f32;
+                        }
+                    }
+                    ProgressEvent::ForensicScanCompleted { .. } => {
+                        self.forensic_running = false;
+                        self.forensic_progress = 1.0;
+                    }
+                    _ => {}
+                }
+                IcedTask::none()
+            }
             Message::ForensicCompleted(result) => {
                 self.forensic_running = false;
                 match result {
@@ -698,6 +748,7 @@ impl DriveWipeApp {
                 &self.wipe_throughput,
                 &self.wipe_pass_info,
                 self.wipe_complete,
+                self.wipe_running,
             ),
             Screen::Health => screens::health::view(&self.drives, &self.health_info),
             Screen::Clone => screens::clone::view(&screens::clone::CloneViewState {

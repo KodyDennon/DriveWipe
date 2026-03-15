@@ -193,19 +193,29 @@ pub fn detect_hidden_areas(device: &mut dyn RawDeviceIo) -> Result<HiddenAreaRes
     let gaps_with_data = unallocated_gaps.iter().filter(|g| g.has_data).count();
     let total_gaps = unallocated_gaps.len();
 
+    // Note: HPA/DCO detection requires ATA passthrough via the drivewipe-live
+    // crate (Linux only). In non-live mode, we can only detect partition-level
+    // hidden areas. Full HPA/DCO probing is available in the live environment.
+    let hpa_dco_note = "HPA/DCO: requires live environment for detection";
+
+    // Build the final summary string, always including the HPA/DCO note
     let summary = if summary_parts.is_empty() {
-        format!(
-            "No hidden areas detected. {} unallocated gap(s) found, {} with data.",
-            total_gaps, gaps_with_data
-        )
+        if total_gaps == 0 {
+            format!("No hidden areas detected. {}", hpa_dco_note)
+        } else {
+            format!(
+                "No hidden areas detected. {} unallocated gap(s) found, {} with data. {}",
+                total_gaps, gaps_with_data, hpa_dco_note
+            )
+        }
     } else {
-        summary_parts.join("; ")
+        format!("{}. {}", summary_parts.join("; "), hpa_dco_note)
     };
 
     Ok(HiddenAreaResult {
-        hpa_detected: false, // True HPA detection requires ATA passthrough
+        hpa_detected: false,
         hpa_size: None,
-        dco_detected: false, // True DCO detection requires ATA passthrough
+        dco_detected: false,
         dco_size: None,
         hidden_partitions,
         unallocated_gaps,

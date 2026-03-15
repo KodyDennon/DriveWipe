@@ -51,13 +51,27 @@ pub fn decrypt_chunk(data: &mut [u8], key: &[u8; 32], nonce: &[u8; 16]) {
     encrypt_chunk(data, key, nonce);
 }
 
-/// Increment a 128-bit nonce (big-endian) for per-chunk unique IVs.
+/// Increment a 128-bit nonce (big-endian) by the number of AES blocks consumed.
+///
+/// AES-CTR internally increments the counter per 16-byte block. If we only
+/// increment by 1 per chunk, the next chunk's counter range overlaps with the
+/// previous chunk's internal counter range, causing keystream reuse.
+///
+/// `data_len` is the number of bytes encrypted in this chunk. The nonce is
+/// advanced by `ceil(data_len / 16)` AES blocks.
+pub fn increment_nonce_by_data_len(nonce: &mut [u8; 16], data_len: usize) {
+    // Number of AES blocks consumed = ceil(data_len / 16)
+    let aes_blocks = (data_len as u128).div_ceil(16);
+    let mut counter = u128::from_be_bytes(*nonce);
+    counter = counter.wrapping_add(aes_blocks);
+    *nonce = counter.to_be_bytes();
+}
+
+/// Increment a 128-bit nonce (big-endian) by 1.
+///
+/// **WARNING**: This should only be used when each "chunk" is exactly 16 bytes
+/// (one AES block). For multi-block chunks, use `increment_nonce_by_data_len`
+/// to avoid keystream reuse.
 pub fn increment_nonce(nonce: &mut [u8; 16]) {
-    for byte in nonce.iter_mut().rev() {
-        let (val, overflow) = byte.overflowing_add(1);
-        *byte = val;
-        if !overflow {
-            break;
-        }
-    }
+    increment_nonce_by_data_len(nonce, 16);
 }

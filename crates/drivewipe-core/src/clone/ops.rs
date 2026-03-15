@@ -45,7 +45,9 @@ pub async fn clone_device_to_image(
     // Encryption setup
     let use_encryption = config.encrypt && config.password.is_some();
     let (enc_key, mut enc_nonce, enc_salt_hex, enc_nonce_hex) = if use_encryption {
-        let password = config.password.as_ref().unwrap();
+        let password = config.password.as_ref().ok_or_else(|| {
+            DriveWipeError::Encryption("Encryption enabled but no password provided".to_string())
+        })?;
         let salt = crate::crypto::encrypt::generate_salt();
         let nonce = crate::crypto::encrypt::generate_nonce();
         let key = crate::crypto::encrypt::derive_key(password.as_bytes(), &salt, 100_000);
@@ -59,10 +61,19 @@ pub async fn clone_device_to_image(
         (None, None, None, None)
     };
 
+    // Extract source device model/serial from the path if possible
+    let (source_model, source_serial) = {
+        let enumerator = crate::drive::create_enumerator();
+        match enumerator.inspect(&config.source).await {
+            Ok(info) => (info.model, info.serial),
+            Err(_) => ("Unknown".to_string(), "Unknown".to_string()),
+        }
+    };
+
     let header = CloneImageHeader {
         version: 1,
-        source_model: "Unknown".to_string(), // In a real impl, we'd pass DriveInfo
-        source_serial: "Unknown".to_string(),
+        source_model,
+        source_serial,
         source_capacity,
         block_size: block_size as u32,
         chunk_count,
@@ -106,7 +117,9 @@ pub async fn clone_device_to_image(
         }
 
         if use_encryption {
-            let chunk_nonce = enc_nonce.as_ref().unwrap();
+            let chunk_nonce = enc_nonce.as_ref().ok_or_else(|| {
+                DriveWipeError::Encryption("Encryption nonce missing".to_string())
+            })?;
             CloneImage::write_encrypted_chunk(
                 &mut writer,
                 &read_res[..n],
@@ -114,7 +127,12 @@ pub async fn clone_device_to_image(
                 enc_key.as_ref(),
                 Some(chunk_nonce),
             )?;
-            crate::crypto::encrypt::increment_nonce(enc_nonce.as_mut().unwrap());
+            // Advance nonce by the number of AES blocks consumed to prevent
+            // keystream reuse between chunks (see crypto/encrypt.rs docs).
+            let enc_nonce_ref = enc_nonce.as_mut().ok_or_else(|| {
+                DriveWipeError::Encryption("Encryption nonce missing".to_string())
+            })?;
+            crate::crypto::encrypt::increment_nonce_by_data_len(enc_nonce_ref, n);
         } else {
             CloneImage::write_chunk(&mut writer, &read_res[..n], config.compression)?;
         }
@@ -248,14 +266,22 @@ pub async fn restore_image_to_device(
         }
 
         let chunk_data = if header.encrypted {
-            let chunk_nonce = dec_nonce.as_ref().unwrap();
+            let chunk_nonce = dec_nonce.as_ref().ok_or_else(|| {
+                DriveWipeError::Encryption("Decryption nonce missing".to_string())
+            })?;
             let data = CloneImage::read_encrypted_chunk(
                 &mut reader,
                 header.compression,
                 dec_key.as_ref(),
                 Some(chunk_nonce),
             )?;
-            crate::crypto::encrypt::increment_nonce(dec_nonce.as_mut().unwrap());
+            // Advance nonce by the number of AES blocks consumed to stay in sync
+            // with how the encrypt side advanced it.
+            let chunk_len = data.len();
+            let dec_nonce_ref = dec_nonce.as_mut().ok_or_else(|| {
+                DriveWipeError::Encryption("Decryption nonce missing".to_string())
+            })?;
+            crate::crypto::encrypt::increment_nonce_by_data_len(dec_nonce_ref, chunk_len);
             data
         } else {
             CloneImage::read_chunk(&mut reader, header.compression)?

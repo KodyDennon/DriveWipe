@@ -28,7 +28,8 @@ impl WipeMethod for DriveWipeSecureHdd {
         "DriveWipe Secure (HDD)"
     }
     fn description(&self) -> &str {
-        "3-pass overwrite (zero, one, random) + verification. Optimized for spinning drives."
+        "3-pass overwrite (zero, one, random) + verification. Optimized for spinning drives \
+         with full surface coverage."
     }
     fn pass_count(&self) -> u32 {
         3
@@ -59,8 +60,8 @@ impl WipeMethod for DriveWipeSecureSataSsd {
         "DriveWipe Secure (SATA SSD)"
     }
     fn description(&self) -> &str {
-        "Overwrite + TRIM + second overwrite + ATA Secure Erase (if available) + verify. \
-         Addresses SSD wear-leveling and spare area."
+        "2-pass software overwrite (random + zero) + ATA Secure Erase attempt (if available) \
+         + verify. Addresses SSD wear-leveling and spare area."
     }
     fn pass_count(&self) -> u32 {
         2
@@ -111,8 +112,8 @@ impl WipeMethod for DriveWipeSecureNvme {
         "DriveWipe Secure (NVMe)"
     }
     fn description(&self) -> &str {
-        "Overwrite + deallocate + NVMe Format/Sanitize (if available) + overwrite + verify. \
-         Addresses NVMe spare area and controller-level remapping."
+        "2-pass software overwrite (random + zero) + NVMe Format/Sanitize attempt \
+         (if available) + verify. Addresses NVMe spare area and controller-level remapping."
     }
     fn pass_count(&self) -> u32 {
         2

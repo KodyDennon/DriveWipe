@@ -198,7 +198,7 @@ pub struct App {
     pub clone_source_index: Option<usize>,
     /// Clone target drive index.
     pub clone_target_index: Option<usize>,
-    /// Clone mode: "block" or "partition".
+    /// Clone mode: "block", "partition", or "image".
     pub clone_mode: String,
     /// Whether keyboard lock is active.
     pub keyboard_locked: bool,
@@ -1302,14 +1302,71 @@ impl App {
                 self.table_state.select(Some(i));
             }
             KeyCode::Enter => {
-                // Show health details for selected drive
+                // Show health details for selected drive and run async health check
                 if let Some(i) = self.table_state.selected() {
                     self.focused_drive_index = Some(i);
                     self.health_display_lines = self.build_health_display(i);
+
+                    // Spawn async health check to get SMART data
+                    if i < self.drives.len() {
+                        let drive_path = self.drives[i].path.clone();
+                        let progress_tx = self.progress_tx.clone();
+                        tokio::spawn(async move {
+                            let sid = Uuid::new_v4();
+                            if let Some(ref tx) = progress_tx {
+                                let _ = tx.send(ProgressEvent::HealthCheckStarted {
+                                    session_id: sid,
+                                    device_path: drive_path.display().to_string(),
+                                });
+                            }
+                            match drivewipe_core::health::get_health(&drive_path).await {
+                                Ok(snapshot) => {
+                                    if let Some(ref tx) = progress_tx {
+                                        let healthy =
+                                            snapshot.smart_data.as_ref().is_none_or(|s| s.healthy);
+                                        let detail = format!(
+                                            "Model: {}, Temp: {}°C, SMART: {}",
+                                            snapshot.device_model,
+                                            snapshot.temperature_celsius.unwrap_or(0),
+                                            if healthy { "HEALTHY" } else { "FAILING" },
+                                        );
+                                        let _ = tx.send(ProgressEvent::Warning {
+                                            session_id: sid,
+                                            message: format!("[HEALTH] {}", detail),
+                                        });
+                                        let _ = tx.send(ProgressEvent::HealthCheckCompleted {
+                                            session_id: sid,
+                                            healthy,
+                                            message: detail,
+                                        });
+                                    }
+                                }
+                                Err(e) => {
+                                    if let Some(ref tx) = progress_tx {
+                                        let _ = tx.send(ProgressEvent::Warning {
+                                            session_id: sid,
+                                            message: format!(
+                                                "[HEALTH] Check failed: {} (requires root)",
+                                                e
+                                            ),
+                                        });
+                                    }
+                                }
+                            }
+                        });
+                    }
                 }
             }
             KeyCode::Char('r') => {
                 self.refresh_drives().await;
+            }
+            KeyCode::Char('c') => {
+                // Navigate to health comparison screen
+                if self.focused_drive_index.is_some() {
+                    self.screen = AppScreen::HealthComparison;
+                } else {
+                    self.log_push("Select a drive first (Enter) to view health comparison".into());
+                }
             }
             _ => {}
         }
@@ -1409,11 +1466,11 @@ impl App {
                 }
             }
             KeyCode::Char('m') => {
-                // Toggle clone mode
-                self.clone_mode = if self.clone_mode == "block" {
-                    "partition".to_string()
-                } else {
-                    "block".to_string()
+                // Cycle clone mode: block -> partition -> image -> block
+                self.clone_mode = match self.clone_mode.as_str() {
+                    "block" => "partition".to_string(),
+                    "partition" => "image".to_string(),
+                    _ => "block".to_string(),
                 };
                 self.log_push(format!("Clone mode: {}", self.clone_mode));
             }
@@ -1676,7 +1733,7 @@ impl App {
                 }
             }
             KeyCode::Enter | KeyCode::Char(' ') => {
-                // Toggle boolean settings
+                // Toggle boolean settings or show info for path settings
                 match self.settings_index {
                     0 => self.config.auto_report_json = !self.config.auto_report_json,
                     1 => self.config.notifications_enabled = !self.config.notifications_enabled,
@@ -1684,6 +1741,30 @@ impl App {
                         self.config.sleep_prevention_enabled = !self.config.sleep_prevention_enabled
                     }
                     3 => self.config.auto_health_pre_wipe = !self.config.auto_health_pre_wipe,
+                    4 => {
+                        self.log_push(format!(
+                            "Profiles dir: {} (edit in config.toml)",
+                            self.config.profiles_dir.display()
+                        ));
+                    }
+                    5 => {
+                        self.log_push(format!(
+                            "Audit dir: {} (edit in config.toml)",
+                            self.config.audit_dir.display()
+                        ));
+                    }
+                    6 => {
+                        self.log_push(format!(
+                            "Performance dir: {} (edit in config.toml)",
+                            self.config.performance_history_dir.display()
+                        ));
+                    }
+                    7 => {
+                        self.log_push(format!(
+                            "Keyboard lock sequence: '{}' (edit in config.toml)",
+                            self.config.keyboard_lock_sequence
+                        ));
+                    }
                     _ => {}
                 }
             }
@@ -1944,6 +2025,22 @@ impl App {
             ProgressEvent::ForensicScanCompleted { duration_secs, .. } => {
                 self.log_push(format!("Forensic scan completed in {duration_secs:.1}s"));
                 self.forensic_progress_pct = 100.0;
+
+                // Collect forensic result lines from recent warnings
+                let forensic_lines: Vec<String> = self
+                    .log_messages
+                    .iter()
+                    .rev()
+                    .take(50)
+                    .filter(|(_, msg)| msg.starts_with("WARNING: [FORENSIC] "))
+                    .map(|(_, msg)| msg.trim_start_matches("WARNING: [FORENSIC] ").to_string())
+                    .collect::<Vec<_>>()
+                    .into_iter()
+                    .rev()
+                    .collect();
+                if !forensic_lines.is_empty() {
+                    self.forensic_result_lines = forensic_lines;
+                }
             }
 
             // Catch any future new events
@@ -2192,10 +2289,10 @@ impl App {
         tokio::spawn(async move {
             use drivewipe_core::clone::{CloneConfig, CloneMode, CompressionMode};
 
-            let mode = if clone_mode == "partition" {
-                CloneMode::Partition
-            } else {
-                CloneMode::Block
+            let mode = match clone_mode.as_str() {
+                "partition" => CloneMode::Partition,
+                "image" => CloneMode::Image,
+                _ => CloneMode::Block,
             };
 
             let config = CloneConfig {
@@ -2257,9 +2354,18 @@ impl App {
                     )
                     .await
                 }
-                CloneMode::Image => Err(drivewipe_core::error::DriveWipeError::Clone(
-                    "Image mode not supported in TUI yet".to_string(),
-                )),
+                CloneMode::Image => {
+                    // Image mode: clone source device to a file
+                    let image_path = target_info.path.clone();
+                    drivewipe_core::clone::ops::clone_device_to_image(
+                        source.as_mut(),
+                        &image_path,
+                        &config,
+                        &progress_tx,
+                        &cancel_token,
+                    )
+                    .await
+                }
             };
 
             if let Err(e) = result {
@@ -2326,8 +2432,65 @@ impl App {
                 .await
             {
                 Ok(result) => {
+                    // Format results and send them back via a dedicated event
+                    // We repurpose Warning events to send back forensic result lines
+                    // since ForensicScanCompleted doesn't carry result data.
+                    let sid = Uuid::new_v4();
+
+                    // Send formatted result lines as warnings so the TUI can display them
+                    let mut result_lines = Vec::new();
+                    result_lines.push(format!("Scan completed in {:.1}s", result.duration_secs));
+
+                    if let Some(ref entropy) = result.entropy_stats {
+                        result_lines.push(format!(
+                            "Entropy: avg={:.2}, zero={:.1}%, high={:.1}%",
+                            entropy.average_entropy, entropy.zero_pct, entropy.high_entropy_pct
+                        ));
+                    }
+
+                    if !result.signature_hits.is_empty() {
+                        result_lines.push(format!(
+                            "{} file signatures found",
+                            result.signature_hits.len()
+                        ));
+                        for hit in result.signature_hits.iter().take(10) {
+                            result_lines
+                                .push(format!("  {} at offset {}", hit.file_type, hit.offset));
+                        }
+                        if result.signature_hits.len() > 10 {
+                            result_lines.push(format!(
+                                "  ... and {} more",
+                                result.signature_hits.len() - 10
+                            ));
+                        }
+                    } else {
+                        result_lines.push("No file signatures detected".to_string());
+                    }
+
+                    if let Some(ref sampling) = result.sampling_result {
+                        result_lines.push(format!(
+                            "Sampling: {:.1}% zero, {:.1}% random, {:.1}% remnants (conf: {:.0}%)",
+                            sampling.zero_pct,
+                            sampling.high_entropy_pct,
+                            sampling.data_remnant_pct,
+                            sampling.confidence * 100.0
+                        ));
+                    }
+
+                    if let Some(ref hidden) = result.hidden_areas {
+                        result_lines.push(format!("Hidden areas: {}", hidden.summary));
+                    }
+
+                    // Send each line as a warning so it shows in the TUI log
+                    for line in &result_lines {
+                        let _ = progress_tx.send(ProgressEvent::Warning {
+                            session_id: sid,
+                            message: format!("[FORENSIC] {}", line),
+                        });
+                    }
+
                     let _ = progress_tx.send(ProgressEvent::ForensicScanCompleted {
-                        session_id: Uuid::new_v4(),
+                        session_id: sid,
                         duration_secs: result.duration_secs,
                         total_findings: result.signature_hits.len() as u32,
                     });

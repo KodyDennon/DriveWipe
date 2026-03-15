@@ -1,4 +1,4 @@
-use iced::widget::{column, container, progress_bar, text};
+use iced::widget::{button, column, container, progress_bar, text};
 use iced::{Element, Length};
 
 use crate::Message;
@@ -12,6 +12,7 @@ pub fn view<'a>(
     throughput: &'a str,
     pass_info: &'a str,
     is_complete: bool,
+    is_running: bool,
 ) -> Element<'a, Message> {
     let title = if is_complete {
         text("Wipe Complete")
@@ -45,7 +46,7 @@ pub fn view<'a>(
         .size(theme::FONT_SIZE_MD)
         .color(theme::STATUS_INFO);
 
-    let content = column![
+    let mut col = column![
         title,
         device_info,
         method_info,
@@ -57,7 +58,25 @@ pub fn view<'a>(
     .spacing(theme::SPACING_LG)
     .padding(theme::SPACING_XL);
 
-    container(content)
+    // Show cancel button while running, back button when complete or cancelled
+    if is_running && !is_complete {
+        col = col.push(
+            button(
+                text("Cancel Wipe")
+                    .size(theme::FONT_SIZE_MD)
+                    .color(theme::DANGER),
+            )
+            .on_press(Message::CancelWipe),
+        );
+    } else {
+        // Complete or cancelled — show back button
+        col = col.push(
+            button(text("Back to Menu").size(theme::FONT_SIZE_MD))
+                .on_press(Message::NavigateToMenu),
+        );
+    }
+
+    container(col)
         .width(Length::Fill)
         .height(Length::Fill)
         .style(|_theme| container::Style {

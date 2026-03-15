@@ -487,12 +487,10 @@ fn format_number(n: u64) -> String {
 
 /// Draw completed screen
 pub fn draw_completed(frame: &mut Frame, app: &mut App) {
-    static mut NOTIFIED: bool = false;
-    unsafe {
-        if !NOTIFIED {
-            play_notification_sound();
-            NOTIFIED = true;
-        }
+    use std::sync::atomic::{AtomicBool, Ordering};
+    static NOTIFIED: AtomicBool = AtomicBool::new(false);
+    if !NOTIFIED.swap(true, Ordering::SeqCst) {
+        play_notification_sound();
     }
 
     let area = frame.area();

@@ -31,7 +31,11 @@ impl MbrTable {
             ));
         }
 
-        let disk_signature = u32::from_le_bytes(data[440..444].try_into().unwrap());
+        let disk_signature = u32::from_le_bytes(
+            data[440..444]
+                .try_into()
+                .map_err(|_| DriveWipeError::InvalidPartitionTable("Malformed MBR".to_string()))?,
+        );
 
         let mut partitions = Vec::new();
 
@@ -48,8 +52,9 @@ impl MbrTable {
                 continue;
             }
 
-            let start_lba = u32::from_le_bytes(entry[8..12].try_into().unwrap()) as u64;
-            let size_sectors = u32::from_le_bytes(entry[12..16].try_into().unwrap()) as u64;
+            let start_lba = u32::from_le_bytes(entry[8..12].try_into().unwrap_or([0; 4])) as u64;
+            let size_sectors =
+                u32::from_le_bytes(entry[12..16].try_into().unwrap_or([0; 4])) as u64;
 
             if size_sectors == 0 {
                 continue;

@@ -97,6 +97,13 @@ env_logger = "0.11"
 dirs = "6"
 hostname = "0.4"
 
+# Async runtime
+tokio = { version = "1.50.0", features = ["full"] }
+async-trait = "0.1.89"
+
+# Encoding
+hex = "0.4.3"
+
 # Testing
 assert_cmd = "2"
 predicates = "3"

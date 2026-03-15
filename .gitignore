@@ -27,6 +27,11 @@ sessions/
 # Wiki repo (separate git repo, managed independently)
 wiki_repo/
 
+# Large media files
+*.mp4
+*.avi
+*.mov
+
 # Release build artifacts (script is committed, artifacts are not)
 drivewipe-v*.tar.gz
 drivewipe-v*.zip

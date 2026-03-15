@@ -200,8 +200,16 @@ pub fn allocate_aligned_buffer(size: usize, alignment: usize) -> AlignedBuffer {
 /// bypassing the `'static` lifetime requirement. The caller must ensure that:
 /// 1. The underlying device object outlives the thread/task using this wrapper.
 /// 2. Exclusive access is maintained (e.g. by awaiting the task immediately).
+///
+/// This relies on the assumption that a fat pointer (data + vtable) is exactly
+/// two `usize` words. The compile-time assertion below will fail if Rust ever
+/// changes fat pointer representation.
 #[derive(Clone, Copy)]
 pub struct DeviceWrapper(pub [usize; 2]);
+
+// Compile-time assertion: fat pointer must be exactly 2 * usize.
+// If this fails, the transmute in new()/get_mut() would be unsound.
+const _: () = assert!(std::mem::size_of::<&dyn RawDeviceIo>() == 2 * std::mem::size_of::<usize>(),);
 
 unsafe impl Send for DeviceWrapper {}
 unsafe impl Sync for DeviceWrapper {}

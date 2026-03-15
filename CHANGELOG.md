@@ -298,9 +298,11 @@ Initial release of DriveWipe.
 - **Test suite**: 130 tests covering types, config, errors, patterns, PRNG, aligned buffers, wipe sessions, verification, cancellation, method registry, and report serialization.
 - GitHub Actions CI (build, test, clippy, fmt, docs, security audit) across Linux, macOS, and Windows.
 
-[Unreleased]: https://github.com/KodyDennon/DriveWipe/compare/v1.2.0...HEAD
+[Unreleased]: https://github.com/KodyDennon/DriveWipe/compare/v1.3.0...HEAD
+[1.3.0]: https://github.com/KodyDennon/DriveWipe/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/KodyDennon/DriveWipe/compare/v1.1.13...v1.2.0
 [1.1.13]: https://github.com/KodyDennon/DriveWipe/compare/v1.1.12...v1.1.13
+[1.1.12]: https://github.com/KodyDennon/DriveWipe/compare/v1.1.11...v1.1.12
 [1.1.11]: https://github.com/KodyDennon/DriveWipe/compare/v1.1.10...v1.1.11
 [1.1.10]: https://github.com/KodyDennon/DriveWipe/compare/v1.1.9...v1.1.10
 [1.1.9]: https://github.com/KodyDennon/DriveWipe/compare/v1.1.8...v1.1.9
