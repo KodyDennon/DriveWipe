@@ -49,7 +49,7 @@ zeroize = { version = "1", features = ["derive"] }
 argon2 = "0.5"
 
 # Hashing
-sha2 = "0.10"
+sha2 = "0.11"
 blake3 = "1"
 hmac = "0.12"
 
