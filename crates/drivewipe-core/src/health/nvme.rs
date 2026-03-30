@@ -76,7 +76,7 @@ impl NvmeHealthLog {
     /// Temperature in Celsius.
     pub fn temperature_celsius(&self) -> i16 {
         let raw = self.temperature_kelvin as i16 - 273;
-        if raw < -40 || raw > 200 {
+        if !(-40..=200).contains(&raw) {
             log::warn!(
                 "NVMe temperature {}°C out of expected range (raw {}K)",
                 raw,

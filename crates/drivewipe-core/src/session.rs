@@ -630,10 +630,8 @@ impl WipeSession {
                         .to_string();
                     warnings.push(msg);
                     false
-                } else if !all_passed {
-                    false
                 } else {
-                    true
+                    all_passed
                 };
 
                 if passed {
