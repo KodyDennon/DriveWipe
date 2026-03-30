@@ -1,29 +1,35 @@
 //! AES-256-CTR stream encryption for clone image chunks.
 
 use aes::Aes256;
+use argon2::{Algorithm, Argon2, Params, Version};
 use cipher::{KeyIvInit, StreamCipher};
 use ctr::Ctr128BE;
-use sha2::{Digest, Sha256};
 
 type Aes256Ctr = Ctr128BE<Aes256>;
 
-/// Derives a 256-bit encryption key from a password and salt using SHA-256 iterated hashing.
-/// This is a simplified KDF — for production with user-facing passwords, use Argon2 or PBKDF2.
-pub fn derive_key(password: &[u8], salt: &[u8], iterations: u32) -> [u8; 32] {
-    let mut key = [0u8; 32];
-    let mut hasher = Sha256::new();
-    hasher.update(password);
-    hasher.update(salt);
-    let mut hash = hasher.finalize_reset();
+/// Derives a 256-bit encryption key from a password and salt using Argon2id.
+///
+/// Argon2id is memory-hard, making it resistant to GPU and ASIC brute-force attacks.
+/// Parameters: 64 MiB memory, 3 iterations, 1 lane (single-threaded).
+///
+/// The `_iterations` parameter is retained for API compatibility but ignored;
+/// Argon2id uses its own internal iteration count configured via `Params`.
+pub fn derive_key(password: &[u8], salt: &[u8], _iterations: u32) -> [u8; 32] {
+    let params = Params::new(
+        64 * 1024, // 64 MiB memory cost
+        3,         // 3 time iterations
+        1,         // 1 parallel lane
+        Some(32),  // 32-byte output
+    )
+    .expect("valid Argon2 params");
 
-    for _ in 1..iterations {
-        hasher.update(hash);
-        hasher.update(salt);
-        hash = hasher.finalize_reset();
-    }
+    let argon2 = Argon2::new(Algorithm::Argon2id, Version::V0x13, params);
 
-    key.copy_from_slice(&hash);
-    key
+    let mut output = [0u8; 32];
+    argon2
+        .hash_password_into(password, salt, &mut output)
+        .expect("Argon2 hashing failed");
+    output
 }
 
 /// Generate a random salt.

@@ -485,10 +485,17 @@ fn format_number(n: u64) -> String {
     result.chars().rev().collect()
 }
 
+/// Reset the "done" notification flag so the next completion plays the sound.
+pub fn reset_done_notification() {
+    use std::sync::atomic::Ordering;
+    NOTIFIED.store(false, Ordering::SeqCst);
+}
+
+static NOTIFIED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
 /// Draw completed screen
 pub fn draw_completed(frame: &mut Frame, app: &mut App) {
-    use std::sync::atomic::{AtomicBool, Ordering};
-    static NOTIFIED: AtomicBool = AtomicBool::new(false);
+    use std::sync::atomic::Ordering;
     if !NOTIFIED.swap(true, Ordering::SeqCst) {
         play_notification_sound();
     }

@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use crate::error::{DriveWipeError, Result};
 
@@ -8,7 +8,7 @@ use crate::error::{DriveWipeError, Result};
 
 /// Top-level configuration for DriveWipe, loaded from
 /// `~/.config/drivewipe/config.toml`.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct DriveWipeConfig {
     /// Default wipe method id (e.g. "zero", "random", "dod-short", "nist-800-88").
@@ -69,7 +69,7 @@ pub struct DriveWipeConfig {
 }
 
 /// A user-defined wipe method declared in the configuration file.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CustomMethodConfig {
     /// Unique identifier used on the command line (e.g. "my-3pass").
     pub id: String,
@@ -89,7 +89,7 @@ pub struct CustomMethodConfig {
 }
 
 /// A single pass within a custom wipe method.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CustomPassConfig {
     /// The fill-pattern kind: `"zero"`, `"one"`, `"random"`, `"constant"`,
     /// or `"repeating"`.
@@ -187,6 +187,23 @@ impl DriveWipeConfig {
     /// Return the directory used to store resumable session state.
     pub fn sessions_dir(&self) -> &PathBuf {
         &self.sessions_dir
+    }
+
+    // ── Saving ───────────────────────────────────────────────────────
+
+    /// Save configuration to `~/.config/drivewipe/config.toml`.
+    pub fn save(&self) -> Result<()> {
+        let config_dir = dirs::config_dir()
+            .unwrap_or_else(|| std::path::PathBuf::from("."))
+            .join("drivewipe");
+        std::fs::create_dir_all(&config_dir)
+            .map_err(|e| DriveWipeError::Config(format!("Failed to create config dir: {e}")))?;
+        let config_path = config_dir.join("config.toml");
+        let toml_str = toml::to_string_pretty(self)
+            .map_err(|e| DriveWipeError::Config(format!("Failed to serialize config: {e}")))?;
+        std::fs::write(&config_path, toml_str)
+            .map_err(|e| DriveWipeError::Config(format!("Failed to write config: {e}")))?;
+        Ok(())
     }
 
     // ── Loading ──────────────────────────────────────────────────────

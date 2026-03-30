@@ -44,15 +44,15 @@ pub async fn run(
 
     // ── Open the device ─────────────────────────────────────────────────
     #[cfg(target_os = "linux")]
-    let mut device_io = drivewipe_core::io::linux::LinuxDeviceIo::open(device_path)
+    let mut device_io = drivewipe_core::io::linux::LinuxDeviceIo::open(device_path, false)
         .with_context(|| format!("Failed to open device {device}"))?;
 
     #[cfg(target_os = "macos")]
-    let mut device_io = drivewipe_core::io::macos::MacosDeviceIo::open(device_path)
+    let mut device_io = drivewipe_core::io::macos::MacosDeviceIo::open(device_path, false)
         .with_context(|| format!("Failed to open device {device}"))?;
 
     #[cfg(target_os = "windows")]
-    let mut device_io = drivewipe_core::io::windows::WindowsDeviceIo::open(device_path)
+    let mut device_io = drivewipe_core::io::windows::WindowsDeviceIo::open(device_path, false)
         .with_context(|| format!("Failed to open device {device}"))?;
 
     // ── Build the verifier ──────────────────────────────────────────────

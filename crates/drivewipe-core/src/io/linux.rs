@@ -43,7 +43,7 @@ impl LinuxDeviceIo {
     /// Returns [`DriveWipeError::DeviceNotFound`] if the path does not exist,
     /// or [`DriveWipeError::Io`] if the device cannot be opened (e.g.
     /// insufficient privileges).
-    pub fn open(path: &Path) -> Result<Self> {
+    pub fn open(path: &Path, writable: bool) -> Result<Self> {
         // Validate the path is a block device (prevents arbitrary file overwrite).
         use std::os::unix::fs::FileTypeExt;
         match std::fs::metadata(path) {
@@ -66,13 +66,16 @@ impl LinuxDeviceIo {
             }
         }
 
-        // Unmount all partitions of this device before opening for raw I/O.
-        unmount_device(path);
+        // Unmount all partitions of this device before opening for raw I/O
+        // (only when opening for write — read-only operations shouldn't unmount).
+        if writable {
+            unmount_device(path);
+        }
 
         // Open with O_NOFOLLOW to prevent symlink attacks (TOCTOU mitigation).
         let mut file = OpenOptions::new()
             .read(true)
-            .write(true)
+            .write(writable)
             .custom_flags(libc::O_DIRECT | libc::O_NOFOLLOW)
             .open(path)
             .map_err(|e| match e.kind() {
@@ -176,8 +179,13 @@ fn unmount_device(path: &Path) {
             continue;
         };
 
-        // Check if this mount is a partition of our device.
-        if mount_dev.starts_with(&format!("/dev/{dev_name}")) {
+        // Check if this mount is the device itself or a partition of it.
+        // Use a delimiter check so that e.g. "sda" does not match "sdaa".
+        if mount_dev == format!("/dev/{dev_name}")
+            || (mount_dev.starts_with(&format!("/dev/{dev_name}"))
+                && mount_dev["/dev/".len() + dev_name.len()..]
+                    .starts_with(|c: char| c.is_ascii_digit()))
+        {
             log::info!("Unmounting {} (mounted at {})", mount_dev, mount_point);
             let result = Command::new("umount").arg(mount_point).output();
             match result {

@@ -137,6 +137,18 @@ impl WipeState {
         Ok(all.into_iter().find(|s| s.device_serial == serial))
     }
 
+    /// Find a resumable session matching both device serial and wipe method.
+    pub fn find_for_device_and_method(
+        sessions_dir: &Path,
+        serial: &str,
+        method_id: &str,
+    ) -> Result<Option<Self>> {
+        let all = Self::find_incomplete(sessions_dir)?;
+        Ok(all
+            .into_iter()
+            .find(|s| s.device_serial == serial && s.method_id == method_id))
+    }
+
     /// Delete the state file (called on completion).
     pub fn cleanup(&self, sessions_dir: &Path) -> Result<()> {
         let path = Self::state_path(sessions_dir, self.session_id);

@@ -32,6 +32,28 @@ pub fn create_partition(
         ));
     }
 
+    // Enforce 1 MiB alignment on start LBA for optimal performance on modern drives.
+    // Only apply if the aligned value still leaves room for the partition.
+    let aligned_start = super::types::align_to_1mib(start_lba, 512);
+    let start_lba = if aligned_start < end_lba {
+        if aligned_start != start_lba {
+            log::info!(
+                "Aligning partition start from LBA {} to {} (1 MiB boundary)",
+                start_lba,
+                aligned_start
+            );
+        }
+        aligned_start
+    } else {
+        // Partition too small for 1 MiB alignment — use as-is with a warning.
+        log::warn!(
+            "Partition too small for 1 MiB alignment (start={}, end={}), using unaligned start",
+            start_lba,
+            end_lba
+        );
+        start_lba
+    };
+
     match table {
         PartitionTable::Gpt(gpt) => {
             // Check for overlap with existing partitions
@@ -71,7 +93,7 @@ pub fn create_partition(
                 index: next_index,
                 name: name.to_string(),
                 type_id: type_id.to_string(),
-                unique_id: None, // Would be generated as a random UUID
+                unique_id: Some(uuid::Uuid::new_v4().to_string()),
                 start_lba,
                 end_lba,
                 size_bytes: (end_lba - start_lba + 1) * 512,

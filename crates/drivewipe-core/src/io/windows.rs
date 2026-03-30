@@ -76,7 +76,7 @@ impl WindowsDeviceIo {
     /// or [`DriveWipeError::Io`] / [`DriveWipeError::InsufficientPrivileges`]
     /// if the device cannot be opened.
     #[cfg(target_os = "windows")]
-    pub fn open(path: &Path) -> Result<Self> {
+    pub fn open(path: &Path, writable: bool) -> Result<Self> {
         let path_str = path.to_string_lossy();
         let wide_path = to_wide_null(&path_str);
 
@@ -93,81 +93,84 @@ impl WindowsDeviceIo {
         // Windows monitors disk writes and blocks access when it detects partition
         // modifications, regardless of privileges. Setting the disk offline prevents
         // Windows from monitoring and blocking our writes.
-        log::debug!("[WINDOWS] Setting disk offline...");
+        // Only set offline when opening for write — read-only operations don't need it.
+        if writable {
+            log::debug!("[WINDOWS] Setting disk offline...");
 
-        const IOCTL_DISK_SET_DISK_ATTRIBUTES: u32 = 0x0007C0F4;
+            const IOCTL_DISK_SET_DISK_ATTRIBUTES: u32 = 0x0007C0F4;
 
-        #[repr(C)]
-        #[allow(non_snake_case)]
-        struct SetDiskAttributes {
-            Version: u32,
-            Persist: u8, // BOOLEAN
-            Reserved1: [u8; 3],
-            Attributes: u64,
-            AttributesMask: u64,
-            Reserved2: [u32; 4],
-        }
+            #[repr(C)]
+            #[allow(non_snake_case)]
+            struct SetDiskAttributes {
+                Version: u32,
+                Persist: u8, // BOOLEAN
+                Reserved1: [u8; 3],
+                Attributes: u64,
+                AttributesMask: u64,
+                Reserved2: [u32; 4],
+            }
 
-        // Attribute value 0x1 = DISK_ATTRIBUTE_OFFLINE
-        let mut attrs = SetDiskAttributes {
-            Version: mem::size_of::<SetDiskAttributes>() as u32,
-            Persist: 0, // Don't persist across reboots
-            Reserved1: [0; 3],
-            Attributes: 0x1,     // Set OFFLINE
-            AttributesMask: 0x1, // Modify OFFLINE attribute
-            Reserved2: [0; 4],
-        };
+            // Attribute value 0x1 = DISK_ATTRIBUTE_OFFLINE
+            let mut attrs = SetDiskAttributes {
+                Version: mem::size_of::<SetDiskAttributes>() as u32,
+                Persist: 0, // Don't persist across reboots
+                Reserved1: [0; 3],
+                Attributes: 0x1,     // Set OFFLINE
+                AttributesMask: 0x1, // Modify OFFLINE attribute
+                Reserved2: [0; 4],
+            };
 
-        // Open the disk first to set it offline
-        let wide_for_offline = to_wide_null(&path_str);
-        let offline_handle = unsafe {
-            CreateFileW(
-                PCWSTR(wide_for_offline.as_ptr()),
-                0x80000000u32 | 0x40000000u32, // GENERIC_READ | GENERIC_WRITE
-                Default::default(),            // No sharing
-                None,
-                OPEN_EXISTING,
-                Default::default(),
-                None,
-            )
-        };
+            // Open the disk first to set it offline
+            let wide_for_offline = to_wide_null(&path_str);
+            let offline_handle = unsafe {
+                CreateFileW(
+                    PCWSTR(wide_for_offline.as_ptr()),
+                    0x80000000u32 | 0x40000000u32, // GENERIC_READ | GENERIC_WRITE
+                    Default::default(),            // No sharing
+                    None,
+                    OPEN_EXISTING,
+                    Default::default(),
+                    None,
+                )
+            };
 
-        if let Ok(h) = offline_handle {
-            if h != INVALID_HANDLE_VALUE {
-                let mut bytes_returned: u32 = 0;
-                let offline_result = unsafe {
-                    DeviceIoControl(
-                        h,
-                        IOCTL_DISK_SET_DISK_ATTRIBUTES,
-                        Some(&mut attrs as *mut _ as *mut _),
-                        mem::size_of::<SetDiskAttributes>() as u32,
-                        None,
-                        0,
-                        Some(&mut bytes_returned),
-                        None,
-                    )
-                };
+            if let Ok(h) = offline_handle {
+                if h != INVALID_HANDLE_VALUE {
+                    let mut bytes_returned: u32 = 0;
+                    let offline_result = unsafe {
+                        DeviceIoControl(
+                            h,
+                            IOCTL_DISK_SET_DISK_ATTRIBUTES,
+                            Some(&mut attrs as *mut _ as *mut _),
+                            mem::size_of::<SetDiskAttributes>() as u32,
+                            None,
+                            0,
+                            Some(&mut bytes_returned),
+                            None,
+                        )
+                    };
 
-                unsafe {
-                    let _ = CloseHandle(h);
-                }
+                    unsafe {
+                        let _ = CloseHandle(h);
+                    }
 
-                if let Err(err) = offline_result {
-                    log::warn!(
-                        "[WINDOWS] Failed to set disk offline (code {}): wipe may fail if disk has active partitions",
-                        err.code().0
-                    );
-                } else {
-                    log::debug!("[WINDOWS] Disk set offline");
+                    if let Err(err) = offline_result {
+                        log::warn!(
+                            "[WINDOWS] Failed to set disk offline (code {}): wipe may fail if disk has active partitions",
+                            err.code().0
+                        );
+                    } else {
+                        log::debug!("[WINDOWS] Disk set offline");
+                    }
                 }
             }
+
+            // Give Windows a moment to process the offline state
+            std::thread::sleep(std::time::Duration::from_millis(500));
         }
 
-        // Give Windows a moment to process the offline state
-        std::thread::sleep(std::time::Duration::from_millis(500));
-
         // Open the physical drive with direct, write-through access.
-        log::debug!("[WINDOWS] Opening device with exclusive access...");
+        log::debug!("[WINDOWS] Opening device...");
 
         const GENERIC_READ: u32 = 0x80000000;
         const GENERIC_WRITE: u32 = 0x40000000;
@@ -175,7 +178,11 @@ impl WindowsDeviceIo {
         const READ_CONTROL: u32 = 0x00020000;
         const SYNCHRONIZE: u32 = 0x00100000;
 
-        let access_rights = GENERIC_READ | GENERIC_WRITE | WRITE_DAC | READ_CONTROL | SYNCHRONIZE;
+        let access_rights = if writable {
+            GENERIC_READ | GENERIC_WRITE | WRITE_DAC | READ_CONTROL | SYNCHRONIZE
+        } else {
+            GENERIC_READ | READ_CONTROL | SYNCHRONIZE
+        };
         let share_mode = Default::default(); // 0 = no sharing (exclusive access)
 
         let handle = unsafe {
@@ -292,7 +299,7 @@ impl WindowsDeviceIo {
     }
 
     #[cfg(not(target_os = "windows"))]
-    pub fn open(_path: &Path) -> Result<Self> {
+    pub fn open(_path: &Path, _writable: bool) -> Result<Self> {
         Err(DriveWipeError::PlatformNotSupported(
             "Windows device I/O is only available on Windows".to_string(),
         ))
@@ -302,18 +309,13 @@ impl WindowsDeviceIo {
 #[cfg(target_os = "windows")]
 impl RawDeviceIo for WindowsDeviceIo {
     fn write_at(&mut self, offset: u64, buf: &[u8]) -> Result<usize> {
-        let distance_to_move = offset as i64;
-        unsafe { SetFilePointerEx(self.handle, distance_to_move, None, FILE_BEGIN) }.map_err(
-            |e| {
-                let err_code = e.code().0;
-                log::error!(
-                    "[WINDOWS] SetFilePointerEx failed at offset {}: error code {}",
-                    offset,
-                    err_code
-                );
-                DriveWipeError::IoGeneric(std::io::Error::from_raw_os_error(err_code as i32))
-            },
-        )?;
+        use windows::Win32::System::IO::OVERLAPPED;
+
+        // Use OVERLAPPED to specify the offset directly, making the
+        // operation atomic (single syscall) instead of seek+write.
+        let mut overlapped = OVERLAPPED::default();
+        overlapped.Anonymous.Anonymous.Offset = offset as u32;
+        overlapped.Anonymous.Anonymous.OffsetHigh = (offset >> 32) as u32;
 
         let mut bytes_written: u32 = 0;
         unsafe {
@@ -321,7 +323,7 @@ impl RawDeviceIo for WindowsDeviceIo {
                 self.handle,
                 Some(buf),
                 Some(&mut bytes_written),
-                None, // No OVERLAPPED - synchronous I/O
+                Some(&mut overlapped),
             )
         }
         .map_err(|e| {
@@ -339,10 +341,12 @@ impl RawDeviceIo for WindowsDeviceIo {
     }
 
     fn read_at(&mut self, offset: u64, buf: &mut [u8]) -> Result<usize> {
-        let distance_to_move = offset as i64;
-        unsafe { SetFilePointerEx(self.handle, distance_to_move, None, FILE_BEGIN) }.map_err(
-            |e| DriveWipeError::IoGeneric(std::io::Error::from_raw_os_error(e.code().0 as i32)),
-        )?;
+        use windows::Win32::System::IO::OVERLAPPED;
+
+        // Use OVERLAPPED to specify the offset directly (atomic positioned read).
+        let mut overlapped = OVERLAPPED::default();
+        overlapped.Anonymous.Anonymous.Offset = offset as u32;
+        overlapped.Anonymous.Anonymous.OffsetHigh = (offset >> 32) as u32;
 
         let mut bytes_read: u32 = 0;
         unsafe {
@@ -350,7 +354,7 @@ impl RawDeviceIo for WindowsDeviceIo {
                 self.handle,
                 Some(buf),
                 Some(&mut bytes_read),
-                None, // No OVERLAPPED - synchronous I/O
+                Some(&mut overlapped),
             )
         }
         .map_err(|e| {
@@ -408,7 +412,44 @@ impl RawDeviceIo for WindowsDeviceIo {
 #[cfg(target_os = "windows")]
 impl Drop for WindowsDeviceIo {
     fn drop(&mut self) {
+        // Bring the disk back online before closing the handle.
+        // Without this, the disk remains in offline state after DriveWipe exits,
+        // requiring manual intervention via diskpart or Disk Management.
+        const IOCTL_DISK_SET_DISK_ATTRIBUTES: u32 = 0x0007C0F4;
+
+        #[repr(C)]
+        #[allow(non_snake_case)]
+        struct SetDiskAttributes {
+            Version: u32,
+            Persist: u8,
+            Reserved1: [u8; 3],
+            Attributes: u64,
+            AttributesMask: u64,
+            Reserved2: [u32; 4],
+        }
+
+        // Clear the OFFLINE attribute (set Attributes to 0, mask the OFFLINE bit).
+        let attrs = SetDiskAttributes {
+            Version: std::mem::size_of::<SetDiskAttributes>() as u32,
+            Persist: 0,
+            Reserved1: [0; 3],
+            Attributes: 0,       // Clear OFFLINE
+            AttributesMask: 0x1, // Modify OFFLINE attribute
+            Reserved2: [0; 4],
+        };
+
+        let mut bytes_returned: u32 = 0;
         unsafe {
+            let _ = DeviceIoControl(
+                self.handle,
+                IOCTL_DISK_SET_DISK_ATTRIBUTES,
+                Some(&attrs as *const _ as *const _),
+                std::mem::size_of::<SetDiskAttributes>() as u32,
+                None,
+                0,
+                Some(&mut bytes_returned),
+                None,
+            );
             let _ = CloseHandle(self.handle);
         }
     }

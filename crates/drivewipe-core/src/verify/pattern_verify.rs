@@ -6,7 +6,7 @@ use uuid::Uuid;
 
 use super::Verifier;
 use crate::error::{DriveWipeError, Result};
-use crate::io::{DEFAULT_BLOCK_SIZE, RawDeviceIo, allocate_aligned_buffer};
+use crate::io::{DEFAULT_BLOCK_SIZE, DeviceWrapper, RawDeviceIo, allocate_aligned_buffer};
 use crate::progress::ProgressEvent;
 use crate::wipe::patterns::PatternGenerator;
 
@@ -48,8 +48,8 @@ impl Verifier for PatternVerifier {
         let mut expected_buf = allocate_aligned_buffer(DEFAULT_BLOCK_SIZE, 4096);
         let mut bytes_verified: u64 = 0;
 
-        // Create a Send-able pointer for spawn_blocking
-        let ptr_parts: [usize; 2] = unsafe { std::mem::transmute(device as *mut dyn RawDeviceIo) };
+        // Pre-allocate a reusable read buffer to avoid per-iteration allocation.
+        let mut reusable_buf: Vec<u8> = vec![0u8; DEFAULT_BLOCK_SIZE];
 
         while bytes_verified < total_bytes {
             let remaining = total_bytes - bytes_verified;
@@ -69,27 +69,34 @@ impl Verifier for PatternVerifier {
             }
 
             let pass_offset = bytes_verified;
-            let expected_data = expected_slice.to_vec();
+            // Copy expected data before sending to the blocking task.
+            let expected_data: Vec<u8> = expected_slice.to_vec();
 
-            // Perform the read in a blocking task
+            let device_wrapper = DeviceWrapper::new(device);
+            let send_buf = std::mem::take(&mut reusable_buf);
+
+            // Perform the read in a blocking task, reusing the buffer.
             let (read_res, read_data) = tokio::task::spawn_blocking(move || {
-                let device_ref = unsafe {
-                    let wide_ptr: *mut dyn RawDeviceIo = std::mem::transmute(ptr_parts);
-                    &mut *wide_ptr
-                };
-                let mut temp_buf = vec![0u8; chunk_len];
-                let res = device_ref.read_at(pass_offset, &mut temp_buf);
-                (res, temp_buf)
+                // SAFETY: device outlives this task; exclusive access is
+                // maintained because we .await immediately after spawn.
+                let device_ref = unsafe { device_wrapper.get_mut() };
+                let mut buf = send_buf;
+                buf.resize(chunk_len, 0);
+                let res = device_ref.read_at(pass_offset, &mut buf[..chunk_len]);
+                (res, buf)
             })
             .await
             .map_err(|e| DriveWipeError::IoGeneric(std::io::Error::other(e.to_string())))?;
 
+            // Reclaim buffer for reuse
+            reusable_buf = read_data;
+
             let bytes_read = read_res?;
 
             // Compare only the bytes we actually read
-            if read_data[..bytes_read] != expected_data[..bytes_read] {
+            if reusable_buf[..bytes_read] != expected_data[..bytes_read] {
                 // Find the first mismatch for diagnostic reporting
-                for (i, (actual, expected)) in read_data[..bytes_read]
+                for (i, (actual, expected)) in reusable_buf[..bytes_read]
                     .iter()
                     .zip(expected_data[..bytes_read].iter())
                     .enumerate()

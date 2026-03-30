@@ -80,9 +80,14 @@ impl DriveEnumerator for LinuxDriveEnumerator {
 
 /// Check if a sysfs block device name is a partition rather than a whole disk.
 fn is_partition(name: &str) -> bool {
-    // sd* partitions: sda1, sdb2, etc. — the name ends with digits.
+    // sd* partitions: sda1, sdb2, sdaa1, etc. — letters after prefix, then digits.
     if name.starts_with("sd") || name.starts_with("hd") || name.starts_with("vd") {
-        return name.len() > 3 && name[3..].chars().all(|c| c.is_ascii_digit());
+        let rest = &name[2..];
+        // Find first digit — partition names have digits after the letter(s)
+        if let Some(digit_start) = rest.find(|c: char| c.is_ascii_digit()) {
+            return rest[digit_start..].chars().all(|c| c.is_ascii_digit());
+        }
+        return false; // No digits = whole device
     }
 
     // NVMe partitions: nvme0n1p1, nvme0n1p2, etc.

@@ -1,4 +1,4 @@
-use iced::widget::{button, column, container, progress_bar, text};
+use iced::widget::{button, column, container, progress_bar, text, text_input};
 use iced::{Element, Length};
 
 use crate::Message;
@@ -14,6 +14,7 @@ pub struct CloneViewState<'a> {
     pub progress: f32,
     pub throughput: &'a str,
     pub complete: bool,
+    pub confirm_text: &'a str,
 }
 
 /// View for the clone setup screen.
@@ -26,6 +27,7 @@ pub fn view<'a>(state: &CloneViewState<'a>) -> Element<'a, Message> {
     let progress = state.progress;
     let throughput = state.throughput;
     let complete = state.complete;
+    let confirm_text = state.confirm_text;
 
     let title = text("Drive Clone")
         .size(theme::FONT_SIZE_XL)
@@ -90,15 +92,31 @@ pub fn view<'a>(state: &CloneViewState<'a>) -> Element<'a, Message> {
         .spacing(theme::SPACING_LG)
         .padding(theme::SPACING_XL);
 
-    // Show start button when both drives selected and not running
+    // Show confirmation UI when both drives are selected and not running
     if source.is_some() && target.is_some() && !running && !complete {
-        let start_btn = button(
+        let clone_warning = text(
+            "WARNING: Cloning will overwrite ALL data on the target drive! Type YES to confirm.",
+        )
+        .size(theme::FONT_SIZE_MD)
+        .color(theme::DANGER);
+
+        let clone_input = text_input("Type YES to confirm", confirm_text)
+            .on_input(Message::CloneConfirmInput)
+            .size(theme::FONT_SIZE_MD);
+
+        let is_confirmed = confirm_text.trim() == "YES";
+        let mut start_btn = button(
             text("Start Clone")
                 .size(theme::FONT_SIZE_LG)
                 .color(theme::TEXT_PRIMARY),
         )
-        .on_press(Message::StartClone)
         .width(Length::Fixed(200.0));
+        if is_confirmed {
+            start_btn = start_btn.on_press(Message::StartClone);
+        }
+
+        content = content.push(clone_warning);
+        content = content.push(clone_input);
         content = content.push(start_btn);
     }
 
@@ -116,6 +134,13 @@ pub fn view<'a>(state: &CloneViewState<'a>) -> Element<'a, Message> {
                 .color(theme::TEXT_SECONDARY);
             content = content.push(tp_text);
         }
+        let cancel_btn = button(
+            text("Cancel Clone")
+                .size(theme::FONT_SIZE_MD)
+                .color(theme::DANGER),
+        )
+        .on_press(Message::CancelClone);
+        content = content.push(cancel_btn);
     }
 
     // Show completion status

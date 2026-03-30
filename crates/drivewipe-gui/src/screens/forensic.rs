@@ -8,6 +8,7 @@ use crate::theme;
 pub fn view<'a>(
     drives: &[drivewipe_core::types::DriveInfo],
     forensic_results: &'a [String],
+    loading: bool,
 ) -> Element<'a, Message> {
     let title = text("Forensic Analysis")
         .size(theme::FONT_SIZE_XL)
@@ -33,20 +34,25 @@ pub fn view<'a>(
     }
 
     let mut results_col = column![].spacing(theme::SPACING_SM);
-    if forensic_results.is_empty() {
+    if loading {
+        results_col = results_col.push(
+            text("Loading...")
+                .size(theme::FONT_SIZE_MD)
+                .color(theme::STATUS_INFO),
+        );
+    } else if forensic_results.is_empty() {
         results_col = results_col.push(
             text("Select a drive to start forensic analysis.")
                 .size(theme::FONT_SIZE_MD)
                 .color(theme::TEXT_MUTED),
         );
-    } else {
-        for line in forensic_results {
-            results_col = results_col.push(
-                text(line.as_str())
-                    .size(theme::FONT_SIZE_MD)
-                    .color(theme::TEXT_SECONDARY),
-            );
-        }
+    }
+    for line in forensic_results {
+        results_col = results_col.push(
+            text(line.as_str())
+                .size(theme::FONT_SIZE_MD)
+                .color(theme::TEXT_SECONDARY),
+        );
     }
 
     let back_btn = button(text("Back").size(theme::FONT_SIZE_MD)).on_press(Message::NavigateToMenu);

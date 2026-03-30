@@ -208,8 +208,20 @@ impl GptTable {
         let entry_count = u32::from_le_bytes(header[80..84].try_into().unwrap_or([0; 4]));
         let entry_size = u32::from_le_bytes(header[84..88].try_into().unwrap_or([0; 4]));
 
-        let entries_offset = (partition_entry_lba * 512) as usize;
-        let entries_len = (entry_count * entry_size) as usize;
+        let entries_offset = match partition_entry_lba
+            .checked_mul(512)
+            .and_then(|v| usize::try_from(v).ok())
+        {
+            Some(v) => v,
+            None => return false, // Overflow means invalid header
+        };
+        let entries_len = match (entry_count as u64)
+            .checked_mul(entry_size as u64)
+            .and_then(|v| usize::try_from(v).ok())
+        {
+            Some(v) => v,
+            None => return false,
+        };
 
         if entries_offset + entries_len > data.len() {
             return false;

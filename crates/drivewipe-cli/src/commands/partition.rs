@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 
 use anyhow::{Context, Result};
+use dialoguer::Confirm;
 
 use drivewipe_core::config::DriveWipeConfig;
 use drivewipe_core::drive;
@@ -78,6 +79,22 @@ pub async fn create(
     type_id: &str,
     name: &str,
 ) -> Result<()> {
+    println!("Create partition on {}:", device);
+    println!("  Start LBA: {}", start_lba);
+    println!("  End LBA:   {}", end_lba);
+    println!("  Type:      {}", type_id);
+    println!("  Name:      {}", name);
+
+    let confirmed = Confirm::new()
+        .with_prompt("This will modify the partition table. Continue?")
+        .default(false)
+        .interact()?;
+
+    if !confirmed {
+        println!("Partition create aborted by user.");
+        return Ok(());
+    }
+
     let mut device_io = drivewipe_core::io::open_device(&PathBuf::from(device), true)
         .context("Failed to open device for writing")?;
 
@@ -112,6 +129,20 @@ pub async fn create(
 
 /// Run the `partition delete` subcommand.
 pub async fn delete(_config: &DriveWipeConfig, device: &str, index: u32) -> Result<()> {
+    println!("Delete partition #{} on {}.", index, device);
+
+    let confirmed = Confirm::new()
+        .with_prompt(format!(
+            "This will permanently remove partition #{index} from {device}. Continue?"
+        ))
+        .default(false)
+        .interact()?;
+
+    if !confirmed {
+        println!("Partition delete aborted by user.");
+        return Ok(());
+    }
+
     let mut device_io = drivewipe_core::io::open_device(&PathBuf::from(device), true)
         .context("Failed to open device for writing")?;
 
@@ -144,6 +175,23 @@ pub async fn resize(
     index: u32,
     new_end: u64,
 ) -> Result<()> {
+    println!(
+        "Resize partition #{} on {} to new end LBA {}.",
+        index, device, new_end
+    );
+
+    let confirmed = Confirm::new()
+        .with_prompt(format!(
+            "This will resize partition #{index} on {device}. Data loss may occur. Continue?"
+        ))
+        .default(false)
+        .interact()?;
+
+    if !confirmed {
+        println!("Partition resize aborted by user.");
+        return Ok(());
+    }
+
     let mut device_io = drivewipe_core::io::open_device(&PathBuf::from(device), true)
         .context("Failed to open device for writing")?;
 
@@ -166,5 +214,55 @@ pub async fn resize(
         .context("Failed to write partition table")?;
 
     println!("Successfully resized partition {} on {}", index, device);
+    Ok(())
+}
+
+/// Run the `partition move` subcommand.
+pub async fn move_partition(
+    _config: &DriveWipeConfig,
+    device: &str,
+    index: u32,
+    new_start: u64,
+) -> Result<()> {
+    println!(
+        "Move partition #{} on {} to new start LBA {}.",
+        index, device, new_start
+    );
+
+    let confirmed = Confirm::new()
+        .with_prompt(format!(
+            "This will move partition #{index} on {device} to start at LBA {new_start}. \
+             Data must be relocated separately. Continue?"
+        ))
+        .default(false)
+        .interact()?;
+
+    if !confirmed {
+        println!("Partition move aborted by user.");
+        return Ok(());
+    }
+
+    let mut device_io = drivewipe_core::io::open_device(&PathBuf::from(device), true)
+        .context("Failed to open device for writing")?;
+
+    let device_wrapper = drivewipe_core::io::DeviceWrapper::new(device_io.as_mut());
+    let buf = tokio::task::spawn_blocking(move || {
+        let device_ref = unsafe { device_wrapper.get_mut() };
+        let mut b = vec![0u8; 34 * 512];
+        device_ref.read_at(0, &mut b).map(|_| b)
+    })
+    .await?
+    .context("Failed to read partition table")?;
+
+    let mut table = drivewipe_core::partition::PartitionTable::parse(&buf)
+        .context("Failed to parse partition table")?;
+
+    drivewipe_core::partition::ops::move_partition(&mut *device_io, &mut table, index, new_start)
+        .context("Failed to move partition")?;
+
+    drivewipe_core::partition::ops::write_table(&mut *device_io, &table)
+        .context("Failed to write partition table")?;
+
+    println!("Successfully moved partition {} on {}", index, device);
     Ok(())
 }

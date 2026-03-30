@@ -1,14 +1,9 @@
 //! DriveWipe Secure wipe methods — optimized multi-stage methods for each drive type.
 
 use async_trait::async_trait;
-use crossbeam_channel::Sender;
-use uuid::Uuid;
 
 use super::WipeMethod;
-use super::patterns::{OneFill, PatternGenerator, RandomFill, ZeroFill};
-use crate::error::Result;
-use crate::progress::ProgressEvent;
-use crate::types::DriveInfo;
+use super::patterns::{PatternGenerator, RandomFill, ZeroFill};
 
 fn boxed<P: PatternGenerator + Send + 'static>(p: P) -> Box<dyn PatternGenerator + Send> {
     Box::new(p)
@@ -28,17 +23,18 @@ impl WipeMethod for DriveWipeSecureHdd {
         "DriveWipe Secure (HDD)"
     }
     fn description(&self) -> &str {
-        "3-pass overwrite (zero, one, random) + verification. Optimized for spinning drives \
-         with full surface coverage."
+        "4-pass overwrite (zero, random, random, zero) + verification. Optimized for spinning \
+         drives with full surface coverage."
     }
     fn pass_count(&self) -> u32 {
-        3
+        4
     }
     fn pattern_for_pass(&self, pass: u32) -> Box<dyn PatternGenerator + Send> {
         match pass {
             0 => boxed(ZeroFill),
-            1 => boxed(OneFill),
-            _ => boxed(RandomFill::new()),
+            1 => boxed(RandomFill::new()),
+            2 => boxed(RandomFill::new()),
+            _ => boxed(ZeroFill), // Final zero pass for clean verification
         }
     }
     fn includes_verification(&self) -> bool {
@@ -60,41 +56,22 @@ impl WipeMethod for DriveWipeSecureSataSsd {
         "DriveWipe Secure (SATA SSD)"
     }
     fn description(&self) -> &str {
-        "2-pass software overwrite (random + zero) + ATA Secure Erase attempt (if available) \
-         + verify. Addresses SSD wear-leveling and spare area."
+        "4-pass software overwrite (random, zero, random, zero) + verification. \
+         Addresses SSD wear-leveling and spare area."
     }
     fn pass_count(&self) -> u32 {
-        2
+        4
     }
     fn pattern_for_pass(&self, pass: u32) -> Box<dyn PatternGenerator + Send> {
         match pass {
             0 => boxed(RandomFill::new()),
+            1 => boxed(ZeroFill),
+            2 => boxed(RandomFill::new()),
             _ => boxed(ZeroFill),
         }
     }
     fn includes_verification(&self) -> bool {
         true
-    }
-
-    async fn execute_firmware(
-        &self,
-        drive: &DriveInfo,
-        session_id: Uuid,
-        progress_tx: &Sender<ProgressEvent>,
-    ) -> Option<Result<()>> {
-        // After software passes, attempt ATA Secure Erase if supported
-        if drive.firmware_erase_likely_supported() {
-            let _ = progress_tx.send(ProgressEvent::FirmwareEraseStarted {
-                session_id,
-                method_name: "ATA Secure Erase (DriveWipe Secure post-overwrite)".to_string(),
-            });
-            // Firmware erase would be attempted here; fall back gracefully
-            let _ = progress_tx.send(ProgressEvent::Warning {
-                session_id,
-                message: "ATA Secure Erase attempted as part of DriveWipe Secure".to_string(),
-            });
-        }
-        None // Return None to still run software passes
     }
 }
 
@@ -112,15 +89,17 @@ impl WipeMethod for DriveWipeSecureNvme {
         "DriveWipe Secure (NVMe)"
     }
     fn description(&self) -> &str {
-        "2-pass software overwrite (random + zero) + NVMe Format/Sanitize attempt \
-         (if available) + verify. Addresses NVMe spare area and controller-level remapping."
+        "4-pass software overwrite (random, zero, random, zero) + NVMe Format/Sanitize attempt \
+         (if available) + verification. Addresses NVMe spare area and controller-level remapping."
     }
     fn pass_count(&self) -> u32 {
-        2
+        4
     }
     fn pattern_for_pass(&self, pass: u32) -> Box<dyn PatternGenerator + Send> {
         match pass {
             0 => boxed(RandomFill::new()),
+            1 => boxed(ZeroFill),
+            2 => boxed(RandomFill::new()),
             _ => boxed(ZeroFill),
         }
     }
@@ -143,17 +122,18 @@ impl WipeMethod for DriveWipeSecureUsb {
         "DriveWipe Secure (USB)"
     }
     fn description(&self) -> &str {
-        "3-pass overwrite (random, zero, random) + verification. USB controllers block firmware \
-         commands, so this uses aggressive multi-pass overwrite."
+        "4-pass overwrite (random, zero, random, zero) + verification. USB controllers block \
+         firmware commands, so this uses aggressive multi-pass overwrite."
     }
     fn pass_count(&self) -> u32 {
-        3
+        4
     }
     fn pattern_for_pass(&self, pass: u32) -> Box<dyn PatternGenerator + Send> {
         match pass {
             0 => boxed(RandomFill::new()),
             1 => boxed(ZeroFill),
-            _ => boxed(RandomFill::new()),
+            2 => boxed(RandomFill::new()),
+            _ => boxed(ZeroFill), // Final zero pass for clean verification
         }
     }
     fn includes_verification(&self) -> bool {

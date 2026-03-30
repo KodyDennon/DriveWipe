@@ -5,41 +5,41 @@ use std::path::PathBuf;
 fn format_bytes_bytes() {
     assert_eq!(format_bytes(0), "0 B");
     assert_eq!(format_bytes(512), "512 B");
-    assert_eq!(format_bytes(1023), "1023 B");
+    assert_eq!(format_bytes(999), "999 B");
 }
 
 #[test]
-fn format_bytes_kib() {
-    assert_eq!(format_bytes(1024), "1.00 KiB");
-    assert_eq!(format_bytes(2048), "2.00 KiB");
+fn format_bytes_kb() {
+    assert_eq!(format_bytes(1_000), "1.00 KB");
+    assert_eq!(format_bytes(2_000), "2.00 KB");
 }
 
 #[test]
-fn format_bytes_mib() {
-    assert_eq!(format_bytes(1024 * 1024), "1.00 MiB");
-    assert_eq!(format_bytes(500 * 1024 * 1024), "500.00 MiB");
+fn format_bytes_mb() {
+    assert_eq!(format_bytes(1_000_000), "1.00 MB");
+    assert_eq!(format_bytes(500_000_000), "500.00 MB");
 }
 
 #[test]
-fn format_bytes_gib() {
-    assert_eq!(format_bytes(1024 * 1024 * 1024), "1.00 GiB");
+fn format_bytes_gb() {
+    assert_eq!(format_bytes(1_000_000_000), "1.00 GB");
 }
 
 #[test]
-fn format_bytes_tib() {
-    assert_eq!(format_bytes(1024u64 * 1024 * 1024 * 1024), "1.00 TiB");
+fn format_bytes_tb() {
+    assert_eq!(format_bytes(1_000_000_000_000), "1.00 TB");
 }
 
 #[test]
-fn format_throughput_mib_range() {
-    let result = format_throughput(100.0 * 1024.0 * 1024.0);
-    assert!(result.contains("MiB/s"));
+fn format_throughput_mb_range() {
+    let result = format_throughput(100.0 * 1_000_000.0);
+    assert!(result.contains("MB/s"));
 }
 
 #[test]
-fn format_throughput_gib_range() {
-    let result = format_throughput(2000.0 * 1024.0 * 1024.0);
-    assert!(result.contains("GiB/s"));
+fn format_throughput_gb_range() {
+    let result = format_throughput(2000.0 * 1_000_000.0);
+    assert!(result.contains("GB/s"));
 }
 
 #[test]
@@ -116,7 +116,7 @@ fn drive_info_firmware_erase_supported() {
 fn drive_info_capacity_display() {
     let mut d = make_drive(DriveType::Hdd, Transport::Sata);
     d.capacity = 500_000_000_000;
-    assert!(d.capacity_display().contains("GiB"));
+    assert!(d.capacity_display().contains("GB"));
 }
 
 #[test]

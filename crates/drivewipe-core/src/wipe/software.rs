@@ -200,8 +200,8 @@ impl WipeMethod for GutmannMethod {
             6 => boxed(RepeatingPattern(vec![0x92, 0x49, 0x24])),
             // Pass 8: repeating 0x49 0x24 0x92
             7 => boxed(RepeatingPattern(vec![0x49, 0x24, 0x92])),
-            // Pass 9: repeating 0xDB 0x6D 0xB6 (not 0x24 0x92 0x49)
-            8 => boxed(RepeatingPattern(vec![0xDB, 0x6D, 0xB6])),
+            // Pass 9: repeating 0x24 0x92 0x49 (per Gutmann paper)
+            8 => boxed(RepeatingPattern(vec![0x24, 0x92, 0x49])),
 
             // Passes 10-16: single-byte fills 0x00..0x66 (step 0x11)
             9 => boxed(ConstantFill(0x00)),
@@ -227,7 +227,7 @@ impl WipeMethod for GutmannMethod {
             // Passes 25-27: same MFM/RLL patterns repeated
             24 => boxed(RepeatingPattern(vec![0x92, 0x49, 0x24])),
             25 => boxed(RepeatingPattern(vec![0x49, 0x24, 0x92])),
-            26 => boxed(RepeatingPattern(vec![0xDB, 0x6D, 0xB6])),
+            26 => boxed(RepeatingPattern(vec![0x24, 0x92, 0x49])),
 
             // Passes 28-31: single-byte fills
             27 => boxed(ConstantFill(0x77)),

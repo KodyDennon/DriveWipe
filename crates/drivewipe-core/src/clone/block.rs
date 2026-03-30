@@ -229,7 +229,11 @@ async fn verify_clone(
         source_hasher.update(&s_hash_chunk[..sn]);
         target_hasher.update(&t_hash_chunk[..tn]);
 
-        offset += sn.max(tn) as u64;
+        let max_read = sn.max(tn);
+        if max_read == 0 {
+            break; // Both devices returned 0 — end of data
+        }
+        offset += max_read as u64;
 
         let _ = progress_tx.send(ProgressEvent::VerificationProgress {
             session_id,

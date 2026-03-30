@@ -4,7 +4,7 @@ use uuid::Uuid;
 
 use super::Verifier;
 use crate::error::{DriveWipeError, Result};
-use crate::io::{DEFAULT_BLOCK_SIZE, RawDeviceIo};
+use crate::io::{DEFAULT_BLOCK_SIZE, DeviceWrapper, RawDeviceIo};
 use crate::progress::ProgressEvent;
 
 /// Optimized verifier that checks whether the entire device is filled with zeros.
@@ -70,35 +70,43 @@ impl Verifier for ZeroVerifier {
 
         let mut bytes_verified: u64 = 0;
 
-        // Create a Send-able pointer for spawn_blocking
-        let ptr_parts: [usize; 2] = unsafe { std::mem::transmute(device as *mut dyn RawDeviceIo) };
+        // Pre-allocate a reusable buffer to avoid per-iteration allocation.
+        let mut reusable_buf: Vec<u8> = vec![0u8; DEFAULT_BLOCK_SIZE];
 
         while bytes_verified < total_bytes {
             let remaining = total_bytes - bytes_verified;
             let chunk_len = (remaining as usize).min(DEFAULT_BLOCK_SIZE);
 
             let pass_offset = bytes_verified;
+            let device_wrapper = DeviceWrapper::new(device);
 
-            // Perform the read in a blocking task
+            // Take ownership of the buffer, send it to the blocking task,
+            // and reclaim it afterwards to avoid re-allocating each iteration.
+            let send_buf = std::mem::take(&mut reusable_buf);
+
             let (read_res, read_data) = tokio::task::spawn_blocking(move || {
-                let device_ref = unsafe {
-                    let wide_ptr: *mut dyn RawDeviceIo = std::mem::transmute(ptr_parts);
-                    &mut *wide_ptr
-                };
-                let mut temp_buf = vec![0u8; chunk_len];
-                let res = device_ref.read_at(pass_offset, &mut temp_buf);
-                (res, temp_buf)
+                // SAFETY: device outlives this task; exclusive access is
+                // maintained because we .await immediately after spawn.
+                let device_ref = unsafe { device_wrapper.get_mut() };
+                let mut buf = send_buf;
+                buf.resize(chunk_len, 0);
+                let res = device_ref.read_at(pass_offset, &mut buf[..chunk_len]);
+                (res, buf)
             })
             .await
             .map_err(|e| DriveWipeError::IoGeneric(std::io::Error::other(e.to_string())))?;
 
+            // Reclaim buffer for reuse
+            reusable_buf = read_data;
+
             let bytes_read = read_res?;
 
-            if !Self::is_zero(&read_data[..bytes_read]) {
+            if !Self::is_zero(&reusable_buf[..bytes_read]) {
                 // Find the exact byte offset of the first non-zero value
-                if let Some(local_offset) = Self::first_nonzero_offset(&read_data[..bytes_read]) {
+                if let Some(local_offset) = Self::first_nonzero_offset(&reusable_buf[..bytes_read])
+                {
                     let offset = bytes_verified + local_offset as u64;
-                    let actual = read_data[local_offset];
+                    let actual = reusable_buf[local_offset];
 
                     let _ = progress_tx.send(ProgressEvent::VerificationCompleted {
                         session_id,

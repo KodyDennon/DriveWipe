@@ -16,3 +16,4 @@ crossbeam-channel.workspace = true
 drivewipe-core = { path = "../drivewipe-core" }
 iced.workspace = true
 tokio.workspace = true
+uuid.workspace = true

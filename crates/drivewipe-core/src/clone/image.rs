@@ -75,11 +75,20 @@ impl CloneImage {
             ));
         }
 
+        const MAX_HEADER_LEN: usize = 16 * 1024 * 1024; // 16 MiB
+
         let mut len_buf = [0u8; 4];
         reader.read_exact(&mut len_buf).map_err(|e| {
             crate::error::DriveWipeError::Clone(format!("Failed to read header length: {e}"))
         })?;
         let header_len = u32::from_le_bytes(len_buf) as usize;
+
+        if header_len > MAX_HEADER_LEN {
+            return Err(crate::error::DriveWipeError::Clone(format!(
+                "Header length {} exceeds maximum allowed size of {} bytes",
+                header_len, MAX_HEADER_LEN
+            )));
+        }
 
         let mut header_buf = vec![0u8; header_len];
         reader.read_exact(&mut header_buf).map_err(|e| {
@@ -133,11 +142,20 @@ impl CloneImage {
         reader: &mut R,
         compression: CompressionMode,
     ) -> crate::error::Result<Vec<u8>> {
+        const MAX_CHUNK_LEN: usize = 64 * 1024 * 1024; // 64 MiB
+
         let mut len_buf = [0u8; 4];
         reader.read_exact(&mut len_buf).map_err(|e| {
             crate::error::DriveWipeError::Clone(format!("Failed to read chunk length: {e}"))
         })?;
         let chunk_len = u32::from_le_bytes(len_buf) as usize;
+
+        if chunk_len > MAX_CHUNK_LEN {
+            return Err(crate::error::DriveWipeError::Clone(format!(
+                "Chunk length {} exceeds maximum allowed size of {} bytes",
+                chunk_len, MAX_CHUNK_LEN
+            )));
+        }
 
         let mut compressed = vec![0u8; chunk_len];
         reader.read_exact(&mut compressed).map_err(|e| {
@@ -165,7 +183,10 @@ impl CloneImage {
         Ok(data)
     }
 
-    /// Write a chunk with optional encryption applied before compression.
+    /// Write a chunk: compress first, then encrypt.
+    ///
+    /// Compressing before encryption is essential because encrypted data has
+    /// high entropy and compresses poorly.
     pub fn write_encrypted_chunk<W: Write>(
         writer: &mut W,
         data: &[u8],
@@ -173,24 +194,95 @@ impl CloneImage {
         key: Option<&[u8; 32]>,
         nonce: Option<&[u8; 16]>,
     ) -> crate::error::Result<()> {
-        let mut buf = data.to_vec();
+        // Step 1: compress
+        let compressed = match compression {
+            CompressionMode::None => data.to_vec(),
+            CompressionMode::Gzip => {
+                use flate2::Compression;
+                use flate2::write::GzEncoder;
+                let mut encoder = GzEncoder::new(Vec::new(), Compression::fast());
+                encoder.write_all(data).map_err(|e| {
+                    crate::error::DriveWipeError::Compression(format!("Gzip compress failed: {e}"))
+                })?;
+                encoder.finish().map_err(|e| {
+                    crate::error::DriveWipeError::Compression(format!("Gzip finish failed: {e}"))
+                })?
+            }
+            CompressionMode::Zstd => zstd::encode_all(data, 3).map_err(|e| {
+                crate::error::DriveWipeError::Compression(format!("Zstd compress failed: {e}"))
+            })?,
+        };
+
+        // Step 2: encrypt the compressed data
+        let mut buf = compressed;
         if let (Some(key), Some(nonce)) = (key, nonce) {
             crate::crypto::encrypt::encrypt_chunk(&mut buf, key, nonce);
         }
-        Self::write_chunk(writer, &buf, compression)
+
+        // Step 3: write as a raw (uncompressed) chunk since compression was already applied
+        let chunk_len = buf.len() as u32;
+        writer.write_all(&chunk_len.to_le_bytes()).map_err(|e| {
+            crate::error::DriveWipeError::Clone(format!("Failed to write chunk length: {e}"))
+        })?;
+        writer.write_all(&buf).map_err(|e| {
+            crate::error::DriveWipeError::Clone(format!("Failed to write chunk data: {e}"))
+        })?;
+
+        Ok(())
     }
 
-    /// Read a chunk with optional decryption applied after decompression.
+    /// Read a chunk: decrypt first, then decompress.
     pub fn read_encrypted_chunk<R: Read>(
         reader: &mut R,
         compression: CompressionMode,
         key: Option<&[u8; 32]>,
         nonce: Option<&[u8; 16]>,
     ) -> crate::error::Result<Vec<u8>> {
-        let mut data = Self::read_chunk(reader, compression)?;
-        if let (Some(key), Some(nonce)) = (key, nonce) {
-            crate::crypto::encrypt::decrypt_chunk(&mut data, key, nonce);
+        const MAX_CHUNK_LEN: usize = 64 * 1024 * 1024;
+
+        // Step 1: read the raw chunk
+        let mut len_buf = [0u8; 4];
+        reader.read_exact(&mut len_buf).map_err(|e| {
+            crate::error::DriveWipeError::Clone(format!("Failed to read chunk length: {e}"))
+        })?;
+        let chunk_len = u32::from_le_bytes(len_buf) as usize;
+
+        if chunk_len > MAX_CHUNK_LEN {
+            return Err(crate::error::DriveWipeError::Clone(format!(
+                "Chunk length {} exceeds maximum allowed size of {} bytes",
+                chunk_len, MAX_CHUNK_LEN
+            )));
         }
+
+        let mut buf = vec![0u8; chunk_len];
+        reader.read_exact(&mut buf).map_err(|e| {
+            crate::error::DriveWipeError::Clone(format!("Failed to read chunk data: {e}"))
+        })?;
+
+        // Step 2: decrypt
+        if let (Some(key), Some(nonce)) = (key, nonce) {
+            crate::crypto::encrypt::decrypt_chunk(&mut buf, key, nonce);
+        }
+
+        // Step 3: decompress the decrypted data
+        let data = match compression {
+            CompressionMode::None => buf,
+            CompressionMode::Gzip => {
+                use flate2::read::GzDecoder;
+                let mut decoder = GzDecoder::new(&buf[..]);
+                let mut decompressed = Vec::new();
+                decoder.read_to_end(&mut decompressed).map_err(|e| {
+                    crate::error::DriveWipeError::Compression(format!(
+                        "Gzip decompress failed: {e}"
+                    ))
+                })?;
+                decompressed
+            }
+            CompressionMode::Zstd => zstd::decode_all(&buf[..]).map_err(|e| {
+                crate::error::DriveWipeError::Compression(format!("Zstd decompress failed: {e}"))
+            })?,
+        };
+
         Ok(data)
     }
 }

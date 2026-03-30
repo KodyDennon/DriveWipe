@@ -1,4 +1,4 @@
-use iced::widget::{button, column, container, text, text_input};
+use iced::widget::{button, column, container, scrollable, text, text_input};
 use iced::{Element, Length};
 
 use crate::Message;
@@ -6,10 +6,12 @@ use crate::theme;
 
 /// View for the confirmation screen.
 pub fn view<'a>(
-    drive_count: usize,
+    device_paths: &[String],
     method_name: &'a str,
     confirm_text: &'a str,
 ) -> Element<'a, Message> {
+    let drive_count = device_paths.len();
+
     let title = text("Confirm Operation")
         .size(theme::FONT_SIZE_XL)
         .color(theme::TEXT_PRIMARY);
@@ -25,6 +27,21 @@ pub fn view<'a>(
     let method_info = text(format!("Method: {}", method_name))
         .size(theme::FONT_SIZE_MD)
         .color(theme::TEXT_SECONDARY);
+
+    // Show the actual device paths being wiped
+    let mut device_col = column![].spacing(theme::SPACING_SM);
+    device_col = device_col.push(
+        text("Drives to wipe:")
+            .size(theme::FONT_SIZE_MD)
+            .color(theme::TEXT_PRIMARY),
+    );
+    for path in device_paths {
+        device_col = device_col.push(
+            text(format!("  {}", path))
+                .size(theme::FONT_SIZE_MD)
+                .color(theme::DANGER),
+        );
+    }
 
     let instruction = text("Type YES to confirm:")
         .size(theme::FONT_SIZE_MD)
@@ -48,6 +65,7 @@ pub fn view<'a>(
         title,
         warning,
         method_info,
+        scrollable(device_col).height(Length::FillPortion(2)),
         instruction,
         input,
         confirm_btn,

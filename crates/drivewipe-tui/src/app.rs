@@ -218,6 +218,10 @@ pub struct App {
     pub clone_throughput: String,
     /// Partition display lines.
     pub partition_lines: Vec<String>,
+    /// Screen to return to when leaving Help.
+    pub previous_screen: Option<AppScreen>,
+    /// Whether partition delete confirmation is pending ('d' pressed once).
+    pub partition_delete_confirm: bool,
 
     // ── Live mode state ─────────────────────────────────────────────────
     /// Whether live mode is active.
@@ -289,6 +293,8 @@ impl App {
             clone_progress_fraction: 0.0,
             clone_throughput: String::new(),
             partition_lines: Vec::new(),
+            previous_screen: None,
+            partition_delete_confirm: false,
             #[cfg(all(feature = "live", target_os = "linux"))]
             live_mode: false,
             #[cfg(all(feature = "live", target_os = "linux"))]
@@ -516,8 +522,10 @@ impl App {
         // '?' key shows help from any screen except Confirm input.
         if key.code == KeyCode::Char('?') && self.screen != AppScreen::Confirm {
             if self.screen == AppScreen::Help {
-                self.screen = AppScreen::MainMenu;
+                // Restore the screen we came from, or fall back to MainMenu.
+                self.screen = self.previous_screen.take().unwrap_or(AppScreen::MainMenu);
             } else {
+                self.previous_screen = Some(self.screen.clone());
                 self.screen = AppScreen::Help;
             }
             return;
@@ -1119,6 +1127,10 @@ impl App {
                 self.progress_tx = Some(ptx);
                 self.progress_rx = Some(prx);
 
+                // Reset the "done" notification so it fires again on the next
+                // batch completion.
+                crate::ui::wipe_dashboard::reset_done_notification();
+
                 self.refresh_drives().await;
                 self.screen = AppScreen::MainMenu;
             }
@@ -1142,7 +1154,7 @@ impl App {
     async fn handle_help_key(&mut self, key: KeyEvent) {
         match key.code {
             KeyCode::Char('q') | KeyCode::Esc | KeyCode::Char('?') => {
-                self.screen = AppScreen::MainMenu;
+                self.screen = self.previous_screen.take().unwrap_or(AppScreen::MainMenu);
             }
             _ => {}
         }
@@ -1459,10 +1471,17 @@ impl App {
                 }
             }
             KeyCode::Char('t') => {
-                // Set target drive
+                // Set target drive (reject boot drive)
                 if let Some(i) = self.table_state.selected() {
-                    self.clone_target_index = Some(i);
-                    self.log_push(format!("Clone target: {}", self.drives[i].path.display()));
+                    if i < self.drives.len() && self.drives[i].is_boot_drive {
+                        self.log_push(format!(
+                            "Cannot use boot drive {} as clone target",
+                            self.drives[i].path.display()
+                        ));
+                    } else {
+                        self.clone_target_index = Some(i);
+                        self.log_push(format!("Clone target: {}", self.drives[i].path.display()));
+                    }
                 }
             }
             KeyCode::Char('m') => {
@@ -1494,6 +1513,18 @@ impl App {
     // ── Partition keys ─────────────────────────────────────────────────
 
     async fn handle_partition_key(&mut self, key: KeyEvent) {
+        // If a delete confirmation is pending, 'd' again confirms, anything else cancels.
+        if self.partition_delete_confirm {
+            if key.code == KeyCode::Char('d') {
+                self.partition_delete_confirm = false;
+                self.execute_partition_delete();
+            } else {
+                self.partition_delete_confirm = false;
+                self.log_push("Partition delete cancelled.".into());
+            }
+            return;
+        }
+
         match key.code {
             KeyCode::Char('q') | KeyCode::Esc => {
                 self.screen = AppScreen::MainMenu;
@@ -1529,53 +1560,12 @@ impl App {
                 if let Some(drive_idx) = self.focused_drive_index {
                     if let Some(part_idx) = self.table_state.selected() {
                         let drive = &self.drives[drive_idx];
-                        let path = drive.path.clone();
                         self.log_push(format!(
-                            "Deleting partition #{} on {}...",
+                            "Delete partition #{} on {}? Press 'd' again to confirm, any other key to cancel.",
                             part_idx,
-                            path.display()
+                            drive.path.display()
                         ));
-                        match drivewipe_core::io::open_device(&path, true) {
-                            Ok(mut device) => {
-                                let mut buf = vec![0u8; 34 * 512];
-                                if device.read_at(0, &mut buf).is_ok() {
-                                    if let Ok(mut table) =
-                                        drivewipe_core::partition::PartitionTable::parse(&buf)
-                                    {
-                                        match drivewipe_core::partition::ops::delete_partition(
-                                            device.as_mut(),
-                                            &mut table,
-                                            part_idx as u32,
-                                        ) {
-                                            Ok(()) => {
-                                                match drivewipe_core::partition::ops::write_table(
-                                                    device.as_mut(),
-                                                    &table,
-                                                ) {
-                                                    Ok(()) => {
-                                                        self.log_push(format!(
-                                                            "Partition #{} deleted",
-                                                            part_idx
-                                                        ));
-                                                        self.read_partition_table(drive_idx);
-                                                    }
-                                                    Err(e) => self.log_push(format!(
-                                                        "Failed to write table: {}",
-                                                        e
-                                                    )),
-                                                }
-                                            }
-                                            Err(e) => {
-                                                self.log_push(format!("Failed to delete: {}", e))
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                            Err(e) => {
-                                self.log_push(format!("Cannot open device: {}", e));
-                            }
-                        }
+                        self.partition_delete_confirm = true;
                     } else {
                         self.log_push("Select a drive first (Enter), then a partition".to_string());
                     }
@@ -1677,6 +1667,60 @@ impl App {
         }
     }
 
+    /// Execute the confirmed partition delete operation.
+    fn execute_partition_delete(&mut self) {
+        let drive_idx = match self.focused_drive_index {
+            Some(idx) => idx,
+            None => return,
+        };
+        let part_idx = match self.table_state.selected() {
+            Some(idx) => idx,
+            None => return,
+        };
+        if drive_idx >= self.drives.len() {
+            return;
+        }
+        let path = self.drives[drive_idx].path.clone();
+        self.log_push(format!(
+            "Deleting partition #{} on {}...",
+            part_idx,
+            path.display()
+        ));
+        match drivewipe_core::io::open_device(&path, true) {
+            Ok(mut device) => {
+                let mut buf = vec![0u8; 34 * 512];
+                if device.read_at(0, &mut buf).is_ok() {
+                    if let Ok(mut table) = drivewipe_core::partition::PartitionTable::parse(&buf) {
+                        match drivewipe_core::partition::ops::delete_partition(
+                            device.as_mut(),
+                            &mut table,
+                            part_idx as u32,
+                        ) {
+                            Ok(()) => {
+                                match drivewipe_core::partition::ops::write_table(
+                                    device.as_mut(),
+                                    &table,
+                                ) {
+                                    Ok(()) => {
+                                        self.log_push(format!("Partition #{} deleted", part_idx));
+                                        self.read_partition_table(drive_idx);
+                                    }
+                                    Err(e) => {
+                                        self.log_push(format!("Failed to write table: {}", e))
+                                    }
+                                }
+                            }
+                            Err(e) => self.log_push(format!("Failed to delete: {}", e)),
+                        }
+                    }
+                }
+            }
+            Err(e) => {
+                self.log_push(format!("Cannot open device: {}", e));
+            }
+        }
+    }
+
     // ── Forensic keys ──────────────────────────────────────────────────
 
     async fn handle_forensic_key(&mut self, key: KeyEvent) {
@@ -1734,38 +1778,62 @@ impl App {
             }
             KeyCode::Enter | KeyCode::Char(' ') => {
                 // Toggle boolean settings or show info for path settings
-                match self.settings_index {
-                    0 => self.config.auto_report_json = !self.config.auto_report_json,
-                    1 => self.config.notifications_enabled = !self.config.notifications_enabled,
-                    2 => {
-                        self.config.sleep_prevention_enabled = !self.config.sleep_prevention_enabled
+                let toggled = match self.settings_index {
+                    0 => {
+                        self.config.auto_report_json = !self.config.auto_report_json;
+                        true
                     }
-                    3 => self.config.auto_health_pre_wipe = !self.config.auto_health_pre_wipe,
+                    1 => {
+                        self.config.notifications_enabled = !self.config.notifications_enabled;
+                        true
+                    }
+                    2 => {
+                        self.config.sleep_prevention_enabled =
+                            !self.config.sleep_prevention_enabled;
+                        true
+                    }
+                    3 => {
+                        self.config.auto_health_pre_wipe = !self.config.auto_health_pre_wipe;
+                        true
+                    }
                     4 => {
                         self.log_push(format!(
                             "Profiles dir: {} (edit in config.toml)",
                             self.config.profiles_dir.display()
                         ));
+                        false
                     }
                     5 => {
                         self.log_push(format!(
                             "Audit dir: {} (edit in config.toml)",
                             self.config.audit_dir.display()
                         ));
+                        false
                     }
                     6 => {
                         self.log_push(format!(
                             "Performance dir: {} (edit in config.toml)",
                             self.config.performance_history_dir.display()
                         ));
+                        false
                     }
                     7 => {
                         self.log_push(format!(
                             "Keyboard lock sequence: '{}' (edit in config.toml)",
                             self.config.keyboard_lock_sequence
                         ));
+                        false
                     }
-                    _ => {}
+                    _ => false,
+                };
+
+                // Persist settings to disk after toggling a boolean.
+                if toggled {
+                    if let Err(e) = self.config.save() {
+                        self.log_push(format!("Failed to save settings: {}", e));
+                    } else {
+                        self.log_push("Settings saved.".into());
+                    }
                 }
             }
             _ => {}

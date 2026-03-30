@@ -8,6 +8,7 @@ use crate::theme;
 pub fn view<'a>(
     methods: &[(String, String, u32)], // (id, name, passes)
     selected_method: Option<usize>,
+    status_message: Option<&'a str>,
 ) -> Element<'a, Message> {
     let title = text("Select Wipe Method")
         .size(theme::FONT_SIZE_XL)
@@ -26,24 +27,32 @@ pub fn view<'a>(
         let _ = id; // suppress unused warning
     }
 
+    let mut continue_btn = button(
+        text("Continue")
+            .size(theme::FONT_SIZE_MD)
+            .color(theme::SECONDARY),
+    );
+    if selected_method.is_some() {
+        continue_btn = continue_btn.on_press(Message::ProceedToConfirm);
+    }
+
     let buttons_row = column![
-        button(
-            text("Continue")
-                .size(theme::FONT_SIZE_MD)
-                .color(theme::SECONDARY)
-        )
-        .on_press(Message::ProceedToConfirm),
+        continue_btn,
         button(text("Back").size(theme::FONT_SIZE_MD)).on_press(Message::NavigateBack),
     ]
     .spacing(theme::SPACING_MD);
 
-    let content = column![
+    let mut content = column![
         title,
         scrollable(method_list).height(Length::Fill),
         buttons_row
     ]
     .spacing(theme::SPACING_LG)
     .padding(theme::SPACING_XL);
+
+    if let Some(msg) = status_message {
+        content = content.push(text(msg).size(theme::FONT_SIZE_MD).color(theme::WARNING));
+    }
 
     container(content)
         .width(Length::Fill)

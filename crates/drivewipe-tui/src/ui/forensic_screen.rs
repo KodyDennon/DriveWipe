@@ -1,5 +1,5 @@
 use ratatui::prelude::*;
-use ratatui::widgets::{Block, Borders, Cell, HighlightSpacing, Paragraph, Row, Table};
+use ratatui::widgets::{Block, Borders, Cell, Gauge, HighlightSpacing, Paragraph, Row, Table};
 
 use crate::app::App;
 use crate::ui;
@@ -12,6 +12,7 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
         .direction(Direction::Vertical)
         .constraints([
             Constraint::Length(3), // Title
+            Constraint::Length(1), // Progress bar
             Constraint::Min(10),   // Main area
             Constraint::Length(1), // Status bar
         ])
@@ -35,11 +36,34 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
     );
     frame.render_widget(title, chunks[0]);
 
+    // Progress bar
+    let pct = app.forensic_progress_pct.clamp(0.0, 100.0);
+    if pct > 0.0 && pct < 100.0 {
+        let ratio = pct as f64 / 100.0;
+        let gauge = Gauge::default()
+            .gauge_style(Style::default().fg(Color::Cyan).bg(Color::Black))
+            .ratio(ratio)
+            .label(Span::styled(
+                format!("Scanning: {:.1}%", pct),
+                Style::default().fg(Color::White).bold(),
+            ));
+        frame.render_widget(gauge, chunks[1]);
+    } else if pct >= 100.0 {
+        let gauge = Gauge::default()
+            .gauge_style(Style::default().fg(Color::Green).bg(Color::Black))
+            .ratio(1.0)
+            .label(Span::styled(
+                "Scan complete",
+                Style::default().fg(Color::White).bold(),
+            ));
+        frame.render_widget(gauge, chunks[1]);
+    }
+
     // Main area: drive list + results
     let main_chunks = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([Constraint::Percentage(45), Constraint::Percentage(55)])
-        .split(chunks[1]);
+        .split(chunks[2]);
 
     // Drive list
     draw_drive_list(frame, main_chunks[0], app);
@@ -50,7 +74,7 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
     // Status bar
     ui::status_bar(
         frame,
-        chunks[2],
+        chunks[3],
         &[
             ("Up/Down", "Navigate"),
             ("Enter", "Analyze"),

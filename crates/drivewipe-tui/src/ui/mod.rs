@@ -31,7 +31,8 @@ use crate::app::{App, AppScreen};
 pub fn draw(frame: &mut Frame, app: &mut App) {
     // Draw keyboard lock overlay if active.
     if app.keyboard_locked {
-        draw_keyboard_lock(frame);
+        let seq_len = app.config.keyboard_lock_sequence.chars().count();
+        draw_keyboard_lock_with_config(frame, Some(seq_len));
         return;
     }
 
@@ -122,15 +123,15 @@ fn draw_quit_confirm(frame: &mut Frame) {
     frame.render_widget(paragraph, area);
 }
 
-/// Render the keyboard lock overlay.
-fn draw_keyboard_lock(frame: &mut Frame) {
+/// Render the keyboard lock overlay, optionally including the unlock sequence length.
+pub fn draw_keyboard_lock_with_config(frame: &mut Frame, unlock_seq_len: Option<usize>) {
     let area = frame.area();
 
     // Fill the background
     let bg = Block::default().style(Style::default().bg(Color::Black));
     frame.render_widget(bg, area);
 
-    let popup = centered_rect(50, 7, area);
+    let popup = centered_rect(55, 7, area);
 
     let block = Block::default()
         .title(" KEYBOARD LOCKED ")
@@ -138,16 +139,18 @@ fn draw_keyboard_lock(frame: &mut Frame) {
         .border_style(Style::default().fg(Color::Red).bold())
         .title_style(Style::default().fg(Color::Red).bold());
 
+    let hint = match unlock_seq_len {
+        Some(n) => format!("Type the {}-character unlock sequence to resume.", n),
+        None => "Type the unlock sequence to resume.".to_string(),
+    };
+
     let text = vec![
         Line::from(""),
         Line::from(Span::styled(
             "Keyboard input is locked.",
             Style::default().fg(Color::Yellow).bold(),
         )),
-        Line::from(Span::styled(
-            "Type the unlock sequence to resume.",
-            Style::default().fg(Color::Gray),
-        )),
+        Line::from(Span::styled(hint, Style::default().fg(Color::Gray))),
         Line::from(""),
     ];
 

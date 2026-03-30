@@ -8,7 +8,10 @@ pub fn export_dfxml(results: &ForensicResult) -> Result<String> {
     xml.push_str("<dfxml version=\"1.0\">\n");
     xml.push_str("  <creator>\n");
     xml.push_str("    <program>DriveWipe</program>\n");
-    xml.push_str("    <version>0.1.5</version>\n");
+    xml.push_str(&format!(
+        "    <version>{}</version>\n",
+        env!("CARGO_PKG_VERSION")
+    ));
     xml.push_str("  </creator>\n");
 
     xml.push_str("  <source>\n");

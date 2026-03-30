@@ -8,7 +8,7 @@ use uuid::Uuid;
 
 use crate::config::DriveWipeConfig;
 use crate::error::{DriveWipeError, Result};
-use crate::io::{DEFAULT_BLOCK_SIZE, RawDeviceIo, allocate_aligned_buffer};
+use crate::io::{DEFAULT_BLOCK_SIZE, DeviceWrapper, RawDeviceIo, allocate_aligned_buffer};
 use crate::progress::ProgressEvent;
 use crate::resume::WipeState;
 use crate::types::*;
@@ -135,6 +135,12 @@ impl WipeSession {
             .map(|s| s.total_bytes_written)
             .unwrap_or(0);
 
+        // Resolve hostname once for use in all WipeResult constructions.
+        let hostname = hostname::get()
+            .ok()
+            .and_then(|h| h.into_string().ok())
+            .unwrap_or_default();
+
         // Sessions directory for state persistence
         let sessions_dir = self.config.sessions_dir.clone();
 
@@ -234,10 +240,7 @@ impl WipeSession {
                     verification_passed: None,
                     started_at,
                     completed_at: Utc::now(),
-                    hostname: hostname::get()
-                        .ok()
-                        .and_then(|h| h.into_string().ok())
-                        .unwrap_or_default(),
+                    hostname: hostname.clone(),
                     operator: self.config.operator_name.clone(),
                     warnings: vec![],
                     errors,
@@ -260,6 +263,13 @@ impl WipeSession {
         log::debug!("[SESSION] Allocating aligned buffer");
         let mut buffer = allocate_aligned_buffer(DEFAULT_BLOCK_SIZE, 4096);
         log::debug!("[SESSION] Buffer allocated");
+
+        // Pre-allocate a reusable owned buffer for spawn_blocking to avoid
+        // a 4 MiB heap allocation on every write iteration.
+        let mut owned_buf: Vec<u8> = Vec::with_capacity(DEFAULT_BLOCK_SIZE);
+
+        // Cache the device's logical block size for O_DIRECT alignment.
+        let device_block_size = device.block_size() as usize;
 
         // Iterate passes: pass_1idx is 1-indexed, pass_0idx is 0-indexed.
         for pass_1idx in start_pass_1indexed..=total_passes {
@@ -347,19 +357,28 @@ impl WipeSession {
                         verification_passed: None,
                         started_at,
                         completed_at: Utc::now(),
-                        hostname: hostname::get()
-                            .ok()
-                            .and_then(|h| h.into_string().ok())
-                            .unwrap_or_default(),
+                        hostname: hostname.clone(),
                         operator: self.config.operator_name.clone(),
                         warnings,
                         errors: vec![],
                     });
                 }
 
-                // Determine how many bytes to write this iteration
+                // Determine how many bytes to write this iteration.
+                // Round up to device block size for O_DIRECT compatibility — the
+                // extra bytes beyond `total_bytes` are zeros from the aligned buffer,
+                // which is safe for a wipe operation.
                 let remaining = total_bytes - bytes_written_this_pass;
-                let write_len = (remaining as usize).min(buffer.len());
+                let raw_write_len = (remaining as usize).min(buffer.len());
+                let write_len = if raw_write_len == 0 {
+                    break;
+                } else if raw_write_len < device_block_size {
+                    device_block_size.min(buffer.len())
+                } else {
+                    let aligned =
+                        (raw_write_len + device_block_size - 1) & !(device_block_size - 1);
+                    aligned.min(buffer.len())
+                };
                 let write_buf = &mut buffer[..write_len];
 
                 // Fill buffer with the pattern
@@ -374,21 +393,21 @@ impl WipeSession {
                     );
                 }
 
-                // To safely pass `&mut dyn RawDeviceIo` to `spawn_blocking`, we must bypass rustc's
-                // strict pointer rules. A wide pointer consists of two words: data pointer and vtable.
-                // Transmuting it to `[usize; 2]` lets us send it across.
-                let ptr_parts: [usize; 2] =
-                    unsafe { std::mem::transmute(device as *mut dyn RawDeviceIo) };
-
-                let write_buf_vec = write_buf.to_vec();
+                // Use DeviceWrapper to safely pass &mut dyn RawDeviceIo across
+                // spawn_blocking boundaries. Reuse owned_buf to avoid per-iteration
+                // heap allocation (reclaimed from the closure return value).
+                let device_wrapper = DeviceWrapper::new(device);
+                owned_buf.clear();
+                owned_buf.extend_from_slice(&buffer[..write_len]);
+                let send_buf = std::mem::take(&mut owned_buf);
                 let pass_offset = bytes_written_this_pass;
 
                 let write_res = tokio::task::spawn_blocking(move || {
-                    let device_ref = unsafe {
-                        let wide_ptr: *mut dyn RawDeviceIo = std::mem::transmute(ptr_parts);
-                        &mut *wide_ptr
-                    };
-                    device_ref.write_at(pass_offset, &write_buf_vec)
+                    // SAFETY: device outlives this task; exclusive access is
+                    // maintained because we .await immediately after spawn.
+                    let device_ref = unsafe { device_wrapper.get_mut() };
+                    let res = device_ref.write_at(pass_offset, &send_buf);
+                    (res, send_buf) // Return buffer for reuse
                 })
                 .await
                 .map_err(|e| {
@@ -398,15 +417,18 @@ impl WipeSession {
                 })?;
 
                 match write_res {
-                    Ok(n) => {
+                    (Ok(n), returned_buf) => {
+                        owned_buf = returned_buf; // Reclaim buffer
                         if write_count == 1 {
                             log::debug!("[SESSION] First write SUCCESS: wrote {} bytes", n);
                         }
-                        bytes_written_this_pass += n as u64;
-                        total_bytes_written += n as u64;
-                        throughput_bytes += n as u64;
+                        let effective_n = (n as u64).min(remaining);
+                        bytes_written_this_pass += effective_n;
+                        total_bytes_written += effective_n;
+                        throughput_bytes += effective_n;
                     }
-                    Err(e) => {
+                    (Err(e), returned_buf) => {
+                        let _ = returned_buf; // Not reused on error path
                         log::debug!(
                             "[SESSION ERROR] Write FAILED at offset {}: {}",
                             bytes_written_this_pass,
@@ -497,16 +519,6 @@ impl WipeSession {
                 throughput_mbps,
             });
 
-            // Flush device cache after each pass for durability
-            log::debug!("[SESSION] Syncing device after pass {}", pass_1idx);
-            if let Err(e) = device.sync() {
-                log::warn!(
-                    "[SESSION] Failed to sync device after pass {}: {:?}",
-                    pass_1idx,
-                    e
-                );
-            }
-
             pass_results.push(PassResult {
                 pass_number: pass_1idx,
                 pattern_name: pattern_name.clone(),
@@ -554,63 +566,82 @@ impl WipeSession {
                     }
                 }
             } else if pattern_name.contains("Random") {
-                // Random pattern — byte-level comparison is impossible because
-                // `pattern_for_pass()` creates a new AES-CTR seed each time.
-                // Instead, verify the device is NOT all zeros (confirming that
-                // something was actually written).
+                // Random pattern verification: sample multiple blocks at evenly
+                // distributed offsets to confirm data was actually written.
+                // Byte-level replay is not possible since the AES-CTR seed was
+                // not persisted between the write and this verification.
                 let verify_start = Instant::now();
 
                 let _ = progress_tx.send(ProgressEvent::VerificationStarted { session_id });
 
-                // Use aligned buffer for Windows FILE_FLAG_NO_BUFFERING compatibility
-                let mut sample_buf = allocate_aligned_buffer(DEFAULT_BLOCK_SIZE, 4096);
-                let sample_len = (total_bytes as usize).min(DEFAULT_BLOCK_SIZE);
+                let num_samples =
+                    16usize.min((total_bytes / DEFAULT_BLOCK_SIZE as u64).max(1) as usize);
+                let mut all_passed = true;
+                let mut any_all_zero = false;
+                let block_sz = device.block_size() as u64;
 
-                let ptr_parts: [usize; 2] =
-                    unsafe { std::mem::transmute(device as *mut dyn RawDeviceIo) };
-
-                let read_res = tokio::task::spawn_blocking(move || {
-                    let device_ref = unsafe {
-                        let wide_ptr: *mut dyn RawDeviceIo = std::mem::transmute(ptr_parts);
-                        &mut *wide_ptr
+                for sample_idx in 0..num_samples {
+                    let raw_offset = if num_samples > 1 {
+                        (total_bytes / num_samples as u64) * sample_idx as u64
+                    } else {
+                        0
                     };
-                    let mut temp_buf = vec![0u8; sample_len];
-                    let res = device_ref.read_at(0, &mut temp_buf[..]);
-                    (res, temp_buf)
-                })
-                .await
-                .map_err(|e| {
-                    DriveWipeError::IoGeneric(std::io::Error::other(format!(
-                        "Task join error: {e}"
-                    )))
-                })?;
+                    // Align offset to block size for O_DIRECT compatibility.
+                    let aligned_offset = (raw_offset / block_sz) * block_sz;
+                    let sample_len =
+                        ((total_bytes - aligned_offset) as usize).min(DEFAULT_BLOCK_SIZE);
 
-                let passed = match read_res.0 {
-                    Ok(n) => {
-                        sample_buf[..n].copy_from_slice(&read_res.1[..n]);
-                        let all_zero = sample_buf[..n].iter().all(|&b| b == 0);
-                        if all_zero {
-                            let msg = "Random pattern verification: first block is all \
-                                       zeros — expected non-zero data"
-                                .to_string();
+                    let device_wrapper = DeviceWrapper::new(device);
+                    let offset = aligned_offset;
+
+                    let read_res = tokio::task::spawn_blocking(move || {
+                        let device_ref = unsafe { device_wrapper.get_mut() };
+                        let mut temp_buf = vec![0u8; sample_len];
+                        let res = device_ref.read_at(offset, &mut temp_buf);
+                        (res, temp_buf)
+                    })
+                    .await
+                    .map_err(|e| {
+                        DriveWipeError::IoGeneric(std::io::Error::other(format!(
+                            "Task join error: {e}"
+                        )))
+                    })?;
+
+                    match read_res.0 {
+                        Ok(n) if n > 0 => {
+                            if read_res.1[..n].iter().all(|&b| b == 0) {
+                                any_all_zero = true;
+                            }
+                        }
+                        Ok(_) => {}
+                        Err(e) => {
+                            let msg =
+                                format!("Verification read error at offset {aligned_offset}: {e}");
                             warnings.push(msg);
-                            false
-                        } else {
-                            true
+                            all_passed = false;
+                            break;
                         }
                     }
-                    Err(e) => {
-                        let msg = format!("Verification read error at offset 0: {e}");
-                        warnings.push(msg);
-                        false
-                    }
+                }
+
+                let passed = if any_all_zero {
+                    let msg = "Random verification: one or more sampled blocks were all \
+                               zeros — expected non-zero random data"
+                        .to_string();
+                    warnings.push(msg);
+                    false
+                } else if !all_passed {
+                    false
+                } else {
+                    true
                 };
 
-                let warn_msg = "Random pattern verification: confirmed device is non-zero \
-                                (byte-level verification not possible for random data)"
-                    .to_string();
                 if passed {
-                    warnings.push(warn_msg);
+                    warnings.push(format!(
+                        "Random pattern verification: confirmed {} sampled blocks contain \
+                         non-zero data (byte-level verification not possible for random data)",
+                        num_samples
+                    ));
                 }
 
                 let verify_duration = verify_start.elapsed().as_secs_f64();
@@ -714,10 +745,7 @@ impl WipeSession {
             verification_passed,
             started_at,
             completed_at: Utc::now(),
-            hostname: hostname::get()
-                .ok()
-                .and_then(|h| h.into_string().ok())
-                .unwrap_or_default(),
+            hostname,
             operator: self.config.operator_name.clone(),
             warnings,
             errors: vec![],

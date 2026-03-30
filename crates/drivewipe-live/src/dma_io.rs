@@ -16,6 +16,8 @@ use crate::kernel_module::{DwDmaRequest, KernelModule, set_device_path};
 pub struct DmaIo {
     device_path: String,
     module: Option<KernelModule>,
+    /// Cached file handle for userspace O_DIRECT fallback.
+    fallback_file: Option<std::fs::File>,
 }
 
 impl DmaIo {
@@ -31,10 +33,33 @@ impl DmaIo {
                 device_path
             );
         }
+
+        // Pre-open the fallback file handle with O_DIRECT when not using the kernel module.
+        let fallback_file = if module.is_none() {
+            Self::open_direct(device_path).ok()
+        } else {
+            None
+        };
+
         Self {
             device_path: device_path.to_string(),
             module,
+            fallback_file,
         }
+    }
+
+    /// Open the device with O_DIRECT for userspace fallback.
+    fn open_direct(device_path: &str) -> Result<std::fs::File> {
+        use std::os::unix::fs::OpenOptionsExt;
+        std::fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .custom_flags(libc::O_DIRECT)
+            .open(device_path)
+            .map_err(|e| DriveWipeError::Io {
+                path: device_path.into(),
+                source: e,
+            })
     }
 
     /// Whether we are using kernel module DMA (true) or userspace fallback (false).
@@ -88,18 +113,22 @@ impl DmaIo {
 
     // ── Userspace O_DIRECT fallback ──────────────────────────────────────────
 
-    fn write_direct(&self, offset: u64, data: &[u8]) -> Result<u64> {
+    fn fallback_fd(&self) -> Result<std::os::unix::io::RawFd> {
         use std::os::unix::io::AsRawFd;
-
-        let file = std::fs::OpenOptions::new()
-            .write(true)
-            .open(&self.device_path)
-            .map_err(|e| DriveWipeError::Io {
+        self.fallback_file
+            .as_ref()
+            .map(|f| f.as_raw_fd())
+            .ok_or_else(|| DriveWipeError::Io {
                 path: self.device_path.clone().into(),
-                source: e,
-            })?;
+                source: std::io::Error::new(
+                    std::io::ErrorKind::NotFound,
+                    "Fallback file handle not available",
+                ),
+            })
+    }
 
-        let fd = file.as_raw_fd();
+    fn write_direct(&self, offset: u64, data: &[u8]) -> Result<u64> {
+        let fd = self.fallback_fd()?;
         let ret = unsafe {
             libc::pwrite(
                 fd,
@@ -120,17 +149,7 @@ impl DmaIo {
     }
 
     fn read_direct(&self, offset: u64, buf: &mut [u8]) -> Result<u64> {
-        use std::os::unix::io::AsRawFd;
-
-        let file = std::fs::OpenOptions::new()
-            .read(true)
-            .open(&self.device_path)
-            .map_err(|e| DriveWipeError::Io {
-                path: self.device_path.clone().into(),
-                source: e,
-            })?;
-
-        let fd = file.as_raw_fd();
+        let fd = self.fallback_fd()?;
         let ret = unsafe {
             libc::pread(
                 fd,

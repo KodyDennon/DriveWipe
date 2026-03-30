@@ -75,7 +75,15 @@ impl NvmeHealthLog {
 
     /// Temperature in Celsius.
     pub fn temperature_celsius(&self) -> i16 {
-        self.temperature_kelvin as i16 - 273
+        let raw = self.temperature_kelvin as i16 - 273;
+        if raw < -40 || raw > 200 {
+            log::warn!(
+                "NVMe temperature {}°C out of expected range (raw {}K)",
+                raw,
+                self.temperature_kelvin
+            );
+        }
+        raw
     }
 
     /// Whether the drive is in a healthy state.

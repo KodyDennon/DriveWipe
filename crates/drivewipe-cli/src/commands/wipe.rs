@@ -140,15 +140,15 @@ pub async fn run(
 
     // ── Open the device ─────────────────────────────────────────────────
     #[cfg(target_os = "linux")]
-    let mut device_io = drivewipe_core::io::linux::LinuxDeviceIo::open(device_path)
+    let mut device_io = drivewipe_core::io::linux::LinuxDeviceIo::open(device_path, true)
         .with_context(|| format!("Failed to open device {device}"))?;
 
     #[cfg(target_os = "macos")]
-    let mut device_io = drivewipe_core::io::macos::MacosDeviceIo::open(device_path)
+    let mut device_io = drivewipe_core::io::macos::MacosDeviceIo::open(device_path, true)
         .with_context(|| format!("Failed to open device {device}"))?;
 
     #[cfg(target_os = "windows")]
-    let mut device_io = drivewipe_core::io::windows::WindowsDeviceIo::open(device_path)
+    let mut device_io = drivewipe_core::io::windows::WindowsDeviceIo::open(device_path, true)
         .with_context(|| format!("Failed to open device {device}"))?;
 
     // ── Build the session ───────────────────────────────────────────────
@@ -165,9 +165,10 @@ pub async fn run(
     };
 
     // ── Check for resumable state ───────────────────────────────────────
-    let resume_state = WipeState::find_for_device(config.sessions_dir(), &drive_info.serial)
-        .ok()
-        .flatten();
+    let resume_state =
+        WipeState::find_for_device_and_method(config.sessions_dir(), &drive_info.serial, method_id)
+            .ok()
+            .flatten();
 
     if let Some(ref state) = resume_state {
         println!(
@@ -264,90 +265,17 @@ pub async fn run(
 
 /// Create an owned `Box<dyn WipeMethod>` for the given method id.
 ///
-/// Because `WipeMethodRegistry` only exposes `&dyn WipeMethod` references and
-/// does not support removing or cloning entries, we use a thin proxy struct
-/// that delegates calls back to a fresh registry.  All built-in software
-/// methods are cheap, stateless unit structs so re-creating the registry on
-/// each delegated call is essentially free.
+/// Uses `WipeMethodRegistry::into_method()` to consume the registry and
+/// return the real method object, preserving full functionality including
+/// `execute_firmware()` for firmware-backed methods.
 pub async fn find_and_clone_method_by_id(
     method_id: &str,
 ) -> Option<Box<dyn drivewipe_core::wipe::WipeMethod>> {
-    let proxy = MethodProxy::new(method_id.to_string())?;
-    Some(Box::new(proxy))
+    let registry = WipeMethodRegistry::new();
+    registry.into_method(method_id)
 }
 
 // ── Private helpers ─────────────────────────────────────────────────────────
-
-/// Thin proxy that delegates to a fresh `WipeMethodRegistry` lookup.
-///
-/// This exists because `WipeMethodRegistry::get` returns a reference and we
-/// need an owned `Box<dyn WipeMethod>` for `WipeSession::new`.  The `name`
-/// and `description` fields are cached at construction time so that `name()`
-/// and `description()` can return `&str` without leaking memory.
-struct MethodProxy {
-    id: String,
-    cached_name: String,
-    cached_description: String,
-    cached_pass_count: u32,
-    cached_includes_verification: bool,
-    cached_is_firmware: bool,
-}
-
-impl MethodProxy {
-    fn new(id: String) -> Option<Self> {
-        let registry = WipeMethodRegistry::new();
-        let method = registry.get(&id)?;
-        Some(Self {
-            cached_name: method.name().to_string(),
-            cached_description: method.description().to_string(),
-            cached_pass_count: method.pass_count(),
-            cached_includes_verification: method.includes_verification(),
-            cached_is_firmware: method.is_firmware(),
-            id,
-        })
-    }
-
-    fn with_inner<R>(&self, f: impl FnOnce(&dyn drivewipe_core::wipe::WipeMethod) -> R) -> R {
-        let registry = WipeMethodRegistry::new();
-        let method = registry
-            .get(&self.id)
-            .expect("MethodProxy: method must exist in registry");
-        f(method)
-    }
-}
-
-impl drivewipe_core::wipe::WipeMethod for MethodProxy {
-    fn id(&self) -> &str {
-        &self.id
-    }
-
-    fn name(&self) -> &str {
-        &self.cached_name
-    }
-
-    fn description(&self) -> &str {
-        &self.cached_description
-    }
-
-    fn pass_count(&self) -> u32 {
-        self.cached_pass_count
-    }
-
-    fn pattern_for_pass(
-        &self,
-        pass: u32,
-    ) -> Box<dyn drivewipe_core::wipe::patterns::PatternGenerator + Send> {
-        self.with_inner(|m| m.pattern_for_pass(pass))
-    }
-
-    fn includes_verification(&self) -> bool {
-        self.cached_includes_verification
-    }
-
-    fn is_firmware(&self) -> bool {
-        self.cached_is_firmware
-    }
-}
 
 fn print_wipe_summary(result: &WipeResult) {
     let style = match result.outcome {

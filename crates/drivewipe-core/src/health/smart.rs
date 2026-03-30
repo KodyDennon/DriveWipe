@@ -27,7 +27,7 @@ pub struct SmartData {
     /// All parsed SMART attributes.
     pub attributes: Vec<SmartAttribute>,
     /// Drive temperature in Celsius, if available.
-    pub temperature_celsius: Option<u8>,
+    pub temperature_celsius: Option<i16>,
     /// Power-on hours, if available.
     pub power_on_hours: Option<u64>,
     /// Power cycle count, if available.
@@ -89,7 +89,7 @@ impl SmartData {
                 5 => reallocated_sectors = Some(raw_value),
                 9 => power_on_hours = Some(raw_value),
                 12 => power_cycle_count = Some(raw_value),
-                194 | 190 => temperature_celsius = Some(raw_value as u8),
+                194 | 190 => temperature_celsius = Some((raw_value & 0xFF) as i16),
                 197 => pending_sectors = Some(raw_value),
                 198 => uncorrectable_sectors = Some(raw_value),
                 _ => {}

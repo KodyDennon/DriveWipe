@@ -968,16 +968,23 @@ mod windows_nvme {
         // This is a simplified version; production code might use
         // StorageAdapterProtocolSpecificProperty for the sanitize log.
         // For now, we use a simple timeout-based approach.
+        // Warn that progress is estimated since we cannot read the sanitize log on Windows.
+        let _ = progress_tx.send(ProgressEvent::Warning {
+            session_id,
+            message: "Windows NVMe sanitize progress is estimated — actual completion \
+                      time depends on drive capacity and sanitize method"
+                .to_string(),
+        });
+
         for i in 0..3600 {
             // Max 1 hour
             std::thread::sleep(std::time::Duration::from_secs(1));
 
-            // Send an estimated progress (we can't easily read the sanitize
-            // log on Windows without more complex IOCTL). In production, we
-            // would query the Sanitize Status Log via
-            // IOCTL_STORAGE_QUERY_PROPERTY with the appropriate protocol
-            // specific data.
-            let estimated_percent = ((i as f32) / 60.0 * 100.0).min(99.0);
+            // Estimated progress — we cannot easily read the NVMe Sanitize
+            // Status Log on Windows without StorageAdapterProtocolSpecific
+            // IOCTLs.  Use a logarithmic curve that approaches 99% slowly.
+            let elapsed_secs = i as f32 + 1.0;
+            let estimated_percent = (1.0 - (-elapsed_secs / 600.0).exp()) * 99.0;
             let _ = progress_tx.send(ProgressEvent::FirmwareEraseProgress {
                 session_id,
                 percent: estimated_percent,

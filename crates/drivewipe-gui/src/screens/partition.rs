@@ -8,6 +8,7 @@ use crate::theme;
 pub fn view<'a>(
     drives: &[drivewipe_core::types::DriveInfo],
     partition_info: &'a [String],
+    loading: bool,
 ) -> Element<'a, Message> {
     let title = text("Partition Manager")
         .size(theme::FONT_SIZE_XL)
@@ -35,6 +36,13 @@ pub fn view<'a>(
     }
 
     let mut info_col = column![].spacing(theme::SPACING_SM);
+    if loading {
+        info_col = info_col.push(
+            text("Loading...")
+                .size(theme::FONT_SIZE_MD)
+                .color(theme::STATUS_INFO),
+        );
+    }
     for line in partition_info {
         info_col = info_col.push(
             text(line.as_str())

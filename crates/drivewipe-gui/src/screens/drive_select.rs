@@ -8,6 +8,7 @@ use crate::theme;
 pub fn view<'a>(
     drives: &[drivewipe_core::types::DriveInfo],
     selected: &[bool],
+    status_message: Option<&'a str>,
 ) -> Element<'a, Message> {
     let title = text("Select Drives")
         .size(theme::FONT_SIZE_XL)
@@ -46,13 +47,20 @@ pub fn view<'a>(
         col
     };
 
+    let has_selection = selected.iter().any(|s| *s);
+
+    let mut continue_btn = button(text("Continue").size(theme::FONT_SIZE_MD));
+    if has_selection {
+        continue_btn = continue_btn.on_press(Message::ProceedToMethodSelect);
+    }
+
     let buttons_row = row![
         button(text("Refresh").size(theme::FONT_SIZE_MD)).on_press(Message::RefreshDrives),
-        button(text("Continue").size(theme::FONT_SIZE_MD)).on_press(Message::ProceedToMethodSelect),
+        continue_btn,
     ]
     .spacing(theme::SPACING_MD);
 
-    let content = column![
+    let mut content = column![
         title,
         subtitle,
         scrollable(drive_list).height(Length::Fill),
@@ -60,6 +68,10 @@ pub fn view<'a>(
     ]
     .spacing(theme::SPACING_LG)
     .padding(theme::SPACING_XL);
+
+    if let Some(msg) = status_message {
+        content = content.push(text(msg).size(theme::FONT_SIZE_MD).color(theme::WARNING));
+    }
 
     container(content)
         .width(Length::Fill)

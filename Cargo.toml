@@ -46,10 +46,12 @@ ctr = "0.9"
 cipher = "0.4"
 rand = "0.10"
 zeroize = { version = "1", features = ["derive"] }
+argon2 = "0.5"
 
 # Hashing
 sha2 = "0.10"
 blake3 = "1"
+hmac = "0.12"
 
 # Data formats
 regex = "1"
@@ -83,6 +85,7 @@ windows = { version = "0.62", features = [
     "Win32_Security",
     "Win32_Storage_IscsiDisc",
     "Win32_System_SystemServices",
+    "Win32_System_Power",
 ] }
 
 # PDF

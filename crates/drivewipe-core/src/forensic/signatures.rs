@@ -120,6 +120,8 @@ pub fn scan_signatures(
     let mut buf = vec![0u8; block_size];
     let mut hits = Vec::new();
 
+    const MAX_HITS: usize = 10_000;
+
     // Sample blocks across the device
     let total_blocks = capacity / block_size as u64;
     let step = if total_blocks > 4096 {
@@ -129,7 +131,7 @@ pub fn scan_signatures(
     };
 
     let mut block_idx: u64 = 0;
-    while block_idx < total_blocks {
+    'outer: while block_idx < total_blocks {
         let offset = block_idx * block_size as u64;
         if offset >= capacity {
             break;
@@ -143,6 +145,13 @@ pub fn scan_signatures(
                     if sig.offset + sig.magic.len() <= n
                         && &buf[sig.offset..sig.offset + sig.magic.len()] == sig.magic
                     {
+                        if hits.len() >= MAX_HITS {
+                            log::warn!(
+                                "Maximum signature hits ({}) reached, stopping scan",
+                                MAX_HITS
+                            );
+                            break 'outer;
+                        }
                         hits.push(FileSignatureHit {
                             offset,
                             file_type: sig.name.to_string(),

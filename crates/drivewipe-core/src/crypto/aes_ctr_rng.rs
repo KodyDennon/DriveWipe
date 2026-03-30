@@ -36,10 +36,11 @@ impl AesCtrRng {
         Self { cipher, key, nonce }
     }
 
-    /// Fills `buf` with pseudorandom keystream bytes.
+    /// Fill `buf` with keystream bytes.
     ///
-    /// The buffer is first zeroed, then the AES-256-CTR keystream is XORed over it,
-    /// which effectively writes the raw keystream into the buffer.
+    /// `apply_keystream` XORs the keystream with the buffer contents, so the
+    /// buffer must be zeroed first to extract raw keystream bytes.  This is the
+    /// only API available in `cipher 0.4` -- there is no `write_keystream`.
     pub fn fill_bytes(&mut self, buf: &mut [u8]) {
         buf.fill(0);
         self.cipher.apply_keystream(buf);

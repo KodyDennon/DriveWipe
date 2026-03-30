@@ -2,10 +2,12 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
+use indicatif::{ProgressBar, ProgressStyle};
 
 use drivewipe_core::config::DriveWipeConfig;
 use drivewipe_core::drive;
 use drivewipe_core::forensic::{ForensicConfig, ForensicResult, ForensicSession};
+use drivewipe_core::progress::ProgressEvent;
 use drivewipe_core::session::CancellationToken;
 
 /// Run the `forensic scan` subcommand.
@@ -37,6 +39,47 @@ async fn execute_scan(
 
     let (progress_tx, progress_rx) = crossbeam_channel::unbounded();
 
+    // Spawn a thread to consume progress events and display a progress bar.
+    let progress_handle = std::thread::spawn(move || {
+        let bar = ProgressBar::new_spinner();
+        bar.set_style(
+            ProgressStyle::with_template(
+                "{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] \
+                 {bytes}/{total_bytes} ({msg})",
+            )
+            .unwrap()
+            .progress_chars("=>-"),
+        );
+        bar.set_message("scanning...");
+
+        for event in progress_rx {
+            match event {
+                ProgressEvent::ForensicScanStarted { .. } => {
+                    bar.set_message("scanning...");
+                }
+                ProgressEvent::ForensicScanProgress {
+                    bytes_scanned,
+                    total_bytes,
+                    findings,
+                    ..
+                } => {
+                    bar.set_length(total_bytes);
+                    bar.set_position(bytes_scanned);
+                    bar.set_message(format!("{} findings", findings));
+                }
+                ProgressEvent::ForensicScanCompleted { duration_secs, .. } => {
+                    bar.finish_with_message(format!("completed in {:.1}s", duration_secs));
+                }
+                ProgressEvent::Error { message, .. } => {
+                    bar.abandon_with_message(format!("ERROR: {message}"));
+                }
+                _ => {}
+            }
+        }
+
+        bar.finish_and_clear();
+    });
+
     let mut device_io = drivewipe_core::io::open_device(&PathBuf::from(device), false)
         .context("Failed to open device")?;
 
@@ -51,9 +94,9 @@ async fn execute_scan(
         .await
         .context("Forensic scan failed")?;
 
-    // Drain progress
+    // Drop the sender so the progress thread's recv loop terminates.
     drop(progress_tx);
-    for _event in progress_rx {}
+    let _ = progress_handle.join();
 
     Ok(result)
 }

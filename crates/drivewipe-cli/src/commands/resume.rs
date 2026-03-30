@@ -242,15 +242,15 @@ async fn execute_resumed_session(
 
     // Open the device.
     #[cfg(target_os = "linux")]
-    let mut device_io = drivewipe_core::io::linux::LinuxDeviceIo::open(device_path)
+    let mut device_io = drivewipe_core::io::linux::LinuxDeviceIo::open(device_path, true)
         .with_context(|| format!("Failed to open device {}", device_path.display()))?;
 
     #[cfg(target_os = "macos")]
-    let mut device_io = drivewipe_core::io::macos::MacosDeviceIo::open(device_path)
+    let mut device_io = drivewipe_core::io::macos::MacosDeviceIo::open(device_path, true)
         .with_context(|| format!("Failed to open device {}", device_path.display()))?;
 
     #[cfg(target_os = "windows")]
-    let mut device_io = drivewipe_core::io::windows::WindowsDeviceIo::open(device_path)
+    let mut device_io = drivewipe_core::io::windows::WindowsDeviceIo::open(device_path, true)
         .with_context(|| format!("Failed to open device {}", device_path.display()))?;
 
     // Build the session using the MethodProxy from wipe command.

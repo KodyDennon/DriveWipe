@@ -2,9 +2,12 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
+use dialoguer::Confirm;
+use indicatif::{ProgressBar, ProgressStyle};
 
 use drivewipe_core::clone::{CloneConfig, CloneMode, CompressionMode};
 use drivewipe_core::config::DriveWipeConfig;
+use drivewipe_core::progress::ProgressEvent;
 use drivewipe_core::session::CancellationToken;
 
 /// Run the `clone` subcommand.
@@ -54,7 +57,59 @@ pub async fn run(
     println!("  Compression: {:?}", compression);
     println!("  Encrypt: {}", encrypt);
 
+    // Confirmation prompt: cloning overwrites the target.
+    let confirmed = Confirm::new()
+        .with_prompt(format!(
+            "This will overwrite all data on the target ({target}). Continue?"
+        ))
+        .default(false)
+        .interact()?;
+
+    if !confirmed {
+        println!("Clone aborted by user.");
+        return Ok(());
+    }
+
     let (progress_tx, progress_rx) = crossbeam_channel::unbounded();
+
+    // Spawn a thread to consume progress events and display a progress bar.
+    let progress_handle = std::thread::spawn(move || {
+        let bar = ProgressBar::new(0);
+        bar.set_style(
+            ProgressStyle::with_template(
+                "{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] \
+                 {bytes}/{total_bytes} ({bytes_per_sec}, ETA {eta})",
+            )
+            .unwrap()
+            .progress_chars("=>-"),
+        );
+
+        for event in progress_rx {
+            match event {
+                ProgressEvent::CloneStarted { total_bytes, .. } => {
+                    bar.set_length(total_bytes);
+                    bar.set_position(0);
+                }
+                ProgressEvent::CloneProgress {
+                    bytes_copied,
+                    total_bytes,
+                    ..
+                } => {
+                    bar.set_length(total_bytes);
+                    bar.set_position(bytes_copied);
+                }
+                ProgressEvent::CloneCompleted { .. } => {
+                    bar.finish_with_message("done");
+                }
+                ProgressEvent::Error { message, .. } => {
+                    bar.abandon_with_message(format!("ERROR: {message}"));
+                }
+                _ => {}
+            }
+        }
+
+        bar.finish_and_clear();
+    });
 
     let result = match clone_mode {
         CloneMode::Block => {
@@ -120,9 +175,9 @@ pub async fn run(
         }
     };
 
-    // Drain progress events
+    // Drop the sender so the progress thread's recv loop terminates.
     drop(progress_tx);
-    for _event in progress_rx {}
+    let _ = progress_handle.join();
 
     match result {
         Ok(result) => {

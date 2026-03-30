@@ -2,14 +2,14 @@
 /// and releases it on drop.
 ///
 /// Platform-specific implementations:
-/// - Linux: D-Bus `org.freedesktop.login1.Manager.Inhibit`
-/// - macOS: `IOPMAssertionCreateWithName` via CoreFoundation FFI
+/// - Linux: `systemd-inhibit` child process (killed on drop)
+/// - macOS: `caffeinate` child process (killed on drop)
 /// - Windows: `SetThreadExecutionState(ES_CONTINUOUS | ES_SYSTEM_REQUIRED)`
 pub struct SleepGuard {
-    #[cfg(target_os = "linux")]
-    _inhibit_fd: Option<std::os::unix::io::RawFd>,
-    #[cfg(target_os = "macos")]
-    _assertion_id: u32,
+    /// Child process handle for process-based inhibitors (Linux, macOS).
+    /// Stored so we can kill it on drop, preventing leaked processes.
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    child: Option<std::process::Child>,
     #[cfg(target_os = "windows")]
     _active: bool,
     #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
@@ -46,8 +46,6 @@ impl SleepGuard {
 
     #[cfg(target_os = "linux")]
     fn new_linux(reason: &str) -> crate::error::Result<Self> {
-        // Try to use systemd-inhibit via D-Bus
-        // Fallback: just log a warning if D-Bus is not available
         use std::process::Command;
 
         let result = Command::new("systemd-inhibit")
@@ -62,13 +60,16 @@ impl SleepGuard {
             .spawn();
 
         match result {
-            Ok(_child) => {
-                log::info!("Sleep inhibitor acquired via systemd-inhibit");
-                Ok(Self { _inhibit_fd: None })
+            Ok(child) => {
+                log::info!(
+                    "Sleep inhibitor acquired via systemd-inhibit (pid {})",
+                    child.id()
+                );
+                Ok(Self { child: Some(child) })
             }
             Err(e) => {
                 log::warn!("Failed to acquire sleep inhibitor: {}", e);
-                Ok(Self { _inhibit_fd: None })
+                Ok(Self { child: None })
             }
         }
     }
@@ -77,20 +78,40 @@ impl SleepGuard {
     fn new_macos(reason: &str) -> crate::error::Result<Self> {
         use std::process::Command;
 
-        // Use caffeinate as a simple cross-version approach
-        let _result = Command::new("caffeinate")
+        let _ = reason;
+        let result = Command::new("caffeinate")
             .args(["-s", "-w", &std::process::id().to_string()])
             .spawn();
 
-        let _ = reason;
-        log::info!("Sleep inhibitor acquired via caffeinate");
-        Ok(Self { _assertion_id: 0 })
+        match result {
+            Ok(child) => {
+                log::info!(
+                    "Sleep inhibitor acquired via caffeinate (pid {})",
+                    child.id()
+                );
+                Ok(Self { child: Some(child) })
+            }
+            Err(e) => {
+                log::warn!("Failed to acquire sleep inhibitor: {}", e);
+                Ok(Self { child: None })
+            }
+        }
     }
 
     #[cfg(target_os = "windows")]
     fn new_windows(reason: &str) -> crate::error::Result<Self> {
         let _ = reason;
-        // SetThreadExecutionState would be called here
+        // Prevent the system from sleeping while a wipe is running.
+        // ES_CONTINUOUS | ES_SYSTEM_REQUIRED keeps the system awake.
+        #[cfg(target_os = "windows")]
+        {
+            use windows::Win32::System::Power::{
+                ES_CONTINUOUS, ES_SYSTEM_REQUIRED, SetThreadExecutionState,
+            };
+            unsafe {
+                SetThreadExecutionState(ES_CONTINUOUS | ES_SYSTEM_REQUIRED);
+            }
+        }
         log::info!("Sleep inhibitor acquired via SetThreadExecutionState");
         Ok(Self { _active: true })
     }
@@ -105,9 +126,25 @@ impl Drop for SleepGuard {
     fn drop(&mut self) {
         log::info!("Releasing sleep inhibitor");
 
+        #[cfg(any(target_os = "linux", target_os = "macos"))]
+        {
+            if let Some(ref mut child) = self.child {
+                log::debug!("Killing sleep inhibitor process (pid {})", child.id());
+                let _ = child.kill();
+                let _ = child.wait();
+            }
+        }
+
         #[cfg(target_os = "windows")]
         {
-            // Would call SetThreadExecutionState(ES_CONTINUOUS) here
+            // Clear the execution state flags, allowing the system to sleep again.
+            #[cfg(target_os = "windows")]
+            {
+                use windows::Win32::System::Power::{ES_CONTINUOUS, SetThreadExecutionState};
+                unsafe {
+                    SetThreadExecutionState(ES_CONTINUOUS);
+                }
+            }
             self._active = false;
         }
     }

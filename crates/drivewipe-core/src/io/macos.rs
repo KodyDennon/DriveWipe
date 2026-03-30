@@ -6,7 +6,7 @@
 
 use std::fs::{File, OpenOptions};
 use std::io::{Seek, SeekFrom};
-use std::os::unix::fs::FileExt;
+use std::os::unix::fs::{FileExt, OpenOptionsExt};
 use std::os::unix::io::AsRawFd;
 use std::path::Path;
 use std::process::Command;
@@ -41,7 +41,7 @@ impl MacosDeviceIo {
     /// Returns [`DriveWipeError::DeviceNotFound`] if the path does not exist,
     /// [`DriveWipeError::Io`] if the device cannot be opened, or
     /// [`DriveWipeError::Ioctl`] if `F_NOCACHE` cannot be set.
-    pub fn open(path: &Path) -> Result<Self> {
+    pub fn open(path: &Path, writable: bool) -> Result<Self> {
         // Validate the path is a disk device (prevents arbitrary file overwrite).
         let path_str = path.to_string_lossy();
         if !path_str.starts_with("/dev/rdisk") && !path_str.starts_with("/dev/disk") {
@@ -51,15 +51,17 @@ impl MacosDeviceIo {
             )));
         }
 
-        // Unmount all volumes on the disk before opening for raw I/O.
-        // macOS will return EBUSY if any partition is still mounted.
-        unmount_disk(path)?;
+        // Unmount all volumes on the disk before opening for raw I/O
+        // (only when opening for write — read-only operations shouldn't unmount).
+        if writable {
+            unmount_disk(path)?;
+        }
 
-        // Open directly — handle NotFound in the error rather than a separate
-        // exists() check (eliminates TOCTOU race).
+        // Open with O_NOFOLLOW to prevent symlink attacks (TOCTOU mitigation).
         let mut file = OpenOptions::new()
             .read(true)
-            .write(true)
+            .write(writable)
+            .custom_flags(libc::O_NOFOLLOW)
             .open(path)
             .map_err(|e| match e.kind() {
                 std::io::ErrorKind::NotFound => DriveWipeError::DeviceNotFound(path.to_path_buf()),
@@ -169,7 +171,11 @@ fn unmount_disk(path: &Path) -> Result<()> {
         DriveWipeError::DeviceError(format!("Invalid device path: {}", path.display()))
     })?;
 
-    let disk_id = name.strip_prefix('r').unwrap_or(name);
+    let disk_id = if name.starts_with("rdisk") {
+        &name[1..] // strip the 'r' to get 'diskN'
+    } else {
+        name
+    };
 
     log::info!(
         "Unmounting all volumes on {} before opening for raw I/O",

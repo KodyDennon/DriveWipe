@@ -3,7 +3,7 @@ use drivewipe_core::audit::{AuditEvent, AuditLogger};
 #[test]
 fn test_audit_logger_creates_entries() {
     let dir = tempfile::tempdir().unwrap();
-    let logger = AuditLogger::new(dir.path().to_path_buf(), None);
+    let mut logger = AuditLogger::new(dir.path().to_path_buf(), None);
 
     logger
         .log(

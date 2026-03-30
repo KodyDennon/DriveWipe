@@ -238,32 +238,33 @@ pub struct WipeResult {
     pub errors: Vec<String>,
 }
 
-/// Format a byte count into a human-readable string.
+/// Format a byte count into a human-readable string using decimal (SI) units
+/// to match `parse_capacity`.
 pub fn format_bytes(bytes: u64) -> String {
-    const KIB: u64 = 1024;
-    const MIB: u64 = KIB * 1024;
-    const GIB: u64 = MIB * 1024;
-    const TIB: u64 = GIB * 1024;
+    const KB: u64 = 1_000;
+    const MB: u64 = 1_000_000;
+    const GB: u64 = 1_000_000_000;
+    const TB: u64 = 1_000_000_000_000;
 
-    if bytes >= TIB {
-        format!("{:.2} TiB", bytes as f64 / TIB as f64)
-    } else if bytes >= GIB {
-        format!("{:.2} GiB", bytes as f64 / GIB as f64)
-    } else if bytes >= MIB {
-        format!("{:.2} MiB", bytes as f64 / MIB as f64)
-    } else if bytes >= KIB {
-        format!("{:.2} KiB", bytes as f64 / KIB as f64)
+    if bytes >= TB {
+        format!("{:.2} TB", bytes as f64 / TB as f64)
+    } else if bytes >= GB {
+        format!("{:.2} GB", bytes as f64 / GB as f64)
+    } else if bytes >= MB {
+        format!("{:.2} MB", bytes as f64 / MB as f64)
+    } else if bytes >= KB {
+        format!("{:.2} KB", bytes as f64 / KB as f64)
     } else {
         format!("{bytes} B")
     }
 }
 
-/// Format a throughput value in MiB/s.
+/// Format a throughput value in MB/s (decimal SI units).
 pub fn format_throughput(bytes_per_sec: f64) -> String {
-    let mib = bytes_per_sec / (1024.0 * 1024.0);
-    if mib >= 1000.0 {
-        format!("{:.1} GiB/s", mib / 1024.0)
+    let mb = bytes_per_sec / 1_000_000.0;
+    if mb >= 1000.0 {
+        format!("{:.1} GB/s", mb / 1000.0)
     } else {
-        format!("{mib:.1} MiB/s")
+        format!("{mb:.1} MB/s")
     }
 }

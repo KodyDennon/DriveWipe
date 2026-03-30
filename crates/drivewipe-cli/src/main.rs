@@ -222,6 +222,15 @@ enum PartitionAction {
         #[arg(long)]
         new_end: u64,
     },
+    /// Move a partition to a new start LBA
+    Move {
+        #[arg(short, long)]
+        device: String,
+        #[arg(short, long)]
+        index: u32,
+        #[arg(long)]
+        new_start: u64,
+    },
 }
 
 #[derive(Subcommand)]
@@ -400,6 +409,11 @@ async fn run(cli: Cli) -> Result<()> {
                 index,
                 new_end,
             } => commands::partition::resize(&config, &device, index, new_end).await,
+            PartitionAction::Move {
+                device,
+                index,
+                new_start,
+            } => commands::partition::move_partition(&config, &device, index, new_start).await,
         },
         Commands::Forensic { action } => match action {
             ForensicAction::Scan { device } => {
