@@ -46,10 +46,10 @@ pub async fn get_health(path: &std::path::Path) -> crate::error::Result<DriveHea
         if let Some(temp) = read_hwmon_temperature(path).await {
             snapshot.temperature_celsius = Some(temp);
             // Also populate into SMART data if we have it.
-            if let Some(ref mut smart) = snapshot.smart_data {
-                if smart.temperature_celsius.is_none() {
-                    smart.temperature_celsius = Some(temp);
-                }
+            if let Some(ref mut smart) = snapshot.smart_data
+                && smart.temperature_celsius.is_none()
+            {
+                smart.temperature_celsius = Some(temp);
             }
         }
     }
@@ -69,18 +69,18 @@ async fn read_hwmon_temperature(dev_path: &std::path::Path) -> Option<i16> {
     let mut entries = tokio::fs::read_dir(&hwmon_dir).await.ok()?;
     while let Ok(Some(entry)) = entries.next_entry().await {
         let temp_path = entry.path().join("temp1_input");
-        if let Ok(contents) = tokio::fs::read_to_string(&temp_path).await {
-            if let Ok(millidegrees) = contents.trim().parse::<i64>() {
-                let celsius = (millidegrees / 1000) as i16;
-                if (-40..=200).contains(&celsius) {
-                    return Some(celsius);
-                }
-                log::warn!(
-                    "hwmon temperature {}°C out of expected range for {}",
-                    celsius,
-                    dev_name,
-                );
+        if let Ok(contents) = tokio::fs::read_to_string(&temp_path).await
+            && let Ok(millidegrees) = contents.trim().parse::<i64>()
+        {
+            let celsius = (millidegrees / 1000) as i16;
+            if (-40..=200).contains(&celsius) {
+                return Some(celsius);
             }
+            log::warn!(
+                "hwmon temperature {}°C out of expected range for {}",
+                celsius,
+                dev_name,
+            );
         }
     }
     None
