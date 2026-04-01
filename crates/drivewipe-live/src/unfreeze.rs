@@ -37,11 +37,11 @@ pub fn any_drives_frozen() -> bool {
         }
 
         let dev_path = format!("/dev/{name_str}");
-        if let Ok(info) = crate::ata_security::query_ata_security(&dev_path) {
-            if info.frozen {
-                log::info!("Drive {} is frozen", dev_path);
-                return true;
-            }
+        if let Ok(info) = crate::ata_security::query_ata_security(&dev_path)
+            && info.frozen
+        {
+            log::info!("Drive {} is frozen", dev_path);
+            return true;
         }
     }
 
@@ -152,10 +152,10 @@ fn count_frozen_drives() -> u32 {
         }
 
         let dev_path = format!("/dev/{name_str}");
-        if let Ok(info) = crate::ata_security::query_ata_security(&dev_path) {
-            if info.frozen {
-                count += 1;
-            }
+        if let Ok(info) = crate::ata_security::query_ata_security(&dev_path)
+            && info.frozen
+        {
+            count += 1;
         }
     }
     count

@@ -96,12 +96,12 @@ impl MockDevice {
 
 impl RawDeviceIo for MockDevice {
     fn write_at(&mut self, offset: u64, buf: &[u8]) -> Result<usize> {
-        if let Some(err_offset) = self.inject_write_error_at {
-            if offset == err_offset {
-                return Err(drivewipe_core::error::DriveWipeError::IoGeneric(
-                    std::io::Error::other("injected write error"),
-                ));
-            }
+        if let Some(err_offset) = self.inject_write_error_at
+            && offset == err_offset
+        {
+            return Err(drivewipe_core::error::DriveWipeError::IoGeneric(
+                std::io::Error::other("injected write error"),
+            ));
         }
 
         let start = offset as usize;
@@ -113,12 +113,12 @@ impl RawDeviceIo for MockDevice {
     }
 
     fn read_at(&mut self, offset: u64, buf: &mut [u8]) -> Result<usize> {
-        if let Some(err_offset) = self.inject_read_error_at {
-            if offset == err_offset {
-                return Err(drivewipe_core::error::DriveWipeError::IoGeneric(
-                    std::io::Error::other("injected read error"),
-                ));
-            }
+        if let Some(err_offset) = self.inject_read_error_at
+            && offset == err_offset
+        {
+            return Err(drivewipe_core::error::DriveWipeError::IoGeneric(
+                std::io::Error::other("injected read error"),
+            ));
         }
 
         let start = offset as usize;

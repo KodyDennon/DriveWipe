@@ -134,34 +134,34 @@ impl WindowsDeviceIo {
                 )
             };
 
-            if let Ok(h) = offline_handle {
-                if h != INVALID_HANDLE_VALUE {
-                    let mut bytes_returned: u32 = 0;
-                    let offline_result = unsafe {
-                        DeviceIoControl(
-                            h,
-                            IOCTL_DISK_SET_DISK_ATTRIBUTES,
-                            Some(&mut attrs as *mut _ as *mut _),
-                            mem::size_of::<SetDiskAttributes>() as u32,
-                            None,
-                            0,
-                            Some(&mut bytes_returned),
-                            None,
-                        )
-                    };
+            if let Ok(h) = offline_handle
+                && h != INVALID_HANDLE_VALUE
+            {
+                let mut bytes_returned: u32 = 0;
+                let offline_result = unsafe {
+                    DeviceIoControl(
+                        h,
+                        IOCTL_DISK_SET_DISK_ATTRIBUTES,
+                        Some(&mut attrs as *mut _ as *mut _),
+                        mem::size_of::<SetDiskAttributes>() as u32,
+                        None,
+                        0,
+                        Some(&mut bytes_returned),
+                        None,
+                    )
+                };
 
-                    unsafe {
-                        let _ = CloseHandle(h);
-                    }
+                unsafe {
+                    let _ = CloseHandle(h);
+                }
 
-                    if let Err(err) = offline_result {
-                        log::warn!(
-                            "[WINDOWS] Failed to set disk offline (code {}): wipe may fail if disk has active partitions",
-                            err.code().0
-                        );
-                    } else {
-                        log::debug!("[WINDOWS] Disk set offline");
-                    }
+                if let Err(err) = offline_result {
+                    log::warn!(
+                        "[WINDOWS] Failed to set disk offline (code {}): wipe may fail if disk has active partitions",
+                        err.code().0
+                    );
+                } else {
+                    log::debug!("[WINDOWS] Disk set offline");
                 }
             }
 

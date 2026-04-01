@@ -270,10 +270,10 @@ fn read_meminfo_total() -> u64 {
         for line in contents.lines() {
             if line.starts_with("MemTotal:") {
                 let parts: Vec<&str> = line.split_whitespace().collect();
-                if parts.len() >= 2 {
-                    if let Ok(kb) = parts[1].parse::<u64>() {
-                        return kb * 1024; // Convert from kB to bytes
-                    }
+                if parts.len() >= 2
+                    && let Ok(kb) = parts[1].parse::<u64>()
+                {
+                    return kb * 1024; // Convert from kB to bytes
                 }
             }
         }
