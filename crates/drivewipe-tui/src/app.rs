@@ -896,18 +896,18 @@ impl App {
             }
             KeyCode::Char(' ') => {
                 // Toggle selection of current drive.
-                if let Some(i) = self.table_state.selected() {
-                    if i < self.selected_drives.len() {
-                        // Prevent selecting boot drives.
-                        if self.drives[i].is_boot_drive {
-                            let msg = format!(
-                                "Cannot select boot drive: {}",
-                                self.drives[i].path.display()
-                            );
-                            self.log_push(msg);
-                        } else {
-                            self.selected_drives[i] = !self.selected_drives[i];
-                        }
+                if let Some(i) = self.table_state.selected()
+                    && i < self.selected_drives.len()
+                {
+                    // Prevent selecting boot drives.
+                    if self.drives[i].is_boot_drive {
+                        let msg = format!(
+                            "Cannot select boot drive: {}",
+                            self.drives[i].path.display()
+                        );
+                        self.log_push(msg);
+                    } else {
+                        self.selected_drives[i] = !self.selected_drives[i];
                     }
                 }
             }
@@ -1579,79 +1579,76 @@ impl App {
                     match drivewipe_core::io::open_device(&path, true) {
                         Ok(mut device) => {
                             let mut buf = vec![0u8; 34 * 512];
-                            if device.read_at(0, &mut buf).is_ok() {
-                                if let Ok(mut table) =
+                            if device.read_at(0, &mut buf).is_ok()
+                                && let Ok(mut table) =
                                     drivewipe_core::partition::PartitionTable::parse(&buf)
-                                {
-                                    let parts = table.partitions();
-                                    let mut sorted: Vec<(u64, u64)> =
-                                        parts.iter().map(|p| (p.start_lba, p.end_lba)).collect();
-                                    sorted.sort_by_key(|&(s, _)| s);
+                            {
+                                let parts = table.partitions();
+                                let mut sorted: Vec<(u64, u64)> =
+                                    parts.iter().map(|p| (p.start_lba, p.end_lba)).collect();
+                                sorted.sort_by_key(|&(s, _)| s);
 
-                                    let cap_lba = device.capacity() / 512;
-                                    let tbl_end: u64 = match table.table_type() {
-                                        drivewipe_core::partition::PartitionTableType::Gpt => 34,
-                                        _ => 1,
-                                    };
+                                let cap_lba = device.capacity() / 512;
+                                let tbl_end: u64 = match table.table_type() {
+                                    drivewipe_core::partition::PartitionTableType::Gpt => 34,
+                                    _ => 1,
+                                };
 
-                                    // Find largest gap
-                                    let mut gap_start = tbl_end;
-                                    let mut best: Option<(u64, u64)> = None;
-                                    for &(start, end) in &sorted {
-                                        if start > gap_start + 2048 {
-                                            let sz = start - gap_start;
-                                            if best.is_none_or(|(_, s)| sz > s) {
-                                                best = Some((gap_start, sz));
-                                            }
-                                        }
-                                        gap_start = end + 1;
-                                    }
-                                    if cap_lba > gap_start + 2048 {
-                                        let sz = cap_lba - gap_start;
+                                // Find largest gap
+                                let mut gap_start = tbl_end;
+                                let mut best: Option<(u64, u64)> = None;
+                                for &(start, end) in &sorted {
+                                    if start > gap_start + 2048 {
+                                        let sz = start - gap_start;
                                         if best.is_none_or(|(_, s)| sz > s) {
                                             best = Some((gap_start, sz));
                                         }
                                     }
+                                    gap_start = end + 1;
+                                }
+                                if cap_lba > gap_start + 2048 {
+                                    let sz = cap_lba - gap_start;
+                                    if best.is_none_or(|(_, s)| sz > s) {
+                                        best = Some((gap_start, sz));
+                                    }
+                                }
 
-                                    if let Some((start, size)) = best {
-                                        let aligned =
-                                            drivewipe_core::partition::types::align_to_1mib(
-                                                start, 512,
-                                            );
-                                        let end = start + size - 1;
-                                        match drivewipe_core::partition::ops::create_partition(
-                                            device.as_mut(),
-                                            &mut table,
-                                            aligned,
-                                            end,
-                                            "0FC63DAF-8483-4772-8E79-3D69D8477DE4", // Linux filesystem
-                                            "New Partition",
-                                        ) {
-                                            Ok(part) => {
-                                                match drivewipe_core::partition::ops::write_table(
-                                                    device.as_mut(),
-                                                    &table,
-                                                ) {
-                                                    Ok(()) => {
-                                                        self.log_push(format!(
-                                                            "Created partition #{} (LBA {}-{})",
-                                                            part.index, aligned, end
-                                                        ));
-                                                        self.read_partition_table(drive_idx);
-                                                    }
-                                                    Err(e) => self.log_push(format!(
-                                                        "Failed to write table: {}",
-                                                        e
-                                                    )),
+                                if let Some((start, size)) = best {
+                                    let aligned =
+                                        drivewipe_core::partition::types::align_to_1mib(start, 512);
+                                    let end = start + size - 1;
+                                    match drivewipe_core::partition::ops::create_partition(
+                                        device.as_mut(),
+                                        &mut table,
+                                        aligned,
+                                        end,
+                                        "0FC63DAF-8483-4772-8E79-3D69D8477DE4", // Linux filesystem
+                                        "New Partition",
+                                    ) {
+                                        Ok(part) => {
+                                            match drivewipe_core::partition::ops::write_table(
+                                                device.as_mut(),
+                                                &table,
+                                            ) {
+                                                Ok(()) => {
+                                                    self.log_push(format!(
+                                                        "Created partition #{} (LBA {}-{})",
+                                                        part.index, aligned, end
+                                                    ));
+                                                    self.read_partition_table(drive_idx);
                                                 }
-                                            }
-                                            Err(e) => {
-                                                self.log_push(format!("Failed to create: {}", e));
+                                                Err(e) => self.log_push(format!(
+                                                    "Failed to write table: {}",
+                                                    e
+                                                )),
                                             }
                                         }
-                                    } else {
-                                        self.log_push("No unallocated space available".to_string());
+                                        Err(e) => {
+                                            self.log_push(format!("Failed to create: {}", e));
+                                        }
                                     }
+                                } else {
+                                    self.log_push("No unallocated space available".to_string());
                                 }
                             }
                         }
@@ -1689,29 +1686,27 @@ impl App {
         match drivewipe_core::io::open_device(&path, true) {
             Ok(mut device) => {
                 let mut buf = vec![0u8; 34 * 512];
-                if device.read_at(0, &mut buf).is_ok() {
-                    if let Ok(mut table) = drivewipe_core::partition::PartitionTable::parse(&buf) {
-                        match drivewipe_core::partition::ops::delete_partition(
-                            device.as_mut(),
-                            &mut table,
-                            part_idx as u32,
-                        ) {
-                            Ok(()) => {
-                                match drivewipe_core::partition::ops::write_table(
-                                    device.as_mut(),
-                                    &table,
-                                ) {
-                                    Ok(()) => {
-                                        self.log_push(format!("Partition #{} deleted", part_idx));
-                                        self.read_partition_table(drive_idx);
-                                    }
-                                    Err(e) => {
-                                        self.log_push(format!("Failed to write table: {}", e))
-                                    }
+                if device.read_at(0, &mut buf).is_ok()
+                    && let Ok(mut table) = drivewipe_core::partition::PartitionTable::parse(&buf)
+                {
+                    match drivewipe_core::partition::ops::delete_partition(
+                        device.as_mut(),
+                        &mut table,
+                        part_idx as u32,
+                    ) {
+                        Ok(()) => {
+                            match drivewipe_core::partition::ops::write_table(
+                                device.as_mut(),
+                                &table,
+                            ) {
+                                Ok(()) => {
+                                    self.log_push(format!("Partition #{} deleted", part_idx));
+                                    self.read_partition_table(drive_idx);
                                 }
+                                Err(e) => self.log_push(format!("Failed to write table: {}", e)),
                             }
-                            Err(e) => self.log_push(format!("Failed to delete: {}", e)),
                         }
+                        Err(e) => self.log_push(format!("Failed to delete: {}", e)),
                     }
                 }
             }
@@ -2134,11 +2129,11 @@ impl App {
 
     fn handle_tick(&mut self) {
         // Check the confirmation countdown.
-        if let Some(started) = self.confirm_countdown {
-            if started.elapsed() >= Duration::from_secs(3) {
-                self.confirm_countdown = None;
-                self.start_wipes();
-            }
+        if let Some(started) = self.confirm_countdown
+            && started.elapsed() >= Duration::from_secs(3)
+        {
+            self.confirm_countdown = None;
+            self.start_wipes();
         }
     }
 

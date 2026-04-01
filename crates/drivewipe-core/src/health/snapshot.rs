@@ -67,15 +67,15 @@ impl DriveHealthSnapshot {
 
     /// Overall health assessment.
     pub fn is_healthy(&self) -> bool {
-        if let Some(ref smart) = self.smart_data {
-            if !smart.healthy {
-                return false;
-            }
+        if let Some(ref smart) = self.smart_data
+            && !smart.healthy
+        {
+            return false;
         }
-        if let Some(ref nvme) = self.nvme_health {
-            if !nvme.is_healthy() {
-                return false;
-            }
+        if let Some(ref nvme) = self.nvme_health
+            && !nvme.is_healthy()
+        {
+            return false;
         }
         true
     }

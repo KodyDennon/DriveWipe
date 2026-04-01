@@ -657,11 +657,11 @@ mod macos_nvme {
             sanact.to_string(),
         ];
 
-        if sanact == SANITIZE_ACT_OVERWRITE {
-            if let Some(pattern) = overwrite_pattern {
-                args.push("--ovrpat".to_string());
-                args.push(pattern.to_string());
-            }
+        if sanact == SANITIZE_ACT_OVERWRITE
+            && let Some(pattern) = overwrite_pattern
+        {
+            args.push("--ovrpat".to_string());
+            args.push(pattern.to_string());
         }
 
         args.push("--force".to_string());

@@ -18,10 +18,10 @@ impl PartitionTable {
     /// Parse a partition table from the first sectors of a device.
     pub fn parse(data: &[u8]) -> Result<Self> {
         // Try GPT first (has protective MBR + GPT header at LBA 1)
-        if data.len() >= 1024 {
-            if let Ok(gpt_table) = gpt::GptTable::parse(data) {
-                return Ok(PartitionTable::Gpt(gpt_table));
-            }
+        if data.len() >= 1024
+            && let Ok(gpt_table) = gpt::GptTable::parse(data)
+        {
+            return Ok(PartitionTable::Gpt(gpt_table));
         }
 
         // Fall back to MBR

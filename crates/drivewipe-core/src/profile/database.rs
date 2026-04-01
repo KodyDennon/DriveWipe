@@ -38,24 +38,24 @@ impl ProfileDatabase {
         }
 
         // Load user profiles from directory
-        if profiles_dir.exists() {
-            if let Ok(entries) = std::fs::read_dir(profiles_dir) {
-                for entry in entries.flatten() {
-                    let path = entry.path();
-                    if path.extension().is_some_and(|ext| ext == "toml") {
-                        match std::fs::read_to_string(&path) {
-                            Ok(contents) => match toml::from_str::<DriveProfile>(&contents) {
-                                Ok(profile) => {
-                                    log::info!("Loaded user profile: {}", profile.name);
-                                    profiles.push(profile);
-                                }
-                                Err(e) => {
-                                    log::warn!("Failed to parse profile {}: {}", path.display(), e);
-                                }
-                            },
-                            Err(e) => {
-                                log::warn!("Failed to read profile {}: {}", path.display(), e);
+        if profiles_dir.exists()
+            && let Ok(entries) = std::fs::read_dir(profiles_dir)
+        {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.extension().is_some_and(|ext| ext == "toml") {
+                    match std::fs::read_to_string(&path) {
+                        Ok(contents) => match toml::from_str::<DriveProfile>(&contents) {
+                            Ok(profile) => {
+                                log::info!("Loaded user profile: {}", profile.name);
+                                profiles.push(profile);
                             }
+                            Err(e) => {
+                                log::warn!("Failed to parse profile {}: {}", path.display(), e);
+                            }
+                        },
+                        Err(e) => {
+                            log::warn!("Failed to read profile {}: {}", path.display(), e);
                         }
                     }
                 }

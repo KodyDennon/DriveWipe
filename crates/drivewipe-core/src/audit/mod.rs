@@ -136,10 +136,10 @@ impl AuditLogger {
             log::warn!("Failed to create audit dir for HMAC key: {e}");
         }
         let key_path = audit_dir.join(".audit_hmac_key");
-        if !key_path.exists() {
-            if let Err(e) = fs::write(&key_path, hex::encode(hmac_key)) {
-                log::warn!("Failed to write HMAC key: {e}");
-            }
+        if !key_path.exists()
+            && let Err(e) = fs::write(&key_path, hex::encode(hmac_key))
+        {
+            log::warn!("Failed to write HMAC key: {e}");
         }
 
         Self {

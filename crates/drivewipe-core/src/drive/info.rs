@@ -115,12 +115,12 @@ fn detect_boot_drive_macos(device_path: &str) -> bool {
 
     for line in stdout.lines() {
         // Format: "/dev/disk1s1 on / (apfs, ...)"
-        if line.contains(" on / (") || line.contains(" on / ") {
-            if let Some(dev) = line.split_whitespace().next() {
-                let mount_base = extract_base_device(dev);
-                if mount_base == base_dev {
-                    return true;
-                }
+        if (line.contains(" on / (") || line.contains(" on / "))
+            && let Some(dev) = line.split_whitespace().next()
+        {
+            let mount_base = extract_base_device(dev);
+            if mount_base == base_dev {
+                return true;
             }
         }
     }

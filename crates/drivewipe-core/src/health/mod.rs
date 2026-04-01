@@ -72,7 +72,7 @@ async fn read_hwmon_temperature(dev_path: &std::path::Path) -> Option<i16> {
         if let Ok(contents) = tokio::fs::read_to_string(&temp_path).await {
             if let Ok(millidegrees) = contents.trim().parse::<i64>() {
                 let celsius = (millidegrees / 1000) as i16;
-                if celsius >= -40 && celsius <= 200 {
+                if (-40..=200).contains(&celsius) {
                     return Some(celsius);
                 }
                 log::warn!(

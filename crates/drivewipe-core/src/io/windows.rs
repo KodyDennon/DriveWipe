@@ -19,8 +19,8 @@ use std::os::windows::ffi::OsStrExt;
 use windows::Win32::Foundation::{CloseHandle, HANDLE, INVALID_HANDLE_VALUE};
 #[cfg(target_os = "windows")]
 use windows::Win32::Storage::FileSystem::{
-    CreateFileW, FILE_BEGIN, FILE_FLAG_NO_BUFFERING, FILE_FLAG_WRITE_THROUGH, FlushFileBuffers,
-    OPEN_EXISTING, ReadFile, SetFilePointerEx, WriteFile,
+    CreateFileW, FILE_FLAG_NO_BUFFERING, FILE_FLAG_WRITE_THROUGH, FlushFileBuffers, OPEN_EXISTING,
+    ReadFile, WriteFile,
 };
 #[cfg(target_os = "windows")]
 use windows::Win32::System::IO::DeviceIoControl;

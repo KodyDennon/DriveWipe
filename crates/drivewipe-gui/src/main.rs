@@ -267,11 +267,11 @@ impl DriveWipeApp {
             // Drive selection
             Message::ToggleDrive(i) => {
                 // Prevent selecting boot drives — safety check
-                if let Some(drive) = self.drives.get(i) {
-                    if drive.is_boot_drive {
-                        self.status_message = Some("Cannot select boot drive".to_string());
-                        return IcedTask::none();
-                    }
+                if let Some(drive) = self.drives.get(i)
+                    && drive.is_boot_drive
+                {
+                    self.status_message = Some("Cannot select boot drive".to_string());
+                    return IcedTask::none();
                 }
                 if let Some(val) = self.selected_drives.get_mut(i) {
                     *val = !*val;
@@ -336,11 +336,11 @@ impl DriveWipeApp {
                     self.cancel_token =
                         std::sync::Arc::new(drivewipe_core::session::CancellationToken::new());
 
-                    if let Some(mi) = self.selected_method {
-                        if let Some((id, name, _)) = self.methods.get(mi) {
-                            self.selected_method_id = id.clone();
-                            self.wipe_method_name = name.clone();
-                        }
+                    if let Some(mi) = self.selected_method
+                        && let Some((id, name, _)) = self.methods.get(mi)
+                    {
+                        self.selected_method_id = id.clone();
+                        self.wipe_method_name = name.clone();
                     }
 
                     self.selected_device_paths = self
@@ -558,73 +558,69 @@ impl DriveWipeApp {
                     self.status_message = Some("Type YES to confirm clone operation".to_string());
                     return IcedTask::none();
                 }
-                if let (Some(src_idx), Some(tgt_idx)) = (self.clone_source, self.clone_target) {
-                    if let (Some(src_drive), Some(tgt_drive)) =
+                if let (Some(src_idx), Some(tgt_idx)) = (self.clone_source, self.clone_target)
+                    && let (Some(src_drive), Some(tgt_drive)) =
                         (self.drives.get(src_idx), self.drives.get(tgt_idx))
-                    {
-                        self.clone_running = true;
-                        self.clone_progress = 0.0;
-                        self.clone_complete = false;
-                        self.clone_throughput.clear();
-                        self.clone_cancel_token =
-                            std::sync::Arc::new(drivewipe_core::session::CancellationToken::new());
+                {
+                    self.clone_running = true;
+                    self.clone_progress = 0.0;
+                    self.clone_complete = false;
+                    self.clone_throughput.clear();
+                    self.clone_cancel_token =
+                        std::sync::Arc::new(drivewipe_core::session::CancellationToken::new());
 
-                        let source_path = src_drive.path.clone();
-                        let target_path = tgt_drive.path.clone();
-                        let cancel_token = self.clone_cancel_token.clone();
+                    let source_path = src_drive.path.clone();
+                    let target_path = tgt_drive.path.clone();
+                    let cancel_token = self.clone_cancel_token.clone();
 
-                        return IcedTask::run(
-                            iced::stream::channel(
-                                100,
-                                move |output: iced::futures::channel::mpsc::Sender<Message>| async move {
-                                    let (tx, rx) = crossbeam_channel::unbounded();
+                    return IcedTask::run(
+                        iced::stream::channel(
+                            100,
+                            move |output: iced::futures::channel::mpsc::Sender<Message>| async move {
+                                let (tx, rx) = crossbeam_channel::unbounded();
 
-                                    let mut output_clone = output.clone();
-                                    tokio::spawn(async move {
-                                        while let Ok(event) = rx.recv() {
-                                            let _ =
-                                                output_clone.send(Message::CloneEvent(event)).await;
-                                        }
-                                    });
+                                let mut output_clone = output.clone();
+                                tokio::spawn(async move {
+                                    while let Ok(event) = rx.recv() {
+                                        let _ = output_clone.send(Message::CloneEvent(event)).await;
+                                    }
+                                });
 
-                                    let config = drivewipe_core::clone::CloneConfig {
-                                        source: source_path.clone(),
-                                        target: target_path.clone(),
-                                        mode: drivewipe_core::clone::CloneMode::Block,
-                                        compression: drivewipe_core::clone::CompressionMode::None,
-                                        encrypt: false,
-                                        password: None,
-                                        verify: true,
-                                        block_size: 4 * 1024 * 1024,
-                                        bandwidth_limit_bps: None,
-                                    };
+                                let config = drivewipe_core::clone::CloneConfig {
+                                    source: source_path.clone(),
+                                    target: target_path.clone(),
+                                    mode: drivewipe_core::clone::CloneMode::Block,
+                                    compression: drivewipe_core::clone::CompressionMode::None,
+                                    encrypt: false,
+                                    password: None,
+                                    verify: true,
+                                    block_size: 4 * 1024 * 1024,
+                                    bandwidth_limit_bps: None,
+                                };
 
-                                    let mut source_dev = match drivewipe_core::io::open_device(
-                                        &source_path,
-                                        false,
-                                    ) {
+                                let mut source_dev =
+                                    match drivewipe_core::io::open_device(&source_path, false) {
                                         Ok(d) => d,
                                         Err(_) => return,
                                     };
-                                    let mut target_dev =
-                                        match drivewipe_core::io::open_device(&target_path, true) {
-                                            Ok(d) => d,
-                                            Err(_) => return,
-                                        };
+                                let mut target_dev =
+                                    match drivewipe_core::io::open_device(&target_path, true) {
+                                        Ok(d) => d,
+                                        Err(_) => return,
+                                    };
 
-                                    let _ = drivewipe_core::clone::block::clone_block(
-                                        source_dev.as_mut(),
-                                        target_dev.as_mut(),
-                                        &config,
-                                        &tx,
-                                        &cancel_token,
-                                    )
-                                    .await;
-                                },
-                            ),
-                            |msg| msg,
-                        );
-                    }
+                                let _ = drivewipe_core::clone::block::clone_block(
+                                    source_dev.as_mut(),
+                                    target_dev.as_mut(),
+                                    &config,
+                                    &tx,
+                                    &cancel_token,
+                                )
+                                .await;
+                            },
+                        ),
+                        |msg| msg,
+                    );
                 }
                 IcedTask::none()
             }

@@ -58,13 +58,13 @@ impl ForensicReport {
             ));
         }
 
-        if let Some(ref sampling) = results.sampling_result {
-            if sampling.data_remnant_pct > 1.0 {
-                conclusions.push(format!(
-                    "Statistical sampling found {:.1}% data remnants",
-                    sampling.data_remnant_pct
-                ));
-            }
+        if let Some(ref sampling) = results.sampling_result
+            && sampling.data_remnant_pct > 1.0
+        {
+            conclusions.push(format!(
+                "Statistical sampling found {:.1}% data remnants",
+                sampling.data_remnant_pct
+            ));
         }
 
         if let Some(ref hidden) = results.hidden_areas {
