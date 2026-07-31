@@ -17,7 +17,10 @@ jobs:
     name: CI Gate (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     strategy:
-      fail-fast: true
+      # Run every platform to completion. A release gate should report which
+      # platforms are broken, not just the first one to fail — cancelling the
+      # rest hides whether a failure is platform-specific or universal.
+      fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
     steps:
@@ -32,10 +35,26 @@ jobs:
         run: cargo test --workspace
       - name: Clippy
         run: cargo clippy --workspace -- -D warnings
+      - name: Format
+        run: cargo fmt --all -- --check
+
+  # The release gate must also refuse to publish artifacts with known
+  # vulnerable dependencies; CI checks this on every push, but a tag can be
+  # cut from a commit whose advisory status has since changed.
+  audit-gate:
+    name: Security Audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-audit
+      - name: Audit dependencies
+        run: cargo audit
 
   build:
     name: Build (${{ matrix.target }})
-    needs: ci-gate
+    needs: [ci-gate, audit-gate]
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -136,7 +155,7 @@ jobs:
   # ── Live ISO Build ──────────────────────────────────────────────────────
   build-live:
     name: Build Live ISO
-    needs: ci-gate
+    needs: [ci-gate, audit-gate]
     runs-on: ubuntu-latest
     outputs:
       # Whether an ISO was actually produced, so the release notes only
