@@ -30,8 +30,8 @@ cargo build --workspace
 # Build with PDF support
 cargo build --workspace --features drivewipe-core/pdf-report
 
-# Build TUI with live features (Linux only)
-cargo build --package drivewipe-tui --features live
+# Build without the desktop interface (servers, containers, the live image)
+cargo build --package drivewipe-cli --no-default-features --features pdf-report
 
 # Build the live USB image
 cargo xtask live-build

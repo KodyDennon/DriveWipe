@@ -5,7 +5,7 @@ set -euo pipefail
 # Builds a bootable Alpine-based live USB with DriveWipe pre-installed.
 #
 # Build stages:
-#   1. Build Rust binaries (musl static, --features live)
+#   1. Build the drivewipe binary (musl static, no GUI)
 #   2. Build kernel module (alpine-sdk + linux-lts-dev)
 #   3. Assemble rootfs (binaries + module + configs)
 #   4. Create bootable image + PXE artifacts
