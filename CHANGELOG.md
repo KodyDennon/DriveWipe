@@ -7,14 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [2.0.1] - 2026-07-31
+## [2.0.2] - 2026-07-31
 
 Major release focused on making the DoD and mil-spec wipe methods genuinely
 complete and verifiable on Linux.
 
-> `v2.0.0` was tagged but never published: the release gate caught a flaky test
-> before any artifact was built, and release tags are immutable. `2.0.1` is the
-> first published release of this work and is otherwise identical in scope.
+> `v2.0.0` and `v2.0.1` were tagged but never published — the release gate
+> caught a flaky test and then a missing `rustfmt` component before any artifact
+> was built, and release tags are immutable. `2.0.2` is the first published
+> release of this work.
 
 ### Added
 - **One binary instead of three** — `drivewipe` now contains the CLI, terminal UI and desktop UI, and chooses between them from how it is invoked: a bare call on a terminal opens the TUI, `--gui` opens the desktop window, and any subcommand runs the CLI. Piped or redirected invocations fall back to the CLI so scripts and cron jobs stay predictable. `drivewipe-tui` and `drivewipe-gui` continue to work as symlinks, dispatched on argv[0]. Server and live-image builds can drop the desktop interface with `--no-default-features --features pdf-report`.
@@ -43,6 +44,10 @@ complete and verifiable on Linux.
 - `SHA256SUMS.txt` in each release covered only one of the eight published artifacts, because the generating glob (`drivewipe-*`) did not match the desktop archives (`DriveWipe-*`) — while the release notes told users to verify their downloads against it.
 - Release notes advertised a Live ISO that was silently omitted whenever the ISO build produced nothing; the ISO row now appears only when the file actually ships.
 - Removed `quick-xml`, an unused dependency, and updated the lockfile, clearing all outstanding `cargo audit` vulnerabilities.
+- Replaced the abandoned `genpdf` with `printpdf`, which drops `lopdf 0.26` and RUSTSEC-2026-0187 entirely — `cargo audit` is now clean with no suppressions — along with the unmaintained `rusttype`, `ttf-parser` and `stb_truetype` font crates.
+- PDF certificates previously required a LiberationSans font file in one of four Linux paths and failed outright when none was found, so `--report-pdf` could not work on macOS or Windows. The certificate now uses the PDF base-14 fonts and needs no font files at all.
+- PDF certificate metadata recorded the Unix epoch as its creation date; it now carries the wipe's completion time, the device, and the operator.
+- Certificates now list per-pass verification results, warnings and errors, so an unremovable hidden area or a failed pass appears on the document itself.
 - Verification no longer selects its strategy by substring-matching the pattern's display name.
 - Resumed random passes are now consistent with the bytes already written.
 - Remaining `collapsible_match` clippy lints in the TUI.

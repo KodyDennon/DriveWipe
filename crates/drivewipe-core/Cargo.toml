@@ -1,6 +1,6 @@
 [package]
 name = "drivewipe-core"
-version = "2.0.1"
+version = "2.0.2"
 edition.workspace = true
 rust-version.workspace = true
 authors.workspace = true
@@ -9,7 +9,7 @@ description = "Core library for DriveWipe — drive enumeration, wipe engine, ve
 
 [features]
 default = []
-pdf-report = ["dep:genpdf"]
+pdf-report = ["dep:printpdf"]
 real-device-tests = []
 
 [dependencies]
@@ -29,7 +29,7 @@ chrono.workspace = true
 log.workspace = true
 dirs.workspace = true
 hostname.workspace = true
-genpdf = { workspace = true, optional = true }
+printpdf = { workspace = true, optional = true }
 
 # New dependencies for overhaul
 sha2.workspace = true

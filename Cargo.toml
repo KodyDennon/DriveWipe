@@ -88,7 +88,7 @@ windows = { version = "0.62", features = [
 ] }
 
 # PDF
-genpdf = "0.2"
+printpdf = { version = "0.12", default-features = false }
 
 # Utilities
 uuid = { version = "1", features = ["v4", "serde"] }
