@@ -53,7 +53,28 @@ while [ $# -gt 0 ]; do
         --prefix=*) PREFIX="${1#*=}"; shift ;;
         --uninstall) UNINSTALL=1; shift ;;
         --no-verify) VERIFY=0; shift ;;
-        -h|--help) sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+        -h|--help)
+            # Printed inline rather than read back from $0, because under
+            # `curl … | sh` there is no script file to read.
+            cat <<'USAGE'
+DriveWipe installer
+
+Usage:
+  curl -fsSL https://raw.githubusercontent.com/KodyDennon/DriveWipe/main/install.sh | sh
+  ./install.sh [options]
+
+Options:
+  --version X.Y.Z   Install a specific version (default: latest)
+  --prefix DIR      Install root (default: /usr/local, or ~/.local without root)
+  --uninstall       Remove an existing installation
+  --no-verify       Skip checksum verification (not recommended)
+  -h, --help        Show this message
+
+To pass options through a pipe, use `sh -s --`:
+  curl -fsSL .../install.sh | sh -s -- --uninstall
+USAGE
+            exit 0
+            ;;
         *) die "unknown option: $1 (try --help)" ;;
     esac
 done
