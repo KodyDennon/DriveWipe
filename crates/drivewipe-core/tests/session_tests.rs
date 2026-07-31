@@ -15,6 +15,8 @@ struct MockDevice {
     /// Offset of a sector that silently refuses writes, simulating a drive that
     /// reports success but leaves the old contents in place.
     bad_sector: Option<u64>,
+    /// The value that stuck byte is pinned to.
+    stuck_value: u8,
 }
 
 impl MockDevice {
@@ -23,6 +25,7 @@ impl MockDevice {
             data: vec![0xFFu8; size],
             block_size: 512,
             bad_sector: None,
+            stuck_value: 0xFF,
         }
     }
 
@@ -33,6 +36,15 @@ impl MockDevice {
             bad_sector: Some(offset),
             ..Self::new(size)
         }
+    }
+
+    /// Like [`with_bad_sector`], but the stuck byte holds `value`, so it matches
+    /// some passes and not others.
+    fn with_stuck_byte(size: usize, offset: u64, value: u8) -> Self {
+        let mut dev = Self::with_bad_sector(size, offset);
+        dev.stuck_value = value;
+        dev.data[offset as usize] = value;
+        dev
     }
 }
 
@@ -47,7 +59,7 @@ impl RawDeviceIo for MockDevice {
         if let Some(bad) = self.bad_sector
             && (start..end).contains(&(bad as usize))
         {
-            self.data[bad as usize] = 0xFF;
+            self.data[bad as usize] = self.stuck_value;
         }
         Ok(n)
     }
@@ -352,6 +364,45 @@ async fn verify_each_pass_catches_a_failure_on_an_intermediate_pass() {
             .any(|w| w.contains("Pass 1 verification mismatch")),
         "expected pass 1 to be blamed, got: {:?}",
         result.warnings
+    );
+    assert_eq!(result.outcome, WipeOutcome::Failed);
+}
+
+#[tokio::test]
+async fn an_earlier_failed_pass_fails_the_whole_session() {
+    use drivewipe_core::wipe::software::DodShortMethod;
+
+    // A sector stuck at 0x00 takes the zero pass fine but not the 0xFF pass,
+    // so pass 2 fails while pass 3 (random) is unaffected at that byte only if
+    // the final pass happens to match. Regardless of which passes fail, the
+    // session verdict must not be decided by the last pass alone.
+    let size = 512 * 1024;
+    let mut device = MockDevice::with_stuck_byte(size, 200 * 1024, 0x00);
+    let drive_info = make_drive_info(size as u64);
+
+    let config = DriveWipeConfig {
+        verify_each_pass: true,
+        ..DriveWipeConfig::default()
+    };
+
+    let method: Box<dyn drivewipe_core::wipe::WipeMethod> = Box::new(DodShortMethod);
+    let session = WipeSession::new(drive_info, method, config);
+
+    let (tx, _rx) = crossbeam_channel::unbounded::<ProgressEvent>();
+    let result = session
+        .execute(&mut device, &tx, &CancellationToken::new(), None)
+        .await
+        .unwrap();
+
+    // Pass 1 writes zeros, so the stuck 0x00 byte matches and pass 1 passes.
+    assert_eq!(result.passes[0].verification_passed, Some(true));
+    // Pass 2 writes 0xFF, which the stuck byte refuses.
+    assert_eq!(result.passes[1].verification_passed, Some(false));
+
+    assert_eq!(
+        result.verification_passed,
+        Some(false),
+        "a failure on any pass must fail the session, not just a failure on the last"
     );
     assert_eq!(result.outcome, WipeOutcome::Failed);
 }

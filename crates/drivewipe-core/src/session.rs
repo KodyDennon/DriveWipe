@@ -657,9 +657,15 @@ impl WipeSession {
             match last_pattern.take() {
                 Some(pattern) => {
                     // Already verified as part of the pass loop; don't read the
-                    // whole device a second time for no new information.
+                    // whole device a second time for no new information. The
+                    // session only passes if *every* pass did — a failure on an
+                    // earlier pass still means the wipe is not sound.
                     if self.verify_each_pass {
-                        pass_results.last().and_then(|p| p.verification_passed)
+                        Some(
+                            pass_results
+                                .iter()
+                                .all(|p| p.verification_passed == Some(true)),
+                        )
                     } else {
                         let (passed, _) = Self::verify_pattern(
                             pattern,
