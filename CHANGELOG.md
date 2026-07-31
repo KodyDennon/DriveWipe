@@ -13,6 +13,8 @@ Major release focused on making the DoD and mil-spec wipe methods genuinely
 complete and verifiable on Linux.
 
 ### Added
+- **One binary instead of three** — `drivewipe` now contains the CLI, terminal UI and desktop UI, and chooses between them from how it is invoked: a bare call on a terminal opens the TUI, `--gui` opens the desktop window, and any subcommand runs the CLI. Piped or redirected invocations fall back to the CLI so scripts and cron jobs stay predictable. `drivewipe-tui` and `drivewipe-gui` continue to work as symlinks, dispatched on argv[0]. Server and live-image builds can drop the desktop interface with `--no-default-features --features pdf-report`.
+- **One-command installer** — `install.sh` detects platform and architecture, downloads the matching release, verifies it against the published SHA-256 checksum before installing, sets up `/usr/local/bin` (or `~/.local/bin` without root), writes a desktop entry, and supports `--uninstall`, `--version` and `--prefix`. It is also shipped inside each release archive for offline installs.
 - **Six new sanitization standards** — NIST SP 800-88 Clear (`nist-800-88-clear`) and Purge (`nist-800-88-purge`), AFSSI-5020 (`afssi-5020`), AR 380-19 (`ar-380-19`), NAVSO P-5239-26 (`navso-p-5239-26`), and VSITR (`vsitr`). The CLI and README previously claimed NIST SP 800-88 compliance while no such method existed; selecting it returned "Unknown wipe method".
 - **Byte-for-byte verification of random passes** — random passes are now reproduced from their AES-256-CTR seed and compared against the full device surface. Previously a random pass could only be sampled: 16 blocks were read and checked for being non-zero, so a sector that silently failed to take the write passed unnoticed. Both DoD methods end on a random pass and were therefore the least-verified methods in the tool.
 - **Per-pass verification** — `--verify-each-pass` (config: `verify_each_pass`) reads the whole surface back after every pass instead of only the last, producing per-pass evidence at roughly double the wall-clock time.
@@ -32,6 +34,11 @@ complete and verifiable on Linux.
 - **TUI settings are table-driven** — settings rendering and key handling now share one definition rather than duplicating hardcoded indices in three places, and the screen exposes Auto Verify, Verify Every Pass, Remove Hidden Areas and Default Method.
 
 ### Fixed
+- Under per-pass verification the session verdict was taken from the last pass alone, so a failure on an earlier pass was discarded and the wipe still reported success.
+- The GUI opened the device without sweeping HPA/DCO, so a wipe started from the desktop interface left hidden sectors intact even though the CLI and TUI covered them.
+- `SHA256SUMS.txt` in each release covered only one of the eight published artifacts, because the generating glob (`drivewipe-*`) did not match the desktop archives (`DriveWipe-*`) — while the release notes told users to verify their downloads against it.
+- Release notes advertised a Live ISO that was silently omitted whenever the ISO build produced nothing; the ISO row now appears only when the file actually ships.
+- Removed `quick-xml`, an unused dependency, and updated the lockfile, clearing all outstanding `cargo audit` vulnerabilities.
 - Verification no longer selects its strategy by substring-matching the pattern's display name.
 - Resumed random passes are now consistent with the bytes already written.
 - Remaining `collapsible_match` clippy lints in the TUI.

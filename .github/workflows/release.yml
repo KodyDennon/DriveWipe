@@ -89,18 +89,10 @@ jobs:
         with:
           key: release-${{ matrix.target }}
 
-      - name: Build CLI
+      # One binary carries all three interfaces; it picks between them from how
+      # it is invoked.
+      - name: Build DriveWipe
         run: cargo build --release --target ${{ matrix.target }} --package drivewipe-cli
-        env:
-          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
-
-      - name: Build TUI
-        run: cargo build --release --target ${{ matrix.target }} --package drivewipe-tui
-        env:
-          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
-
-      - name: Build GUI
-        run: cargo build --release --target ${{ matrix.target }} --package drivewipe-gui
         env:
           CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
 
@@ -124,10 +116,9 @@ jobs:
           mkdir -p dist
 
           cp target/${{ matrix.target }}/release/drivewipe${{ matrix.suffix }} dist/
-          cp target/${{ matrix.target }}/release/drivewipe-tui${{ matrix.suffix }} dist/
-          cp target/${{ matrix.target }}/release/drivewipe-gui${{ matrix.suffix }} dist/ 2>/dev/null || true
           cp LICENSE.md dist/
           cp README.md dist/
+          cp install.sh dist/ 2>/dev/null || true
 
           cd dist
           if [ "${{ matrix.archive }}" = "zip" ]; then
@@ -167,18 +158,14 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y musl-tools
 
-      - name: Build TUI for live (static musl)
+      # The live image is text-mode, and iced does not link against musl, so
+      # the GUI is excluded from this build.
+      - name: Build DriveWipe for live (static musl, no GUI)
         run: |
           cargo build --release \
             --target x86_64-unknown-linux-musl \
-            --package drivewipe-tui \
-            --features live
-
-      - name: Build CLI for live (static musl)
-        run: |
-          cargo build --release \
-            --target x86_64-unknown-linux-musl \
-            --package drivewipe-cli
+            --package drivewipe-cli \
+            --no-default-features --features pdf-report
 
       - name: Extract version
         id: version

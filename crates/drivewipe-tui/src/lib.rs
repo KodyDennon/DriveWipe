@@ -1,11 +1,10 @@
 //! DriveWipe Terminal User Interface (TUI)
 //!
-//! The `drivewipe-tui` binary provides a modern, interactive terminal interface
-//! built on `ratatui`. It offers a dashboard-centric workflow for managing
-//! multiple wipes, viewing drive health, and performing forensic scans.
+//! A dashboard-centric `ratatui` interface for managing multiple wipes, viewing
+//! drive health, and performing forensic scans.
 //!
-//! Special features like HPA/DCO removal and drive unfreezing are automatically
-//! enabled when running in a supported Live environment.
+//! Live-environment features (HPA/DCO removal, drive unfreezing) are enabled
+//! automatically when running on a supported system.
 
 use std::io;
 
@@ -16,18 +15,18 @@ use crossterm::{
 };
 use ratatui::prelude::*;
 
-mod app;
-mod event;
-mod ui;
-mod widgets;
+pub mod app;
+pub mod event;
+pub mod ui;
+pub mod widgets;
 
-#[tokio::main]
-async fn main() -> anyhow::Result<()> {
-    env_logger::init();
-
-    // Check privileges — warn but allow the TUI to start so users can at
-    // least browse the drive list. Wipe operations will fail gracefully if
-    // elevated privileges are truly required.
+/// Run the terminal interface until the user exits.
+///
+/// The terminal is always restored, including on error — leaving a user in raw
+/// mode with no cursor after a crash is worse than the crash.
+pub async fn run() -> anyhow::Result<()> {
+    // Warn but continue without elevation so the drive list stays browsable;
+    // operations that genuinely need privileges fail with their own message.
     if !drivewipe_core::platform::privilege::is_elevated() {
         eprintln!(
             "Warning: {}",
@@ -35,25 +34,22 @@ async fn main() -> anyhow::Result<()> {
         );
     }
 
-    // Load config before entering raw mode so parse errors are readable.
+    // Load config before entering raw mode so parse errors stay readable.
     let config =
         drivewipe_core::config::DriveWipeConfig::load().map_err(|e| anyhow::anyhow!("{e}"))?;
 
-    // Setup terminal
     enable_raw_mode()?;
     let mut stdout = io::stdout();
     execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
 
-    // Create app and run — always restore the terminal even on error.
     let result = async {
         let mut app = app::App::new(config).await?;
         app.run(&mut terminal).await
     }
     .await;
 
-    // Restore terminal
     disable_raw_mode()?;
     execute!(
         terminal.backend_mut(),

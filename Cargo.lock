@@ -1322,6 +1322,8 @@ dependencies = [
  "ctrlc",
  "dialoguer",
  "drivewipe-core",
+ "drivewipe-gui",
+ "drivewipe-tui",
  "env_logger",
  "indicatif",
  "log",

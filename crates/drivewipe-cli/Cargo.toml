@@ -12,11 +12,17 @@ name = "drivewipe"
 path = "src/main.rs"
 
 [features]
-default = ["pdf-report"]
+default = ["pdf-report", "gui"]
 pdf-report = ["drivewipe-core/pdf-report"]
+# The desktop interface. Disable it for static musl and headless server builds,
+# where the windowing stack is unavailable or unwanted; the CLI and TUI are
+# unaffected.
+gui = ["dep:drivewipe-gui"]
 
 [dependencies]
 drivewipe-core = { path = "../drivewipe-core" }
+drivewipe-tui = { path = "../drivewipe-tui" }
+drivewipe-gui = { path = "../drivewipe-gui", optional = true }
 clap.workspace = true
 dialoguer.workspace = true
 indicatif.workspace = true

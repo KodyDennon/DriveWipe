@@ -122,16 +122,9 @@ build_and_package() {
     echo ""
 
     cargo build --release --target "$TARGET" --package drivewipe-cli
-    echo "  [1/3] drivewipe-cli built"
+    echo "  [OK] drivewipe built (CLI + TUI + GUI in one binary)"
 
-    cargo build --release --target "$TARGET" --package drivewipe-tui
-    echo "  [2/3] drivewipe-tui built"
 
-    if cargo build --release --target "$TARGET" --package drivewipe-gui 2>&1; then
-        echo "  [3/3] drivewipe-gui built"
-    else
-        echo "  [3/3] drivewipe-gui skipped (build failed — may need platform GUI libs)"
-    fi
     echo ""
 
     # ── Package ─────────────────────────────────────────────────────────────
@@ -142,8 +135,7 @@ build_and_package() {
     mkdir -p "$DIST_DIR"
 
     cp "target/${TARGET}/release/drivewipe${SUFFIX}" "$DIST_DIR/"    || die "CLI binary not found at target/${TARGET}/release/drivewipe${SUFFIX}"
-    cp "target/${TARGET}/release/drivewipe-tui${SUFFIX}" "$DIST_DIR/" || die "TUI binary not found at target/${TARGET}/release/drivewipe-tui${SUFFIX}"
-    cp "target/${TARGET}/release/drivewipe-gui${SUFFIX}" "$DIST_DIR/" 2>/dev/null || true
+    cp install.sh "$DIST_DIR/" 2>/dev/null || true
     [ -f LICENSE.md ] && cp LICENSE.md "$DIST_DIR/"
     cp README.md "$DIST_DIR/"
 
@@ -304,13 +296,7 @@ RELEASE_NOTES="## DriveWipe ${TAG}
 
 ### Contents
 - \`drivewipe${SUFFIX}\` — CLI tool
-- \`drivewipe-tui${SUFFIX}\` — Terminal UI"
-
-# Add GUI line if it was built
-if [ -f "$DIST_DIR/drivewipe-gui${SUFFIX}" ]; then
-    RELEASE_NOTES="${RELEASE_NOTES}
-- \`drivewipe-gui${SUFFIX}\` — Graphical UI"
-fi
+- \`install.sh\` — installer that adds the drivewipe-tui / drivewipe-gui aliases"
 
 RELEASE_NOTES="${RELEASE_NOTES}
 

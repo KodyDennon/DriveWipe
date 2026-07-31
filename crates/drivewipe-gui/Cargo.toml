@@ -7,10 +7,6 @@ authors.workspace = true
 license-file.workspace = true
 description = "Graphical UI for DriveWipe (iced framework)"
 
-[[bin]]
-name = "drivewipe-gui"
-path = "src/main.rs"
-
 [dependencies]
 crossbeam-channel.workspace = true
 drivewipe-core = { path = "../drivewipe-core" }

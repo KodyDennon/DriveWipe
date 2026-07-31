@@ -78,10 +78,20 @@ DriveWipe provides military/corporate-grade drive wiping with software overwrite
 - **Intelligent time estimates** — EMA-smoothed throughput with confidence intervals
 - **Automated versioning** — git-commit-driven version bumps with LOC safety triggers
 
-### Three Interfaces
-- **CLI** (`drivewipe`) — full-featured command-line for scripting and automation
-- **TUI** (`drivewipe-tui`) — interactive terminal UI with ratatui
-- **GUI** (`drivewipe-gui`) — graphical desktop application with iced
+### One Binary, Three Interfaces
+A single `drivewipe` binary contains all three interfaces and picks between them
+from how you start it:
+
+| You run | You get |
+|---|---|
+| `drivewipe` | Interactive terminal UI (ratatui) |
+| `drivewipe --gui` | Desktop application (iced) |
+| `drivewipe list`, `drivewipe wipe …` | Command line, for scripts and automation |
+| `drivewipe-tui` / `drivewipe-gui` | Aliases; symlinks the installer creates |
+
+Piping or redirecting falls back to the CLI, so `drivewipe | cat` and cron jobs
+behave predictably. Server builds can omit the desktop interface entirely with
+`--no-default-features --features pdf-report`.
 
 ---
 
@@ -95,12 +105,12 @@ DriveWipe provides military/corporate-grade drive wiping with software overwrite
 ### Build
 
 ```bash
-# Build all desktop binaries
+# Build the drivewipe binary (CLI + TUI + GUI)
 cargo build --release
 
-# The TUI includes the live-environment screens by default on Linux.
-# To build without them:
-cargo build --release --package drivewipe-tui --no-default-features --features pdf-report
+# Headless/server build, without the desktop interface
+cargo build --release --package drivewipe-cli \
+  --no-default-features --features pdf-report
 
 # Build the live USB image (requires Docker)
 cargo xtask live-build
@@ -108,16 +118,34 @@ cargo xtask live-build
 
 ### Install
 
-Download the pre-built binaries for your platform from the [Releases](https://github.com/KodyDennon/DriveWipe/releases) page. Archives are provided for **Linux**, **macOS**, and **Windows** (x86_64 and ARM64).
+One command on Linux and macOS:
 
-*Note: DriveWipe requires **Administrative / Root** privileges to access raw disks.*
+```bash
+curl -fsSL https://raw.githubusercontent.com/KodyDennon/DriveWipe/main/install.sh | sh
+```
+
+It detects your platform, downloads the matching release, **verifies it against
+the published SHA-256 checksum**, installs to `/usr/local/bin` (or `~/.local/bin`
+without root), and adds a desktop entry. To remove it again:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/KodyDennon/DriveWipe/main/install.sh | sh -s -- --uninstall
+```
+
+Other options: `--version X.Y.Z` to pin a version, `--prefix DIR` to choose where
+it goes.
+
+Prefer to do it by hand? Download an archive from the [Releases](https://github.com/KodyDennon/DriveWipe/releases)
+page — **Linux**, **macOS**, and **Windows**, x86_64 and ARM64 — and run the
+bundled `install.sh`, or just put the `drivewipe` binary on your `PATH`.
+
+*Note: DriveWipe needs **Administrator / root** privileges to reach raw disks,
+though not to install.*
 
 To build from source:
 
 ```bash
 cargo install --path crates/drivewipe-cli
-cargo install --path crates/drivewipe-tui
-cargo install --path crates/drivewipe-gui
 ```
 
 ### Usage
@@ -168,14 +196,11 @@ sudo drivewipe partition list /dev/sda
 # Forensic analysis
 sudo drivewipe forensic scan /dev/sda
 
-# Launch the TUI
-sudo drivewipe-tui
-
-# Launch the TUI in live mode (auto-detected in live environment)
-sudo drivewipe-tui --live
+# Launch the terminal UI (also what a bare `sudo drivewipe` does)
+sudo drivewipe --tui
 
 # Launch the GUI
-sudo drivewipe-gui
+sudo drivewipe --gui
 ```
 
 ---
@@ -229,9 +254,9 @@ The DriveWipe Secure methods combine software overwrite with firmware commands f
 DriveWipe/
   crates/
     drivewipe-core/    # Library — all logic, no UI
-    drivewipe-cli/     # CLI binary (drivewipe)
-    drivewipe-tui/     # TUI binary (drivewipe-tui)
-    drivewipe-gui/     # GUI binary (drivewipe-gui)
+    drivewipe-cli/     # The drivewipe binary — CLI commands + mode dispatch
+    drivewipe-tui/     # Terminal interface (library)
+    drivewipe-gui/     # Desktop interface (library)
     drivewipe-live/    # Live environment — HPA/DCO, ATA security, DMA I/O
     xtask/             # Build automation (bump, release, live-build)
   kernel/drivewipe/    # Custom Linux kernel module (/dev/drivewipe)

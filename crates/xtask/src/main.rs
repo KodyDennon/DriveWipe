@@ -62,13 +62,7 @@ fn main() -> Result<()> {
 fn bump_versions() -> Result<()> {
     println!("🔍 Analyzing git history and LOC for version bumps...");
 
-    let crates = vec![
-        "drivewipe-core",
-        "drivewipe-cli",
-        "drivewipe-tui",
-        "drivewipe-gui",
-        "drivewipe-live",
-    ];
+    let crates = vec!["drivewipe-core", "drivewipe-cli", "drivewipe-live"];
     let mut bumps = HashMap::new();
 
     for &krate in &crates {

@@ -54,10 +54,11 @@ if ! rustup target list --installed | grep -q "$MUSL_TARGET"; then
     rustup target add "$MUSL_TARGET"
 fi
 
+# One static binary carrying the CLI and TUI. The GUI is left out: the live
+# image is a text-mode environment and iced will not link against musl.
 cargo build --release --target "$MUSL_TARGET" \
     --package drivewipe-cli \
-    --package drivewipe-tui \
-    --features live \
+    --no-default-features --features pdf-report \
     --manifest-path "$ROOT_DIR/Cargo.toml"
 
 echo "  [OK] Binaries built"
@@ -166,9 +167,10 @@ RUN mkdir -p \
 RUN cp /boot/vmlinuz-lts /drivewipe-live/boot/ && \
     cp /boot/initramfs-lts /drivewipe-live/boot/
 
-# Copy binaries
+# Copy the single binary; drivewipe-tui is a symlink that makes it open the
+# terminal interface, which is what the live environment boots into.
 COPY drivewipe /drivewipe-live/usr/local/bin/drivewipe
-COPY drivewipe-tui /drivewipe-live/usr/local/bin/drivewipe-tui
+RUN ln -sf drivewipe /drivewipe-live/usr/local/bin/drivewipe-tui
 
 # Copy configs
 COPY init-script.sh /drivewipe-live/etc/local.d/drivewipe.start
@@ -198,12 +200,8 @@ CMD ["tar", "-C", "/drivewipe-live", "-cf", "-", "."]
 DOCKERFILE
 
 # Copy binaries and configs into build context
-cp "$ROOT_DIR/target/$MUSL_TARGET/release/drivewipe" "$BUILD_DIR/" 2>/dev/null || {
-    echo "  [WARN] drivewipe CLI binary not found — skipping"
-    touch "$BUILD_DIR/drivewipe"
-}
-cp "$ROOT_DIR/target/$MUSL_TARGET/release/drivewipe-tui" "$BUILD_DIR/" 2>/dev/null || {
-    echo "  [ERROR] drivewipe-tui binary not found"
+cp "$ROOT_DIR/target/$MUSL_TARGET/release/drivewipe" "$BUILD_DIR/" || {
+    echo "  [ERROR] drivewipe binary not found at target/$MUSL_TARGET/release/drivewipe"
     exit 1
 }
 cp "$LIVE_DIR/alpine-config/init-script.sh" "$BUILD_DIR/"

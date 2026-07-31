@@ -256,9 +256,140 @@ enum ForensicAction {
 
 // ── Entry point ─────────────────────────────────────────────────────────────
 
-#[tokio::main]
-async fn main() {
-    let cli = Cli::parse();
+/// Which interface this invocation should open.
+#[derive(Debug, PartialEq)]
+enum Mode {
+    Cli,
+    Tui,
+    Gui,
+}
+
+/// Decide the interface from how the program was invoked.
+///
+/// In order of precedence: the name it was called as (so `drivewipe-tui` and
+/// `drivewipe-gui` symlinks work), an explicit `--tui`/`--gui` flag, and
+/// finally a bare invocation, which opens the TUI on a terminal and otherwise
+/// falls through to the CLI so pipelines and `--help` still behave.
+fn detect_mode(args: &[String]) -> Mode {
+    use std::io::IsTerminal;
+
+    let invoked_as = args
+        .first()
+        .map(std::path::Path::new)
+        .and_then(|p| p.file_stem())
+        .and_then(|s| s.to_str())
+        .unwrap_or("");
+
+    if invoked_as.ends_with("-tui") {
+        return Mode::Tui;
+    }
+    if invoked_as.ends_with("-gui") {
+        return Mode::Gui;
+    }
+
+    let rest = &args[args.len().min(1)..];
+    if rest.iter().any(|a| a == "--gui") {
+        return Mode::Gui;
+    }
+    if rest.iter().any(|a| a == "--tui") {
+        return Mode::Tui;
+    }
+
+    if rest.is_empty() && std::io::stdin().is_terminal() && std::io::stdout().is_terminal() {
+        return Mode::Tui;
+    }
+
+    Mode::Cli
+}
+
+fn main() -> std::process::ExitCode {
+    let args: Vec<String> = std::env::args().collect();
+
+    match detect_mode(&args) {
+        // iced drives a winit event loop, which must own the main thread and
+        // must not be started from inside a tokio runtime — so the GUI is
+        // dispatched before any runtime exists.
+        #[cfg(feature = "gui")]
+        Mode::Gui => {
+            env_logger::init();
+            if let Err(msg) = check_display_available() {
+                eprintln!("error: {msg}");
+                return std::process::ExitCode::FAILURE;
+            }
+            match drivewipe_gui::run() {
+                Ok(()) => std::process::ExitCode::SUCCESS,
+                Err(e) => {
+                    eprintln!("error: could not open the DriveWipe window: {e}");
+                    eprintln!("       The terminal interface works anywhere: drivewipe --tui");
+                    std::process::ExitCode::FAILURE
+                }
+            }
+        }
+        #[cfg(not(feature = "gui"))]
+        Mode::Gui => {
+            eprintln!(
+                "error: this build of DriveWipe was compiled without the graphical \
+                 interface.\n       Use the terminal interface instead: drivewipe --tui"
+            );
+            std::process::ExitCode::FAILURE
+        }
+        Mode::Tui => {
+            env_logger::init();
+            match tokio_runtime().block_on(drivewipe_tui::run()) {
+                Ok(()) => std::process::ExitCode::SUCCESS,
+                Err(e) => {
+                    eprintln!("error: {e}");
+                    std::process::ExitCode::FAILURE
+                }
+            }
+        }
+        Mode::Cli => {
+            tokio_runtime().block_on(cli_main());
+            std::process::ExitCode::SUCCESS
+        }
+    }
+}
+
+/// Refuse to start the desktop interface when there is no display server.
+///
+/// Without this the windowing layer panics deep inside winit, which reads as a
+/// crash rather than the ordinary situation it is — someone ran `--gui` over
+/// SSH or on a headless box.
+#[cfg(all(feature = "gui", unix, not(target_os = "macos")))]
+fn check_display_available() -> Result<(), String> {
+    let has_display = std::env::var_os("DISPLAY")
+        .filter(|v| !v.is_empty())
+        .is_some();
+    let has_wayland = std::env::var_os("WAYLAND_DISPLAY")
+        .filter(|v| !v.is_empty())
+        .is_some();
+
+    if has_display || has_wayland {
+        Ok(())
+    } else {
+        Err(
+            "no graphical display was found (neither DISPLAY nor WAYLAND_DISPLAY is set).\n       \
+             If you are connected over SSH, use the terminal interface instead:\n       \
+             drivewipe --tui"
+                .to_string(),
+        )
+    }
+}
+
+#[cfg(all(feature = "gui", not(all(unix, not(target_os = "macos")))))]
+fn check_display_available() -> Result<(), String> {
+    Ok(())
+}
+
+fn tokio_runtime() -> tokio::runtime::Runtime {
+    tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()
+        .expect("failed to start the async runtime")
+}
+
+async fn cli_main() {
+    let cli = Cli::parse_from(std::env::args().filter(|a| a != "--tui" && a != "--gui"));
 
     // Initialise logging. With --verbose we use debug level; otherwise honour
     // the existing RUST_LOG value or default to "info".

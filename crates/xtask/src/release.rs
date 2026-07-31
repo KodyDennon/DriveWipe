@@ -26,10 +26,6 @@ fn success(text: &str) {
     println!("  {} {text}", style("✔").green().bold());
 }
 
-fn skipped(text: &str) {
-    println!("  {} {text}", style("⊘").yellow().bold());
-}
-
 fn error_line(text: &str) {
     println!("  {} {text}", style("✘").red().bold());
 }
@@ -208,7 +204,6 @@ fn set_workspace_version(ver: &str) -> Result<()> {
 struct BuildResult {
     archive_path: PathBuf,
     checksum_path: PathBuf,
-    gui_built: bool,
 }
 
 fn build_and_package(tag: &str, platform: &Platform) -> Result<BuildResult> {
@@ -239,42 +234,6 @@ fn build_and_package(tag: &str, platform: &Platform) -> Result<BuildResult> {
     sp.finish_and_clear();
     success("drivewipe-cli");
 
-    // Build TUI
-    let sp = spinner("Building drivewipe-tui...");
-    cmd_run(
-        "cargo",
-        &[
-            "build",
-            "--release",
-            "--target",
-            &platform.target,
-            "--package",
-            "drivewipe-tui",
-        ],
-    )?;
-    sp.finish_and_clear();
-    success("drivewipe-tui");
-
-    // Build GUI (non-fatal)
-    let sp = spinner("Building drivewipe-gui...");
-    let gui_ok = cmd_run_quiet(
-        "cargo",
-        &[
-            "build",
-            "--release",
-            "--target",
-            &platform.target,
-            "--package",
-            "drivewipe-gui",
-        ],
-    )?;
-    sp.finish_and_clear();
-    if gui_ok {
-        success("drivewipe-gui");
-    } else {
-        skipped("drivewipe-gui (build failed — may need platform GUI libs)");
-    }
-
     // ── Package ─────────────────────────────────────────────────────────────
 
     step(5, "Packaging artifacts");
@@ -289,20 +248,14 @@ fn build_and_package(tag: &str, platform: &Platform) -> Result<BuildResult> {
 
     let bin_dir = PathBuf::from(format!("target/{}/release", platform.target));
 
-    // Copy CLI binary
+    // A single binary carries the CLI, TUI and GUI.
     let cli_bin = format!("drivewipe{}", platform.exe_suffix);
     fs::copy(bin_dir.join(&cli_bin), dist_dir.join(&cli_bin))
-        .context("CLI binary not found — build may have failed")?;
+        .context("drivewipe binary not found — build may have failed")?;
 
-    // Copy TUI binary
-    let tui_bin = format!("drivewipe-tui{}", platform.exe_suffix);
-    fs::copy(bin_dir.join(&tui_bin), dist_dir.join(&tui_bin))
-        .context("TUI binary not found — build may have failed")?;
-
-    // Copy GUI binary (optional)
-    let gui_bin = format!("drivewipe-gui{}", platform.exe_suffix);
-    if gui_ok {
-        let _ = fs::copy(bin_dir.join(&gui_bin), dist_dir.join(&gui_bin));
+    // Ship the installer alongside it.
+    if Path::new("install.sh").exists() {
+        let _ = fs::copy("install.sh", dist_dir.join("install.sh"));
     }
 
     // Copy docs
@@ -363,7 +316,6 @@ fn build_and_package(tag: &str, platform: &Platform) -> Result<BuildResult> {
     Ok(BuildResult {
         archive_path,
         checksum_path,
-        gui_built: gui_ok,
     })
 }
 
@@ -754,7 +706,7 @@ fn flow_attach(platform: &Platform) -> Result<()> {
 
 // ── Release notes builder ───────────────────────────────────────────────────
 
-fn build_release_notes(tag: &str, platform: &Platform, build: &BuildResult) -> String {
+fn build_release_notes(tag: &str, platform: &Platform, _build: &BuildResult) -> String {
     let archive_name = format!("drivewipe-{tag}-{}", platform.target);
     let mut notes = format!(
         "# 🚀 DriveWipe {tag}\n\
@@ -770,23 +722,15 @@ fn build_release_notes(tag: &str, platform: &Platform, build: &BuildResult) -> S
          > [!NOTE]\n\
          > This release contains the standard desktop binaries. Run this tool on other platforms to attach more builds.\n\
          \n\
-         ### Included Binaries\n\
-         - `drivewipe{}` — Advanced CLI for scripts and automation\n\
-         - `drivewipe-tui{}` — Dashboard-centric Terminal UI",
+         ### Included\n\
+         - `drivewipe{}` — one binary containing the CLI, terminal UI and desktop UI\n\
+         - `install.sh` — installs it and creates the `drivewipe-tui` / `drivewipe-gui` aliases",
         platform.os.to_uppercase(),
         platform.arch,
         archive_name,
         platform.archive_ext,
         platform.exe_suffix,
-        platform.exe_suffix,
     );
-
-    if build.gui_built {
-        notes.push_str(&format!(
-            "\n- `drivewipe-gui{}` — Simplified Graphical Interface",
-            platform.exe_suffix
-        ));
-    }
 
     notes.push_str(&format!(
         "\n\n---\n\n\

@@ -1,12 +1,11 @@
 //! DriveWipe Graphical User Interface (GUI)
 //!
-//! The `drivewipe-gui` binary is a cross-platform desktop application built
-//! using the `iced` framework. It provides a simplified, visual-first workflow
-//! for all DriveWipe features, making complex sanitization tasks accessible
-//! to non-technical operators.
+//! A cross-platform desktop application built on the `iced` framework,
+//! providing a visual-first workflow over all DriveWipe features for operators
+//! who do not want a terminal.
 
-mod screens;
-mod theme;
+pub mod screens;
+pub mod theme;
 
 use iced::futures::SinkExt;
 use iced::widget::{column, container, text};
@@ -978,7 +977,8 @@ impl DriveWipeApp {
     }
 }
 
-fn main() -> iced::Result {
+/// Open the desktop window and run until the user closes it.
+pub fn run() -> iced::Result {
     iced::application(DriveWipeApp::new, DriveWipeApp::update, DriveWipeApp::view)
         .title(DriveWipeApp::title)
         .subscription(DriveWipeApp::subscription)
