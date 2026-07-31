@@ -7,10 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [2.0.0] - 2026-07-31
+## [2.0.1] - 2026-07-31
 
 Major release focused on making the DoD and mil-spec wipe methods genuinely
 complete and verifiable on Linux.
+
+> `v2.0.0` was tagged but never published: the release gate caught a flaky test
+> before any artifact was built, and release tags are immutable. `2.0.1` is the
+> first published release of this work and is otherwise identical in scope.
 
 ### Added
 - **One binary instead of three** — `drivewipe` now contains the CLI, terminal UI and desktop UI, and chooses between them from how it is invoked: a bare call on a terminal opens the TUI, `--gui` opens the desktop window, and any subcommand runs the CLI. Piped or redirected invocations fall back to the CLI so scripts and cron jobs stay predictable. `drivewipe-tui` and `drivewipe-gui` continue to work as symlinks, dispatched on argv[0]. Server and live-image builds can drop the desktop interface with `--no-default-features --features pdf-report`.
