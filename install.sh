@@ -19,6 +19,10 @@
 set -eu
 
 REPO="KodyDennon/DriveWipe"
+# Overridable so the download path can be exercised against a local server in
+# tests; end users never set these.
+BASE_URL="${DRIVEWIPE_BASE_URL:-https://github.com/$REPO/releases/download}"
+API_URL="${DRIVEWIPE_API_URL:-https://api.github.com/repos/$REPO/releases/latest}"
 VERSION=""
 PREFIX=""
 UNINSTALL=0
@@ -199,7 +203,7 @@ fetch() {
 resolve_version() {
     [ -n "$VERSION" ] && return 0
     step "resolving latest release"
-    VERSION=$(fetch "https://api.github.com/repos/$REPO/releases/latest" /dev/stdout \
+    VERSION=$(fetch "$API_URL" /dev/stdout \
         | sed -n 's/.*"tag_name": *"\([^"]*\)".*/\1/p' | head -1)
     [ -n "$VERSION" ] || die "could not determine the latest version. Pass --version X.Y.Z"
 }
@@ -242,7 +246,7 @@ download_and_install() {
     case "$tag" in v*) ;; *) tag="v$tag" ;; esac
 
     archive="DriveWipe-${tag}-${PLATFORM}.${EXT}"
-    base="https://github.com/$REPO/releases/download/$tag"
+    base="$BASE_URL/$tag"
 
     tmp=$(mktemp -d 2>/dev/null || mktemp -d -t drivewipe)
     trap 'rm -rf "$tmp"' EXIT INT TERM
@@ -262,7 +266,10 @@ download_and_install() {
     fi
 
     step "extracting"
-    tar xzf "$tmp/$archive" -C "$tmp" || die "could not extract $archive"
+    # Extract from inside the directory rather than passing -C alongside -f:
+    # tar applies -C before resolving the archive path, so an absolute -f would
+    # be looked up relative to the new directory.
+    (cd "$tmp" && tar xzf "$archive") || die "could not extract $archive"
 
     bin=$(find "$tmp" -type f -name drivewipe -perm -u+x 2>/dev/null | head -1)
     [ -n "$bin" ] || die "the archive did not contain a drivewipe binary"

@@ -1407,7 +1407,7 @@ checksum = "d8b14ccef22fc6f5a8f4d7d768562a182c04ce9a3b3157b91390b52ddfdf1a76"
 
 [[package]]
 name = "drivewipe-cli"
-version = "2.0.2"
+version = "2.0.3"
 dependencies = [
  "anyhow",
  "assert_cmd",
@@ -1434,7 +1434,7 @@ dependencies = [
 
 [[package]]
 name = "drivewipe-core"
-version = "2.0.2"
+version = "2.0.3"
 dependencies = [
  "aes 0.8.4",
  "anyhow",
@@ -1476,7 +1476,7 @@ dependencies = [
 
 [[package]]
 name = "drivewipe-gui"
-version = "2.0.2"
+version = "2.0.3"
 dependencies = [
  "crossbeam-channel",
  "drivewipe-core",
@@ -1487,7 +1487,7 @@ dependencies = [
 
 [[package]]
 name = "drivewipe-live"
-version = "2.0.2"
+version = "2.0.3"
 dependencies = [
  "drivewipe-core",
  "libc",
@@ -1500,7 +1500,7 @@ dependencies = [
 
 [[package]]
 name = "drivewipe-tui"
-version = "2.0.2"
+version = "2.0.3"
 dependencies = [
  "anyhow",
  "chrono",
@@ -6319,7 +6319,7 @@ checksum = "3ae8337f8a065cfc972643663ea4279e04e7256de865aa66fe25cec5fb912d3f"
 
 [[package]]
 name = "xtask"
-version = "2.0.2"
+version = "2.0.3"
 dependencies = [
  "anyhow",
  "clap",

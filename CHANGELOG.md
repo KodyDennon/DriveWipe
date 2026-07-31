@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.0.3] - 2026-07-31
+
+### Fixed
+- **`curl | sh` installs failed at extraction.** `tar` applies `-C` before resolving the archive path, so the absolute path passed to `-f` was looked up relative to the new directory. Installing from an already-extracted archive was unaffected, which is why it was not caught earlier — that path never extracts anything. The download path is now covered by `scripts/test-install.sh`, which stands a local HTTP server in for GitHub Releases and checks install, checksum verification, tamper rejection, `--version` pinning and uninstall; it runs in CI on Linux and macOS.
+
 ## [2.0.2] - 2026-07-31
 
 Major release focused on making the DoD and mil-spec wipe methods genuinely

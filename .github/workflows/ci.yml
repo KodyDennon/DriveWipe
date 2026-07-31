@@ -86,6 +86,26 @@ jobs:
       - name: Audit dependencies
         run: cargo audit
 
+  # The installer is the documented way to get DriveWipe, so its download path
+  # is exercised against a local server rather than trusted to review.
+  installer:
+    name: Installer
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@1.94
+      - uses: Swatinem/rust-cache@v2
+      - name: Build the binary
+        run: cargo build --package drivewipe-cli
+      - name: Shell syntax
+        run: sh -n install.sh
+      - name: End-to-end install, verify, tamper-reject, uninstall
+        run: ./scripts/test-install.sh
+
   docs:
     name: Documentation
     runs-on: ubuntu-latest
