@@ -342,6 +342,8 @@ Default config location: `~/.config/drivewipe/config.toml`
 default_method = "dod-short"
 parallel_drives = 2
 auto_verify = true
+verify_each_pass = false
+remove_hidden_areas = true
 auto_report_json = true
 log_level = "info"
 operator_name = "John Doe"

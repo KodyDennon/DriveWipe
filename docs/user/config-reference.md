@@ -8,7 +8,9 @@ Default location: `~/.config/drivewipe/config.toml`
 |---|---|---|---|
 | `default_method` | string | `"zero"` | Default wipe method ID |
 | `parallel_drives` | integer | `1` | Max concurrent wipe operations |
-| `auto_verify` | bool | `true` | Automatically verify after wipe |
+| `auto_verify` | bool | `true` | Verify after wipe. Methods whose standard mandates verification always verify regardless |
+| `verify_each_pass` | bool | `false` | Read the full surface back after every pass, not just the last. Roughly doubles wipe time |
+| `remove_hidden_areas` | bool | `true` | Clear HPA/DCO before wiping so hidden sectors are covered |
 | `auto_report_json` | bool | `true` | Generate JSON report after wipe |
 | `log_level` | string | `"info"` | Logging level (trace, debug, info, warn, error) |
 | `operator_name` | string | `""` | Operator name for reports and audit |
