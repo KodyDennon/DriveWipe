@@ -37,7 +37,6 @@ blake3.workspace = true
 hmac.workspace = true
 argon2.workspace = true
 regex.workspace = true
-quick-xml.workspace = true
 byteorder.workspace = true
 crc32fast.workspace = true
 bitflags.workspace = true

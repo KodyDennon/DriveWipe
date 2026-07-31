@@ -75,14 +75,16 @@ jobs:
   audit:
     name: Security Audit
     runs-on: ubuntu-latest
-    permissions:
-      checks: write
-      contents: read
     steps:
       - uses: actions/checkout@v6
-      - uses: rustsec/audit-check@v2
+      # Run cargo-audit directly rather than via rustsec/audit-check so that
+      # .cargo/audit.toml is honoured. Every ignored advisory is justified
+      # there; nothing is suppressed without a written reason.
+      - uses: taiki-e/install-action@v2
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          tool: cargo-audit
+      - name: Audit dependencies
+        run: cargo audit
 
   docs:
     name: Documentation

@@ -1,0 +1,24 @@
+# cargo-audit configuration.
+#
+# Every entry here must state why the advisory does not apply to DriveWipe and
+# what would remove it. An advisory is only ignored when it is unreachable from
+# our code paths — never merely because it is inconvenient.
+
+[advisories]
+ignore = [
+    # RUSTSEC-2026-0187 — stack overflow in lopdf via deeply nested PDF objects.
+    #
+    # Reached through genpdf 0.2.0, which is the newest published version and is
+    # no longer maintained, so there is no upgrade path.
+    #
+    # Not applicable: the advisory is a denial of service in lopdf's *parsing*
+    # entry points (`Document::load_mem` and the other `load*` functions), which
+    # require attacker-controlled PDF input. DriveWipe only ever constructs PDFs
+    # — `report::pdf` builds a genpdf `Document` and renders it to bytes — and
+    # never loads or parses a PDF from any source. The vulnerable code is not
+    # reachable.
+    #
+    # Removed for good by replacing genpdf with a maintained PDF writer; tracked
+    # as follow-up work.
+    "RUSTSEC-2026-0187",
+]
