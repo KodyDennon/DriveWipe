@@ -8,15 +8,24 @@ use drivewipe_core::session::{CancellationToken, WipeSession};
 use drivewipe_core::types::*;
 use drivewipe_core::wipe::software::ZeroFillMethod;
 
+/// How a faulty byte behaves when written to.
+#[derive(Clone, Copy)]
+enum BadByte {
+    /// Stores the complement of whatever was written, so it never matches the
+    /// intended pattern. Use when a pass must be seen to fail: pinning to a
+    /// fixed value would match a random pass roughly once every 256 runs.
+    Inverts,
+    /// Always holds this value, so it matches some patterns and not others.
+    StuckAt(u8),
+}
+
 /// A mock device backed by an in-memory buffer.
 struct MockDevice {
     data: Vec<u8>,
     block_size: u32,
-    /// Offset of a sector that silently refuses writes, simulating a drive that
-    /// reports success but leaves the old contents in place.
-    bad_sector: Option<u64>,
-    /// The value that stuck byte is pinned to.
-    stuck_value: u8,
+    /// Offset of a byte that silently refuses writes, simulating a drive that
+    /// reports success but does not store what it was given.
+    bad_byte: Option<(u64, BadByte)>,
 }
 
 impl MockDevice {
@@ -24,25 +33,23 @@ impl MockDevice {
         Self {
             data: vec![0xFFu8; size],
             block_size: 512,
-            bad_sector: None,
-            stuck_value: 0xFF,
+            bad_byte: None,
         }
     }
 
-    /// Build a device where the byte at `offset` never actually changes, even
-    /// though every write reports success.
+    /// A device whose byte at `offset` never holds what was written to it.
     fn with_bad_sector(size: usize, offset: u64) -> Self {
         Self {
-            bad_sector: Some(offset),
+            bad_byte: Some((offset, BadByte::Inverts)),
             ..Self::new(size)
         }
     }
 
-    /// Like [`with_bad_sector`], but the stuck byte holds `value`, so it matches
-    /// some passes and not others.
+    /// A device whose byte at `offset` is pinned to `value` regardless of what
+    /// is written, so it satisfies passes writing `value` and fails the rest.
     fn with_stuck_byte(size: usize, offset: u64, value: u8) -> Self {
-        let mut dev = Self::with_bad_sector(size, offset);
-        dev.stuck_value = value;
+        let mut dev = Self::new(size);
+        dev.bad_byte = Some((offset, BadByte::StuckAt(value)));
         dev.data[offset as usize] = value;
         dev
     }
@@ -55,11 +62,15 @@ impl RawDeviceIo for MockDevice {
         let n = end - start;
         self.data[start..end].copy_from_slice(&buf[..n]);
 
-        // The bad sector swallows the write but still reports success.
-        if let Some(bad) = self.bad_sector
+        // The faulty byte swallows the write but still reports success.
+        if let Some((bad, behaviour)) = self.bad_byte
             && (start..end).contains(&(bad as usize))
         {
-            self.data[bad as usize] = self.stuck_value;
+            let written = buf[bad as usize - start];
+            self.data[bad as usize] = match behaviour {
+                BadByte::Inverts => !written,
+                BadByte::StuckAt(v) => v,
+            };
         }
         Ok(n)
     }
