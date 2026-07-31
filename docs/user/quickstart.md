@@ -42,10 +42,11 @@ sudo drivewipe health /dev/sda
 
 ## TUI
 
-Launch the interactive terminal UI:
+Launch the interactive terminal UI — this is what a bare `drivewipe` does on a
+terminal:
 
 ```bash
-sudo drivewipe-tui
+sudo drivewipe
 ```
 
 Navigate with arrow keys, Enter to select, Esc to go back. The main menu provides access to all features:
@@ -55,6 +56,9 @@ Navigate with arrow keys, Enter to select, Esc to go back. The main menu provide
 - Partition Manager
 - Forensic Analysis
 - Settings
+
+On Linux the live-environment screens (HPA/DCO Manager, ATA Security, Kernel
+Module Status, Live Dashboard) are also available.
 
 ### Keyboard shortcuts
 - `Ctrl-L` — Toggle keyboard lock (prevents accidental input)
@@ -66,7 +70,7 @@ Navigate with arrow keys, Enter to select, Esc to go back. The main menu provide
 Launch the graphical interface:
 
 ```bash
-sudo drivewipe-gui
+sudo drivewipe --gui
 ```
 
 Point-and-click access to all features with the same main menu layout as the TUI.

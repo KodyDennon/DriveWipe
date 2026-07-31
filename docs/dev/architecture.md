@@ -6,9 +6,9 @@
 DriveWipe/
 ├── crates/
 │   ├── drivewipe-core/     # All business logic (library crate)
-│   ├── drivewipe-cli/      # CLI binary (thin wrapper)
-│   ├── drivewipe-tui/      # TUI binary (ratatui)
-│   ├── drivewipe-gui/      # GUI binary (iced)
+│   ├── drivewipe-cli/      # The `drivewipe` binary — CLI commands + mode dispatch
+│   ├── drivewipe-tui/      # Terminal interface, a library (ratatui)
+│   ├── drivewipe-gui/      # Desktop interface, a library (iced)
 │   ├── drivewipe-live/     # Live environment (HPA/DCO, kernel module, ATA security)
 │   └── xtask/              # Build automation
 ├── kernel/                 # Custom Linux kernel module for ATA/NVMe passthrough
@@ -77,11 +77,11 @@ All business logic lives in the core crate. The CLI, TUI, and GUI are thin prese
 | `verify` | Read-back verification |
 | `wipe` | Method registry, software/firmware/DriveWipe Secure |
 
-## TUI (`drivewipe-tui`)
+## TUI (`drivewipe-tui`, linked into `drivewipe`)
 
 Built on ratatui 0.30. Uses an `AppScreen` enum state machine with 19+ states (including live environment screens). The main event loop handles terminal events (key/mouse/resize) and progress events from core. Supports interactive partition CRUD (create/delete) and forensic scan execution.
 
-## GUI (`drivewipe-gui`)
+## GUI (`drivewipe-gui`, linked into `drivewipe`)
 
 Built on iced 0.14. Uses a `Screen` enum for navigation, `Message` enum for all events, and delegates to screen view functions. Supports wipe execution, clone execution with progress, forensic scanning, health checks, and partition viewing.
 
