@@ -272,7 +272,12 @@ enum Mode {
 /// falls through to the CLI so pipelines and `--help` still behave.
 fn detect_mode(args: &[String]) -> Mode {
     use std::io::IsTerminal;
+    let interactive = std::io::stdin().is_terminal() && std::io::stdout().is_terminal();
+    detect_mode_with(args, interactive)
+}
 
+/// The decision itself, with terminal detection passed in so it can be tested.
+fn detect_mode_with(args: &[String], interactive: bool) -> Mode {
     let invoked_as = args
         .first()
         .map(std::path::Path::new)
@@ -295,7 +300,7 @@ fn detect_mode(args: &[String]) -> Mode {
         return Mode::Tui;
     }
 
-    if rest.is_empty() && std::io::stdin().is_terminal() && std::io::stdout().is_terminal() {
+    if rest.is_empty() && interactive {
         return Mode::Tui;
     }
 
@@ -561,5 +566,102 @@ async fn run(cli: Cli) -> Result<()> {
                 commands::forensic::report(&config, &cancel_token, &device, output.as_deref()).await
             }
         },
+    }
+}
+
+#[cfg(test)]
+mod mode_tests {
+    use super::{Mode, detect_mode_with};
+
+    fn args(v: &[&str]) -> Vec<String> {
+        v.iter().map(|s| s.to_string()).collect()
+    }
+
+    #[test]
+    fn bare_invocation_on_a_terminal_opens_the_tui() {
+        assert_eq!(detect_mode_with(&args(&["drivewipe"]), true), Mode::Tui);
+    }
+
+    #[test]
+    fn bare_invocation_without_a_terminal_stays_on_the_cli() {
+        // `drivewipe | cat`, cron, and CI must not try to paint a dashboard.
+        assert_eq!(detect_mode_with(&args(&["drivewipe"]), false), Mode::Cli);
+    }
+
+    #[test]
+    fn a_subcommand_always_means_the_cli() {
+        assert_eq!(
+            detect_mode_with(&args(&["drivewipe", "list"]), true),
+            Mode::Cli
+        );
+        assert_eq!(
+            detect_mode_with(&args(&["drivewipe", "wipe", "--device", "/dev/sda"]), true),
+            Mode::Cli
+        );
+    }
+
+    #[test]
+    fn help_and_version_reach_the_cli_even_on_a_terminal() {
+        for flag in ["--help", "-h", "--version", "-V"] {
+            assert_eq!(
+                detect_mode_with(&args(&["drivewipe", flag]), true),
+                Mode::Cli,
+                "{flag} should print CLI output, not open the TUI"
+            );
+        }
+    }
+
+    #[test]
+    fn explicit_flags_win_over_terminal_detection() {
+        assert_eq!(
+            detect_mode_with(&args(&["drivewipe", "--gui"]), false),
+            Mode::Gui
+        );
+        assert_eq!(
+            detect_mode_with(&args(&["drivewipe", "--tui"]), false),
+            Mode::Tui
+        );
+    }
+
+    #[test]
+    fn the_name_it_was_invoked_as_selects_the_interface() {
+        // The installer ships these as symlinks to the one binary.
+        assert_eq!(
+            detect_mode_with(&args(&["drivewipe-tui"]), false),
+            Mode::Tui
+        );
+        assert_eq!(
+            detect_mode_with(&args(&["drivewipe-gui"]), false),
+            Mode::Gui
+        );
+        assert_eq!(
+            detect_mode_with(&args(&["/usr/local/bin/drivewipe-gui"]), false),
+            Mode::Gui
+        );
+    }
+
+    #[test]
+    fn a_windows_exe_suffix_still_dispatches() {
+        assert_eq!(
+            detect_mode_with(
+                &args(&["C:\\Program Files\\DriveWipe\\drivewipe-gui.exe"]),
+                false
+            ),
+            Mode::Gui
+        );
+    }
+
+    #[test]
+    fn the_invoked_name_outranks_a_conflicting_flag() {
+        assert_eq!(
+            detect_mode_with(&args(&["drivewipe-tui", "--gui"]), false),
+            Mode::Tui
+        );
+    }
+
+    #[test]
+    fn an_empty_argv_does_not_panic() {
+        assert_eq!(detect_mode_with(&[], false), Mode::Cli);
+        assert_eq!(detect_mode_with(&[], true), Mode::Tui);
     }
 }
