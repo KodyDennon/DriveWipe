@@ -427,6 +427,24 @@ impl DriveWipeApp {
                                         ..Default::default()
                                     };
 
+                                    // Clear HPA/DCO before opening the device, so the
+                                    // wipe covers the hidden sectors.
+                                    let mut drive_info = drive_info;
+                                    if !method.is_firmware() {
+                                        let outcome = drivewipe_core::hidden::prepare_for_wipe(
+                                            &mut drive_info,
+                                            wipe_config.remove_hidden_areas,
+                                        );
+                                        for note in outcome.notes {
+                                            let _ = tx.send(
+                                                drivewipe_core::progress::ProgressEvent::Warning {
+                                                    session_id: error_id,
+                                                    message: note,
+                                                },
+                                            );
+                                        }
+                                    }
+
                                     let session = drivewipe_core::session::WipeSession::new(
                                         drive_info,
                                         method,
