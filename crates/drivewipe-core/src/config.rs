@@ -11,14 +11,30 @@ use crate::error::{DriveWipeError, Result};
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct DriveWipeConfig {
-    /// Default wipe method id (e.g. "zero", "random", "dod-short", "nist-800-88").
+    /// Default wipe method id (e.g. "zero", "random", "dod-short",
+    /// "nist-800-88-clear").
     pub default_method: String,
 
     /// Maximum number of drives to wipe in parallel.
     pub parallel_drives: usize,
 
     /// Automatically run a verification pass after each wipe.
+    ///
+    /// Note that methods whose specification mandates verification (DoD
+    /// 5220.22-M, NIST SP 800-88, HMG IS5, and the service-branch standards)
+    /// are verified regardless of this setting — turning it off suppresses
+    /// verification only for methods that do not require it.
     pub auto_verify: bool,
+
+    /// Verify the entire device surface after *every* pass, rather than only
+    /// after the last one.
+    ///
+    /// This is the strict reading of the multi-pass overwrite standards, and is
+    /// what an auditor generally expects to see evidenced per pass. It roughly
+    /// doubles wall-clock time, since each pass becomes a full write followed by
+    /// a full read, so it is off by default.
+    #[serde(default)]
+    pub verify_each_pass: bool,
 
     /// Automatically generate a JSON report after each wipe completes.
     pub auto_report_json: bool,
@@ -60,6 +76,16 @@ pub struct DriveWipeConfig {
     /// Automatically run a health check before each wipe.
     #[serde(default)]
     pub auto_health_pre_wipe: bool,
+
+    /// Remove any HPA/DCO before wiping so the hidden sectors are covered.
+    ///
+    /// A Host Protected Area or Device Configuration Overlay hides sectors from
+    /// the operating system; wiping only the reported capacity leaves whatever
+    /// they contain on the drive. Sanitization standards require these areas to
+    /// be cleared, so this defaults to on. Removal is irreversible, and applies
+    /// only once the operator has already confirmed the wipe.
+    #[serde(default = "default_true")]
+    pub remove_hidden_areas: bool,
 
     /// Directory for audit log output.
     pub audit_dir: PathBuf,
@@ -152,6 +178,7 @@ impl Default for DriveWipeConfig {
             default_method: "zero".to_string(),
             parallel_drives: 1,
             auto_verify: true,
+            verify_each_pass: false,
             auto_report_json: true,
             sessions_dir: default_sessions_dir(),
             log_level: "info".to_string(),
@@ -163,6 +190,7 @@ impl Default for DriveWipeConfig {
             sleep_prevention_enabled: true,
             keyboard_lock_sequence: default_keyboard_lock_sequence(),
             auto_health_pre_wipe: false,
+            remove_hidden_areas: true,
             audit_dir: default_audit_dir(),
             performance_history_dir: default_performance_history_dir(),
         }

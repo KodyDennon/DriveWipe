@@ -147,9 +147,103 @@ fn gutmann_pass_5_is_0x55() {
 }
 
 #[test]
-fn all_software_methods_returns_nine() {
+fn all_software_methods_returns_expected_count() {
     let methods = all_software_methods();
-    assert_eq!(methods.len(), 9);
+    assert_eq!(methods.len(), 15);
+}
+
+#[test]
+fn standards_that_mandate_verification_declare_it() {
+    // Every method named after a sanitisation standard that specifies a
+    // read-back must report it, since WipeSession keys off this to decide
+    // whether verification may be skipped.
+    let mandated = [
+        "dod-short",
+        "dod-ece",
+        "hmg-baseline",
+        "hmg-enhanced",
+        "nist-800-88-clear",
+        "nist-800-88-purge",
+        "afssi-5020",
+        "ar-380-19",
+        "navso-p-5239-26",
+        "vsitr",
+    ];
+    let methods = all_software_methods();
+    for id in mandated {
+        let m = methods
+            .iter()
+            .find(|m| m.id() == id)
+            .unwrap_or_else(|| panic!("method {id} is not registered"));
+        assert!(
+            m.includes_verification(),
+            "{id} must declare that it includes verification"
+        );
+    }
+}
+
+#[test]
+fn nist_800_88_clear_is_a_single_verified_zero_pass() {
+    let m = Nist80088ClearMethod;
+    assert_eq!(m.id(), "nist-800-88-clear");
+    assert_eq!(m.pass_count(), 1);
+    assert!(m.includes_verification());
+    let mut buf = [0xAAu8; 32];
+    m.pattern_for_pass(0).fill(&mut buf);
+    assert!(buf.iter().all(|&b| b == 0x00));
+}
+
+#[test]
+fn afssi_5020_is_zero_one_random() {
+    let m = Afssi5020Method;
+    assert_eq!(m.pass_count(), 3);
+    let mut buf = [0xAAu8; 8];
+    m.pattern_for_pass(0).fill(&mut buf);
+    assert!(buf.iter().all(|&b| b == 0x00));
+    m.pattern_for_pass(1).fill(&mut buf);
+    assert!(buf.iter().all(|&b| b == 0xFF));
+    assert!(m.pattern_for_pass(2).name().contains("Random"));
+}
+
+#[test]
+fn navso_uses_complementary_character_pair() {
+    let m = NavsoP5239_26Method;
+    let mut buf = [0u8; 8];
+    m.pattern_for_pass(0).fill(&mut buf);
+    assert!(buf.iter().all(|&b| b == 0x01));
+    m.pattern_for_pass(1).fill(&mut buf);
+    // Pass 2 must be the exact bitwise complement of pass 1.
+    assert!(buf.iter().all(|&b| b == !0x01u8));
+    assert!(m.pattern_for_pass(2).name().contains("Random"));
+}
+
+#[test]
+fn ar_380_19_uses_complementary_character_pair() {
+    let m = Ar380_19Method;
+    assert!(m.pattern_for_pass(0).name().contains("Random"));
+    let mut buf = [0xAAu8; 8];
+    m.pattern_for_pass(1).fill(&mut buf);
+    assert!(buf.iter().all(|&b| b == 0x00));
+    m.pattern_for_pass(2).fill(&mut buf);
+    assert!(buf.iter().all(|&b| b == !0x00u8));
+}
+
+#[test]
+fn vsitr_alternates_then_ends_on_0xaa() {
+    let m = VsitrMethod;
+    assert_eq!(m.pass_count(), 7);
+    for pass in 0..6 {
+        let mut buf = [0x11u8; 4];
+        m.pattern_for_pass(pass).fill(&mut buf);
+        let expected = if pass % 2 == 0 { 0x00 } else { 0xFF };
+        assert!(
+            buf.iter().all(|&b| b == expected),
+            "pass {pass} should be {expected:#04x}"
+        );
+    }
+    let mut buf = [0u8; 4];
+    m.pattern_for_pass(6).fill(&mut buf);
+    assert!(buf.iter().all(|&b| b == 0xAA));
 }
 
 #[test]

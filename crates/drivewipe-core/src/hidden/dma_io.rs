@@ -7,10 +7,10 @@
 //! Falls back to normal `pread`/`pwrite` with `O_DIRECT` when the kernel
 //! module is unavailable.
 
-use drivewipe_core::error::{DriveWipeError, Result};
+use crate::error::{DriveWipeError, Result};
 use log;
 
-use crate::kernel_module::{DwDmaRequest, KernelModule, set_device_path};
+use super::kernel_module::{DwDmaRequest, KernelModule, set_device_path};
 
 /// DMA I/O handle for a specific device.
 pub struct DmaIo {

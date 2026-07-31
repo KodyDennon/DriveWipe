@@ -9,10 +9,10 @@
 //! - DEVICE CONFIGURATION RESTORE (0xB1, feature 0xC3): Restore factory settings
 //! - DEVICE CONFIGURATION FREEZE LOCK (0xB1, feature 0xC5): Prevent further changes
 
-use drivewipe_core::error::{DriveWipeError, Result};
+use crate::error::{DriveWipeError, Result};
 use log;
 
-use crate::kernel_module::{DwDcoInfo, KernelModule, set_device_path};
+use super::kernel_module::{DwDcoInfo, KernelModule, set_device_path};
 
 /// ATA command: DEVICE CONFIGURATION (0xB1).
 const ATA_CMD_DEVICE_CONFIG: u8 = 0xB1;

@@ -12,6 +12,12 @@ fn registry_contains_software_methods() {
     assert!(reg.get("hmg-baseline").is_some());
     assert!(reg.get("hmg-enhanced").is_some());
     assert!(reg.get("rcmp").is_some());
+    assert!(reg.get("nist-800-88-clear").is_some());
+    assert!(reg.get("nist-800-88-purge").is_some());
+    assert!(reg.get("afssi-5020").is_some());
+    assert!(reg.get("ar-380-19").is_some());
+    assert!(reg.get("navso-p-5239-26").is_some());
+    assert!(reg.get("vsitr").is_some());
 }
 
 #[test]
@@ -30,8 +36,8 @@ fn registry_contains_firmware_methods() {
 #[test]
 fn registry_total_count() {
     let reg = WipeMethodRegistry::new();
-    // 9 software + 8 firmware + 4 DriveWipe Secure = 21
-    assert_eq!(reg.list().len(), 21);
+    // 15 software + 8 firmware + 4 DriveWipe Secure = 27
+    assert_eq!(reg.list().len(), 27);
 }
 
 #[test]

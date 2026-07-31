@@ -9,7 +9,7 @@
 use std::fs::{File, OpenOptions};
 use std::os::unix::io::{AsRawFd, RawFd};
 
-use drivewipe_core::error::{DriveWipeError, Result};
+use crate::error::{DriveWipeError, Result};
 
 // ── ioctl numbers ────────────────────────────────────────────────────────────
 

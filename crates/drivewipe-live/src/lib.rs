@@ -20,9 +20,11 @@
 
 pub mod ata_security;
 pub mod capabilities;
-pub mod dco;
 pub mod detect;
-pub mod dma_io;
-pub mod hpa;
-pub mod kernel_module;
 pub mod unfreeze;
+
+// HPA, DCO, the kernel-module interface and the DMA I/O path live in
+// `drivewipe-core` so that the wipe engine can clear hidden areas before it
+// starts writing. They are re-exported here unchanged, so `drivewipe_live::hpa`
+// and friends continue to resolve for live-environment callers.
+pub use drivewipe_core::hidden::{dco, dma_io, hpa, kernel_module};

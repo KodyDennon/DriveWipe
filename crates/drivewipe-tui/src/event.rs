@@ -52,20 +52,20 @@ impl EventHandler {
                             }
                         }).await;
 
-                        if let Ok(Some(evt)) = evt {
-                            match evt {
-                                Event::Key(key) if key.kind == KeyEventKind::Press => {
-                                    if input_tx_inner.send(AppEvent::Key(key)).await.is_err() {
-                                        break;
-                                    }
-                                }
-                                Event::Resize(w, h) => {
-                                    if input_tx_inner.send(AppEvent::Resize(w, h)).await.is_err() {
-                                        break;
-                                    }
-                                }
-                                _ => {}
+                        let app_event = match evt {
+                            Ok(Some(Event::Key(key))) if key.kind == KeyEventKind::Press => {
+                                Some(AppEvent::Key(key))
                             }
+                            Ok(Some(Event::Resize(w, h))) => Some(AppEvent::Resize(w, h)),
+                            _ => None,
+                        };
+
+                        // A send error means the receiver is gone and the app is
+                        // shutting down.
+                        if let Some(app_event) = app_event
+                            && input_tx_inner.send(app_event).await.is_err()
+                        {
+                            break;
                         }
                     }
                 }

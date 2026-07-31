@@ -179,6 +179,7 @@ pub async fn start(
                     &cfg, &ct, &dev, &mth, true,  // force
                     true,  // yes_i_know
                     None,  // verify override
+                    false, // verify_each_pass (config decides for queued jobs)
                     None,  // pdf report
                     false, // dry_run
                 )

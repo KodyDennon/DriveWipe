@@ -12,6 +12,9 @@ use drivewipe_core::wipe::software::ZeroFillMethod;
 struct MockDevice {
     data: Vec<u8>,
     block_size: u32,
+    /// Offset of a sector that silently refuses writes, simulating a drive that
+    /// reports success but leaves the old contents in place.
+    bad_sector: Option<u64>,
 }
 
 impl MockDevice {
@@ -19,6 +22,16 @@ impl MockDevice {
         Self {
             data: vec![0xFFu8; size],
             block_size: 512,
+            bad_sector: None,
+        }
+    }
+
+    /// Build a device where the byte at `offset` never actually changes, even
+    /// though every write reports success.
+    fn with_bad_sector(size: usize, offset: u64) -> Self {
+        Self {
+            bad_sector: Some(offset),
+            ..Self::new(size)
         }
     }
 }
@@ -29,6 +42,13 @@ impl RawDeviceIo for MockDevice {
         let end = (start + buf.len()).min(self.data.len());
         let n = end - start;
         self.data[start..end].copy_from_slice(&buf[..n]);
+
+        // The bad sector swallows the write but still reports success.
+        if let Some(bad) = self.bad_sector
+            && (start..end).contains(&(bad as usize))
+        {
+            self.data[bad as usize] = 0xFF;
+        }
         Ok(n)
     }
 
@@ -197,6 +217,143 @@ async fn wipe_session_progress_events() {
         events.last().unwrap(),
         ProgressEvent::Completed { .. }
     ));
+}
+
+#[tokio::test]
+async fn dod_short_is_verified_even_when_auto_verify_is_off() {
+    use drivewipe_core::wipe::software::DodShortMethod;
+
+    let size = 1024 * 1024;
+    let mut device = MockDevice::new(size);
+    let drive_info = make_drive_info(size as u64);
+
+    // DoD 5220.22-M mandates verification, so it must run regardless of the
+    // operator's default preference.
+    let config = DriveWipeConfig {
+        auto_verify: false,
+        ..DriveWipeConfig::default()
+    };
+
+    let method: Box<dyn drivewipe_core::wipe::WipeMethod> = Box::new(DodShortMethod);
+    let session = WipeSession::new(drive_info, method, config);
+
+    let (tx, _rx) = crossbeam_channel::unbounded::<ProgressEvent>();
+    let result = session
+        .execute(&mut device, &tx, &CancellationToken::new(), None)
+        .await
+        .unwrap();
+
+    assert_eq!(
+        result.verification_passed,
+        Some(true),
+        "DoD 5220.22-M must be verified even with auto_verify disabled"
+    );
+    assert_eq!(result.outcome, WipeOutcome::Success);
+}
+
+#[tokio::test]
+async fn random_final_pass_is_verified_byte_for_byte() {
+    use drivewipe_core::wipe::software::DodShortMethod;
+
+    // A single sector that silently fails to take the write. The old sampling
+    // heuristic only checked that blocks were non-zero, so a stale 0xFF sector
+    // like this passed unnoticed; replaying the keystream catches it.
+    let size = 1024 * 1024;
+    let bad_offset = 700 * 1024;
+    let mut device = MockDevice::with_bad_sector(size, bad_offset);
+    let drive_info = make_drive_info(size as u64);
+
+    let method: Box<dyn drivewipe_core::wipe::WipeMethod> = Box::new(DodShortMethod);
+    let session = WipeSession::new(drive_info, method, DriveWipeConfig::default());
+
+    let (tx, _rx) = crossbeam_channel::unbounded::<ProgressEvent>();
+    let result = session
+        .execute(&mut device, &tx, &CancellationToken::new(), None)
+        .await
+        .unwrap();
+
+    assert_eq!(
+        result.verification_passed,
+        Some(false),
+        "a sector that did not take the random pass must fail verification"
+    );
+    assert_eq!(result.outcome, WipeOutcome::Failed);
+    assert!(
+        result.warnings.iter().any(|w| w.contains("mismatch")),
+        "expected a mismatch warning, got: {:?}",
+        result.warnings
+    );
+}
+
+#[tokio::test]
+async fn verify_each_pass_records_a_result_for_every_pass() {
+    use drivewipe_core::wipe::software::DodShortMethod;
+
+    let size = 512 * 1024;
+    let mut device = MockDevice::new(size);
+    let drive_info = make_drive_info(size as u64);
+
+    let config = DriveWipeConfig {
+        verify_each_pass: true,
+        ..DriveWipeConfig::default()
+    };
+
+    let method: Box<dyn drivewipe_core::wipe::WipeMethod> = Box::new(DodShortMethod);
+    let session = WipeSession::new(drive_info, method, config);
+
+    let (tx, _rx) = crossbeam_channel::unbounded::<ProgressEvent>();
+    let result = session
+        .execute(&mut device, &tx, &CancellationToken::new(), None)
+        .await
+        .unwrap();
+
+    assert_eq!(result.passes.len(), 3);
+    for pass in &result.passes {
+        assert!(
+            pass.verified,
+            "pass {} was not verified under verify_each_pass",
+            pass.pass_number
+        );
+        assert_eq!(pass.verification_passed, Some(true));
+    }
+    assert_eq!(result.verification_passed, Some(true));
+}
+
+#[tokio::test]
+async fn verify_each_pass_catches_a_failure_on_an_intermediate_pass() {
+    use drivewipe_core::wipe::software::DodShortMethod;
+
+    // Verifying only the final pass cannot tell you whether pass 1 landed.
+    // Per-pass verification is what makes each pass individually evidenced.
+    let size = 512 * 1024;
+    let mut device = MockDevice::with_bad_sector(size, 300 * 1024);
+    let drive_info = make_drive_info(size as u64);
+
+    let config = DriveWipeConfig {
+        verify_each_pass: true,
+        ..DriveWipeConfig::default()
+    };
+
+    let method: Box<dyn drivewipe_core::wipe::WipeMethod> = Box::new(DodShortMethod);
+    let session = WipeSession::new(drive_info, method, config);
+
+    let (tx, _rx) = crossbeam_channel::unbounded::<ProgressEvent>();
+    let result = session
+        .execute(&mut device, &tx, &CancellationToken::new(), None)
+        .await
+        .unwrap();
+
+    // Pass 1 writes zeros; the stuck 0xFF byte must be caught right there.
+    assert_eq!(result.passes[0].verification_passed, Some(false));
+    assert!(
+        result
+            .warnings
+            .iter()
+            .any(|w| w.contains("Pass 1 verification mismatch")),
+        "expected pass 1 to be blamed, got: {:?}",
+        result.warnings
+    );
+    assert_eq!(result.outcome, WipeOutcome::Failed);
 }
 
 #[tokio::test]

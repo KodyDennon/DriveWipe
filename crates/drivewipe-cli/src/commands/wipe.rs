@@ -27,6 +27,7 @@ pub async fn run(
     force: bool,
     yes_i_know: bool,
     verify_override: Option<bool>,
+    verify_each_pass: bool,
     report_pdf: Option<&str>,
     dry_run: bool,
 ) -> Result<()> {
@@ -47,6 +48,7 @@ pub async fn run(
     let method_name = method_ref.name().to_string();
     let pass_count = method_ref.pass_count();
     let is_firmware = method_ref.is_firmware();
+    let verification_mandated = method_ref.includes_verification();
 
     // ── Inspect the device ──────────────────────────────────────────────
     let enumerator = create_enumerator();
@@ -127,15 +129,44 @@ pub async fn run(
         );
         println!(
             "Verification after wipe: {}",
-            match verify_override {
-                Some(true) => "yes (override)",
-                Some(false) => "no (override)",
-                None if config.auto_verify => "yes (config default)",
-                None => "no (config default)",
+            match (verification_mandated, verify_override) {
+                (true, _) => "yes (required by this method's specification)",
+                (false, Some(true)) => "yes (override)",
+                (false, Some(false)) => "no (override)",
+                (false, None) if config.auto_verify => "yes (config default)",
+                (false, None) => "no (config default)",
             }
         );
+        if verify_each_pass || config.verify_each_pass {
+            println!("Verification scope       : every pass (full surface read-back per pass)");
+        }
         println!("Dry run complete. No data was modified.");
         return Ok(());
+    }
+
+    // ── Clear hidden areas ──────────────────────────────────────────────
+    // Must happen before the device is opened: the handle caches the capacity
+    // it saw at open time, so an HPA removed afterwards would leave the wipe
+    // still covering only the smaller, visible region.
+    let mut drive_info = drive_info;
+    let hidden_outcome = if is_firmware {
+        // Firmware erase covers the full native capacity itself.
+        Default::default()
+    } else {
+        drivewipe_core::hidden::prepare_for_wipe(&mut drive_info, config.remove_hidden_areas)
+    };
+
+    for note in &hidden_outcome.notes {
+        println!("{} {}", console::style("hidden area:").cyan().bold(), note,);
+    }
+
+    if hidden_outcome.has_unremoved_area() {
+        eprintln!(
+            "{} A hidden area on {} could not be removed. The wipe will not reach \
+             those sectors and the result will not be a complete sanitisation.",
+            console::style("warning:").yellow().bold(),
+            drive_info.path.display(),
+        );
     }
 
     // ── Open the device ─────────────────────────────────────────────────
@@ -155,6 +186,9 @@ pub async fn run(
     let mut session_config = config.clone();
     if let Some(v) = verify_override {
         session_config.auto_verify = v;
+    }
+    if verify_each_pass {
+        session_config.verify_each_pass = true;
     }
 
     let session = {
@@ -205,10 +239,19 @@ pub async fn run(
         pass_count,
     );
 
-    let wipe_result = session
+    let mut wipe_result = session
         .execute(&mut device_io, &progress_tx, cancel_token, resume_state)
         .await
         .context("Wipe operation failed")?;
+
+    // Record what the hidden-area sweep did on the certificate: whether the
+    // wipe covered the whole physical surface is exactly the sort of thing an
+    // audit needs stated explicitly.
+    if !hidden_outcome.notes.is_empty() {
+        let mut notes = hidden_outcome.notes.clone();
+        notes.append(&mut wipe_result.warnings);
+        wipe_result.warnings = notes;
+    }
 
     // Drop the sender so the display thread terminates.
     drop(progress_tx);

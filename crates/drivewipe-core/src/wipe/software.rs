@@ -188,54 +188,36 @@ impl WipeMethod for GutmannMethod {
         35
     }
     fn pattern_for_pass(&self, pass: u32) -> Box<dyn PatternGenerator + Send> {
+        // Pass numbers in comments are 1-indexed to match the paper; `pass` is
+        // 0-indexed.
         match pass {
-            // Passes 1-4: random (0-indexed: 0..4)
+            // Passes 1-4: random.
             0..4 => boxed(RandomFill::new()),
 
-            // Pass 5: 0x55
+            // Pass 5: 0x55, pass 6: 0xAA.
             4 => boxed(ConstantFill(0x55)),
-            // Pass 6: 0xAA
             5 => boxed(ConstantFill(0xAA)),
-            // Pass 7: repeating 0x92 0x49 0x24
+
+            // Passes 7-9: the MFM/RLL 3-byte sequence and its rotations.
             6 => boxed(RepeatingPattern(vec![0x92, 0x49, 0x24])),
-            // Pass 8: repeating 0x49 0x24 0x92
             7 => boxed(RepeatingPattern(vec![0x49, 0x24, 0x92])),
-            // Pass 9: repeating 0x24 0x92 0x49 (per Gutmann paper)
             8 => boxed(RepeatingPattern(vec![0x24, 0x92, 0x49])),
 
-            // Passes 10-16: single-byte fills 0x00..0x66 (step 0x11)
-            9 => boxed(ConstantFill(0x00)),
-            10 => boxed(ConstantFill(0x11)),
-            11 => boxed(ConstantFill(0x22)),
-            12 => boxed(ConstantFill(0x33)),
-            13 => boxed(ConstantFill(0x44)),
-            14 => boxed(ConstantFill(0x55)),
-            15 => boxed(ConstantFill(0x66)),
+            // Passes 10-25: the sixteen single-nibble-repeated constants,
+            // 0x00, 0x11, 0x22 ... 0xFF.
+            9..25 => boxed(ConstantFill(((pass - 9) * 0x11) as u8)),
 
-            // Passes 17-19: repeating 3-byte fills
-            16 => boxed(RepeatingPattern(vec![0x88, 0x88, 0x88])),
-            17 => boxed(RepeatingPattern(vec![0x99, 0x99, 0x99])),
-            18 => boxed(RepeatingPattern(vec![0xAA, 0xAA, 0xAA])),
+            // Passes 26-28: the MFM/RLL sequence again.
+            25 => boxed(RepeatingPattern(vec![0x92, 0x49, 0x24])),
+            26 => boxed(RepeatingPattern(vec![0x49, 0x24, 0x92])),
+            27 => boxed(RepeatingPattern(vec![0x24, 0x92, 0x49])),
 
-            // Passes 20-24: repeating 3-byte fills
-            19 => boxed(RepeatingPattern(vec![0xBB, 0xBB, 0xBB])),
-            20 => boxed(RepeatingPattern(vec![0xCC, 0xCC, 0xCC])),
-            21 => boxed(RepeatingPattern(vec![0xDD, 0xDD, 0xDD])),
-            22 => boxed(RepeatingPattern(vec![0xEE, 0xEE, 0xEE])),
-            23 => boxed(RepeatingPattern(vec![0xFF, 0xFF, 0xFF])),
+            // Passes 29-31: the complementary RLL sequence and its rotations.
+            28 => boxed(RepeatingPattern(vec![0x6D, 0xB6, 0xDB])),
+            29 => boxed(RepeatingPattern(vec![0xB6, 0xDB, 0x6D])),
+            30 => boxed(RepeatingPattern(vec![0xDB, 0x6D, 0xB6])),
 
-            // Passes 25-27: same MFM/RLL patterns repeated
-            24 => boxed(RepeatingPattern(vec![0x92, 0x49, 0x24])),
-            25 => boxed(RepeatingPattern(vec![0x49, 0x24, 0x92])),
-            26 => boxed(RepeatingPattern(vec![0x24, 0x92, 0x49])),
-
-            // Passes 28-31: single-byte fills
-            27 => boxed(ConstantFill(0x77)),
-            28 => boxed(ConstantFill(0x88)),
-            29 => boxed(ConstantFill(0x99)),
-            30 => boxed(ConstantFill(0xAA)),
-
-            // Passes 32-35: random (0-indexed: 31..35)
+            // Passes 32-35: random.
             _ => boxed(RandomFill::new()),
         }
     }
@@ -337,6 +319,218 @@ impl WipeMethod for RcmpMethod {
     }
 }
 
+// ── NIST SP 800-88 Clear ────────────────────────────────────────────────────
+
+/// NIST SP 800-88 Rev. 1, *Clear*: a single overwrite of the addressable
+/// surface with a fixed pattern, verified.
+///
+/// Clear protects against recovery using standard read commands — it is the
+/// appropriate level when the media stays within the organisation. It does not
+/// address data in reallocated sectors or overprovisioned flash; that is what
+/// Purge is for.
+pub struct Nist80088ClearMethod;
+
+#[async_trait]
+impl WipeMethod for Nist80088ClearMethod {
+    fn id(&self) -> &str {
+        "nist-800-88-clear"
+    }
+    fn name(&self) -> &str {
+        "NIST SP 800-88 Clear"
+    }
+    fn description(&self) -> &str {
+        "NIST SP 800-88 Rev. 1 Clear: single zero-fill overwrite of all addressable locations, \
+         with full read-back verification"
+    }
+    fn pass_count(&self) -> u32 {
+        1
+    }
+    fn pattern_for_pass(&self, _pass: u32) -> Box<dyn PatternGenerator + Send> {
+        boxed(ZeroFill)
+    }
+    fn includes_verification(&self) -> bool {
+        true
+    }
+}
+
+// ── NIST SP 800-88 Purge (overwrite) ────────────────────────────────────────
+
+/// NIST SP 800-88 Rev. 1, *Purge* by overwrite: three passes, verified.
+///
+/// Note that 800-88 prefers a firmware sanitize for Purge — ATA Secure Erase,
+/// NVMe Sanitize, or a cryptographic erase — because host-side overwrites
+/// cannot reach reallocated sectors or flash overprovisioning. This method is
+/// the overwrite-based fallback the standard permits for magnetic media whose
+/// controller does not offer a sanitize command. On an SSD, prefer one of the
+/// firmware methods.
+pub struct Nist80088PurgeMethod;
+
+#[async_trait]
+impl WipeMethod for Nist80088PurgeMethod {
+    fn id(&self) -> &str {
+        "nist-800-88-purge"
+    }
+    fn name(&self) -> &str {
+        "NIST SP 800-88 Purge (overwrite)"
+    }
+    fn description(&self) -> &str {
+        "NIST SP 800-88 Rev. 1 Purge by overwrite: random, zero, random with full read-back \
+         verification. For flash media a firmware sanitize or cryptographic erase is preferred."
+    }
+    fn pass_count(&self) -> u32 {
+        3
+    }
+    fn pattern_for_pass(&self, pass: u32) -> Box<dyn PatternGenerator + Send> {
+        match pass {
+            0 => boxed(RandomFill::new()),
+            1 => boxed(ZeroFill),
+            _ => boxed(RandomFill::new()),
+        }
+    }
+    fn includes_verification(&self) -> bool {
+        true
+    }
+}
+
+// ── AFSSI-5020 (U.S. Air Force) ─────────────────────────────────────────────
+
+/// U.S. Air Force System Security Instruction 5020: zero, one, random, verified.
+pub struct Afssi5020Method;
+
+#[async_trait]
+impl WipeMethod for Afssi5020Method {
+    fn id(&self) -> &str {
+        "afssi-5020"
+    }
+    fn name(&self) -> &str {
+        "AFSSI-5020 (U.S. Air Force)"
+    }
+    fn description(&self) -> &str {
+        "U.S. Air Force AFSSI-5020: zero, one, random — with verification"
+    }
+    fn pass_count(&self) -> u32 {
+        3
+    }
+    fn pattern_for_pass(&self, pass: u32) -> Box<dyn PatternGenerator + Send> {
+        match pass {
+            0 => boxed(ZeroFill),
+            1 => boxed(OneFill),
+            _ => boxed(RandomFill::new()),
+        }
+    }
+    fn includes_verification(&self) -> bool {
+        true
+    }
+}
+
+// ── AR 380-19 (U.S. Army) ───────────────────────────────────────────────────
+
+/// U.S. Army Regulation 380-19: random, a fixed character, then its
+/// complement — verified.
+///
+/// The regulation specifies "a random character, then a character, then its
+/// complement". The fixed pair is realised here as `0x00` / `0xFF`; a literal
+/// per-run random character would make the pass unreproducible and therefore
+/// unverifiable, since verification replays the pattern to compare it against
+/// the device.
+pub struct Ar380_19Method;
+
+#[async_trait]
+impl WipeMethod for Ar380_19Method {
+    fn id(&self) -> &str {
+        "ar-380-19"
+    }
+    fn name(&self) -> &str {
+        "AR 380-19 (U.S. Army)"
+    }
+    fn description(&self) -> &str {
+        "U.S. Army AR 380-19: random, then 0x00, then its complement 0xFF — with verification"
+    }
+    fn pass_count(&self) -> u32 {
+        3
+    }
+    fn pattern_for_pass(&self, pass: u32) -> Box<dyn PatternGenerator + Send> {
+        match pass {
+            0 => boxed(RandomFill::new()),
+            1 => boxed(ConstantFill(0x00)),
+            _ => boxed(ConstantFill(0xFF)),
+        }
+    }
+    fn includes_verification(&self) -> bool {
+        true
+    }
+}
+
+// ── NAVSO P-5239-26 (U.S. Navy) ─────────────────────────────────────────────
+
+/// U.S. Navy NAVSO P-5239-26: a character, its complement, then random —
+/// verified.
+///
+/// The publication names `0x01` and its complement `0xFE` for MFM-encoded
+/// media, which is the pairing used here.
+pub struct NavsoP5239_26Method;
+
+#[async_trait]
+impl WipeMethod for NavsoP5239_26Method {
+    fn id(&self) -> &str {
+        "navso-p-5239-26"
+    }
+    fn name(&self) -> &str {
+        "NAVSO P-5239-26 (U.S. Navy)"
+    }
+    fn description(&self) -> &str {
+        "U.S. Navy NAVSO P-5239-26: 0x01, its complement 0xFE, then random — with verification"
+    }
+    fn pass_count(&self) -> u32 {
+        3
+    }
+    fn pattern_for_pass(&self, pass: u32) -> Box<dyn PatternGenerator + Send> {
+        match pass {
+            0 => boxed(ConstantFill(0x01)),
+            1 => boxed(ConstantFill(0xFE)),
+            _ => boxed(RandomFill::new()),
+        }
+    }
+    fn includes_verification(&self) -> bool {
+        true
+    }
+}
+
+// ── VSITR (German BSI) ──────────────────────────────────────────────────────
+
+/// German BSI VSITR: seven passes — three alternating zero/one pairs followed
+/// by a final `0xAA` pass.
+pub struct VsitrMethod;
+
+#[async_trait]
+impl WipeMethod for VsitrMethod {
+    fn id(&self) -> &str {
+        "vsitr"
+    }
+    fn name(&self) -> &str {
+        "VSITR (German BSI, 7-pass)"
+    }
+    fn description(&self) -> &str {
+        "German BSI VSITR: three alternating 0x00/0xFF pass pairs, then a final 0xAA pass — \
+         with verification"
+    }
+    fn pass_count(&self) -> u32 {
+        7
+    }
+    fn pattern_for_pass(&self, pass: u32) -> Box<dyn PatternGenerator + Send> {
+        match pass {
+            // Passes 1-6 alternate 0x00 and 0xFF.
+            p if p < 6 && p % 2 == 0 => boxed(ZeroFill),
+            p if p < 6 => boxed(OneFill),
+            // Pass 7 is 0xAA.
+            _ => boxed(ConstantFill(0xAA)),
+        }
+    }
+    fn includes_verification(&self) -> bool {
+        true
+    }
+}
+
 // ── Registry helper ──────────────────────────────────────────────────────────
 
 /// Returns all built-in software wipe methods.
@@ -351,5 +545,11 @@ pub fn all_software_methods() -> Vec<Box<dyn WipeMethod>> {
         Box::new(HmgBaselineMethod),
         Box::new(HmgEnhancedMethod),
         Box::new(RcmpMethod),
+        Box::new(Nist80088ClearMethod),
+        Box::new(Nist80088PurgeMethod),
+        Box::new(Afssi5020Method),
+        Box::new(Ar380_19Method),
+        Box::new(NavsoP5239_26Method),
+        Box::new(VsitrMethod),
     ]
 }

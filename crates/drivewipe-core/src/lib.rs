@@ -6,7 +6,7 @@
 //!
 //! ## Key Features
 //!
-//! - **Sanitization**: Implements 21 wipe methods compliant with NIST SP 800-88 and IEEE 2883.
+//! - **Sanitization**: Implements 27 wipe methods compliant with NIST SP 800-88 and IEEE 2883.
 //! - **Dual-Layer I/O**: High-performance software overwrites combined with firmware-level erase commands.
 //! - **Safety First**: Integrated boot drive detection, multi-step confirmation logic, and hardware warnings.
 //! - **Extensible Architecture**: Trait-based design for I/O, patterns, and wipe methods.
@@ -37,6 +37,7 @@ pub mod drive;
 pub mod error;
 pub mod forensic;
 pub mod health;
+pub mod hidden;
 pub mod io;
 pub mod keyboard_lock;
 pub mod notify;

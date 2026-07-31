@@ -8,7 +8,7 @@ DriveWipe provides military/corporate-grade drive wiping with software overwrite
 
 ## Why DriveWipe?
 
-- **21 wipe methods** — software, firmware, and hybrid — covering every drive type
+- **27 wipe methods** — software, firmware, and hybrid — covering every drive type
 - **Live environment** — boot from USB or PXE network to wipe any drive, including the boot drive
 - **Direct hardware access** — custom kernel module for ATA/NVMe passthrough, HPA/DCO manipulation, and DMA I/O
 - **Full forensic toolkit** — entropy analysis, signature scanning, and formal chain-of-custody reports
@@ -20,10 +20,10 @@ DriveWipe provides military/corporate-grade drive wiping with software overwrite
 ## Features
 
 ### Secure Data Sanitization
-- **9 software wipe methods** — Zero/One/Random fill, DoD 5220.22-M (3 & 7 pass), Gutmann (35 pass), HMG IS5 Baseline & Enhanced, RCMP TSSIT OPS-II, plus custom user-defined methods
+- **15 software wipe methods** — Zero/One/Random fill, NIST SP 800-88 Clear & Purge, DoD 5220.22-M (3 & 7 pass), AFSSI-5020, AR 380-19, NAVSO P-5239-26, Gutmann (35 pass), HMG IS5 Baseline & Enhanced, RCMP TSSIT OPS-II, VSITR, plus custom user-defined methods
 - **8 firmware wipe methods** — ATA Secure Erase (normal & enhanced), NVMe Format/Sanitize (5 modes), TCG Opal crypto erase
 - **4 DriveWipe Secure methods** — Intelligent multi-phase sanitization tailored for HDD, SATA SSD, NVMe, and USB drives
-- **Full read-back verification** after wipe
+- **Full read-back verification** — byte-for-byte across the whole surface for every pattern type, including random passes, which are reproduced from their AES-256-CTR seed rather than sampled. Optional per-pass verification via `--verify-each-pass`. Methods whose standard mandates verification always run it.
 - **Resume capability** — auto-save state every 10 seconds, resume after interruption
 - **Multi-drive parallel wipe** with live queue (add drives during active wipe)
 
@@ -89,7 +89,7 @@ DriveWipe provides military/corporate-grade drive wiping with software overwrite
 
 ### Prerequisites
 
-- Rust 1.85+ (2024 edition)
+- Rust 1.94+ (2024 edition)
 - Root/Administrator privileges (required for raw device access)
 
 ### Build
@@ -98,8 +98,9 @@ DriveWipe provides military/corporate-grade drive wiping with software overwrite
 # Build all desktop binaries
 cargo build --release
 
-# Build TUI with live environment features (Linux only)
-cargo build --release --package drivewipe-tui --features live
+# The TUI includes the live-environment screens by default on Linux.
+# To build without them:
+cargo build --release --package drivewipe-tui --no-default-features --features pdf-report
 
 # Build the live USB image (requires Docker)
 cargo xtask live-build
@@ -192,6 +193,12 @@ sudo drivewipe-gui
 | `hmg-baseline` | HMG IS5 Baseline | 1 | Software |
 | `hmg-enhanced` | HMG IS5 Enhanced | 3 | Software |
 | `rcmp` | RCMP TSSIT OPS-II | 7 | Software |
+| `nist-800-88-clear` | NIST SP 800-88 Clear | 1 | Software |
+| `nist-800-88-purge` | NIST SP 800-88 Purge (overwrite) | 3 | Software |
+| `afssi-5020` | AFSSI-5020 (U.S. Air Force) | 3 | Software |
+| `ar-380-19` | AR 380-19 (U.S. Army) | 3 | Software |
+| `navso-p-5239-26` | NAVSO P-5239-26 (U.S. Navy) | 3 | Software |
+| `vsitr` | VSITR (German BSI) | 7 | Software |
 | `ata-erase` | ATA Secure Erase | firmware | Firmware |
 | `ata-erase-enhanced` | ATA Enhanced Secure Erase | firmware | Firmware |
 | `nvme-format-user` | NVMe Format (User Data Erase) | firmware | Firmware |
@@ -232,7 +239,7 @@ DriveWipe/
     alpine-config/     # Live USB boot configuration and init scripts
     pxe/               # PXE network boot infrastructure
   profiles/            # Drive profile TOML files
-  scripts/             # Build scripts (DRIVEWIPE_LIVE_VERSION=1.2.0 ./scripts/build-live.sh)
+  scripts/             # Build scripts (DRIVEWIPE_LIVE_VERSION=2.0.0 ./scripts/build-live.sh)
   docs/                # Documentation
 ```
 
@@ -297,17 +304,17 @@ DriveWipe/
 # Build the live image
 cargo xtask live-build
 
-# Write to USB (replace v1.2.0 and /dev/sdX with your version and device)
-sudo dd if=drivewipe-live-v1.2.0.iso of=/dev/sdX bs=4M status=progress
+# Write to USB (replace VERSION and /dev/sdX with your version and device)
+sudo dd if=drivewipe-live-VERSION.iso of=/dev/sdX bs=4M status=progress
 ```
 
 ### PXE Network Boot
 
-DriveWipe Live can be network-booted for wiping entire racks. The PXE artifact (`drivewipe-live-v1.2.0-pxe.tar.gz`) contains everything needed to seed a TFTP/HTTP server.
+DriveWipe Live can be network-booted for wiping entire racks. The PXE artifact (`drivewipe-live-VERSION-pxe.tar.gz`) contains everything needed to seed a TFTP/HTTP server.
 
 ```bash
 # Extract PXE artifacts from a built image
-tar -xzvf DriveWipe-v1.2.0-Live-PXE.tar.gz -C /var/lib/tftpboot/
+tar -xzvf drivewipe-live-VERSION-pxe.tar.gz -C /var/lib/tftpboot/
 
 # Configure dnsmasq with the included config
 sudo cp /var/lib/tftpboot/dnsmasq.conf /etc/dnsmasq.d/drivewipe.conf

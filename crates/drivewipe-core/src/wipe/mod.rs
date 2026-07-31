@@ -67,6 +67,35 @@ pub trait WipeMethod: Send + Sync {
     ) -> Option<Result<()>> {
         None
     }
+
+    /// Best-effort work performed before the overwrite passes begin.
+    ///
+    /// Used by hybrid methods to reach storage the host cannot address, such as
+    /// a controller-level sanitize over spare and overprovisioned blocks.
+    /// Returns notes for the wipe report. Failures are advisory: an unsupported
+    /// command must degrade to a warning, never fail the wipe.
+    async fn before_passes(
+        &self,
+        _drive: &DriveInfo,
+        _session_id: Uuid,
+        _progress_tx: &Sender<ProgressEvent>,
+    ) -> Vec<String> {
+        Vec::new()
+    }
+
+    /// Best-effort work performed after the overwrite passes, before
+    /// verification.
+    ///
+    /// Anything done here must leave the surface matching the final pass, since
+    /// verification still has to pass afterwards.
+    async fn after_passes(
+        &self,
+        _drive: &DriveInfo,
+        _session_id: Uuid,
+        _progress_tx: &Sender<ProgressEvent>,
+    ) -> Vec<String> {
+        Vec::new()
+    }
 }
 
 // ── FirmwareMethodAdapter ────────────────────────────────────────────────────

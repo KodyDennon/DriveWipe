@@ -4,9 +4,21 @@ use crate::crypto::AesCtrRng;
 ///
 /// Each implementor fills a buffer with a specific byte pattern and provides
 /// a human-readable name for logging and reporting.
+///
+/// Generators are offset-addressable: [`fill_at`](Self::fill_at) produces the
+/// bytes belonging at an absolute device offset, which is what makes a pass
+/// verifiable and keeps a resumed pass byte-identical to an uninterrupted one.
+///
+/// For [`RandomFill`] this holds per generator instance — each new instance
+/// seeds itself afresh, so verification must reuse the instance that wrote.
 pub trait PatternGenerator {
-    /// Fills `buf` entirely with this generator's pattern.
-    fn fill(&mut self, buf: &mut [u8]);
+    /// Fills `buf` with the pattern bytes belonging at absolute device `offset`.
+    fn fill_at(&mut self, offset: u64, buf: &mut [u8]);
+
+    /// Equivalent to `fill_at(0, buf)`; for callers that only care about shape.
+    fn fill(&mut self, buf: &mut [u8]) {
+        self.fill_at(0, buf);
+    }
 
     /// Returns a human-readable name describing this pattern.
     fn name(&self) -> &str;
@@ -16,7 +28,7 @@ pub trait PatternGenerator {
 pub struct ZeroFill;
 
 impl PatternGenerator for ZeroFill {
-    fn fill(&mut self, buf: &mut [u8]) {
+    fn fill_at(&mut self, _offset: u64, buf: &mut [u8]) {
         buf.fill(0x00);
     }
 
@@ -29,7 +41,7 @@ impl PatternGenerator for ZeroFill {
 pub struct OneFill;
 
 impl PatternGenerator for OneFill {
-    fn fill(&mut self, buf: &mut [u8]) {
+    fn fill_at(&mut self, _offset: u64, buf: &mut [u8]) {
         buf.fill(0xFF);
     }
 
@@ -42,7 +54,7 @@ impl PatternGenerator for OneFill {
 pub struct ConstantFill(pub u8);
 
 impl PatternGenerator for ConstantFill {
-    fn fill(&mut self, buf: &mut [u8]) {
+    fn fill_at(&mut self, _offset: u64, buf: &mut [u8]) {
         buf.fill(self.0);
     }
 
@@ -52,6 +64,10 @@ impl PatternGenerator for ConstantFill {
 }
 
 /// Fills the buffer with cryptographically secure random data from an AES-256-CTR PRNG.
+///
+/// Keyed to the absolute device offset, so a given instance always produces the
+/// same bytes for the same offset — which makes a random pass verifiable
+/// byte-for-byte rather than sampled.
 pub struct RandomFill {
     rng: AesCtrRng,
 }
@@ -63,6 +79,20 @@ impl RandomFill {
             rng: AesCtrRng::new(),
         }
     }
+
+    /// Recreates a `RandomFill` from a previously recorded seed, reproducing
+    /// the exact keystream of an earlier pass.
+    pub fn from_seed(key: [u8; 32], nonce: [u8; 16]) -> Self {
+        Self {
+            rng: AesCtrRng::from_seed(key, nonce),
+        }
+    }
+
+    /// Returns the key and nonce backing this generator, so the pass can be
+    /// reproduced later for verification or resumption.
+    pub fn seed(&self) -> ([u8; 32], [u8; 16]) {
+        self.rng.seed()
+    }
 }
 
 impl Default for RandomFill {
@@ -72,8 +102,8 @@ impl Default for RandomFill {
 }
 
 impl PatternGenerator for RandomFill {
-    fn fill(&mut self, buf: &mut [u8]) {
-        self.rng.fill_bytes(buf);
+    fn fill_at(&mut self, offset: u64, buf: &mut [u8]) {
+        self.rng.fill_bytes_at(offset, buf);
     }
 
     fn name(&self) -> &str {
@@ -83,23 +113,24 @@ impl PatternGenerator for RandomFill {
 
 /// Fills the buffer by repeating a byte sequence across its entire length.
 ///
-/// If the buffer length is not an exact multiple of the pattern length, the final
-/// repetition is truncated to fit.
+/// Phased to the absolute device offset so the sequence repeats continuously
+/// across the device rather than restarting at every buffer boundary.
 pub struct RepeatingPattern(pub Vec<u8>);
 
 impl PatternGenerator for RepeatingPattern {
-    fn fill(&mut self, buf: &mut [u8]) {
+    fn fill_at(&mut self, offset: u64, buf: &mut [u8]) {
         if self.0.is_empty() {
             return;
         }
         let pattern = &self.0;
+        let mut phase = (offset % pattern.len() as u64) as usize;
 
-        // Use efficient chunk copying instead of modulo for each byte
-        let mut remaining = buf;
+        let mut remaining = &mut buf[..];
         while !remaining.is_empty() {
-            let chunk_len = remaining.len().min(pattern.len());
-            remaining[..chunk_len].copy_from_slice(&pattern[..chunk_len]);
+            let chunk_len = remaining.len().min(pattern.len() - phase);
+            remaining[..chunk_len].copy_from_slice(&pattern[phase..phase + chunk_len]);
             remaining = &mut remaining[chunk_len..];
+            phase = 0;
         }
     }
 
@@ -142,14 +173,39 @@ mod tests {
     }
 
     #[test]
-    fn random_fill_produces_different_output_each_call() {
+    fn random_fill_differs_across_offsets() {
         let mut rng = RandomFill::new();
         let mut buf1 = [0u8; 64];
         let mut buf2 = [0u8; 64];
-        rng.fill(&mut buf1);
-        rng.fill(&mut buf2);
-        // Two successive fills from the same generator should differ.
+        rng.fill_at(0, &mut buf1);
+        rng.fill_at(64, &mut buf2);
+        // Distinct regions of the device must receive distinct keystream.
         assert_ne!(buf1, buf2);
+    }
+
+    #[test]
+    fn random_fill_is_reproducible_at_a_given_offset() {
+        let mut rng = RandomFill::new();
+        let mut first = [0u8; 128];
+        let mut second = [0u8; 128];
+        rng.fill_at(4096, &mut first);
+        rng.fill_at(0, &mut [0u8; 512]); // move the stream position elsewhere
+        rng.fill_at(4096, &mut second);
+        assert_eq!(first, second);
+    }
+
+    #[test]
+    fn random_fill_reproducible_from_recorded_seed() {
+        let original = RandomFill::new();
+        let (key, nonce) = original.seed();
+        let mut original = original;
+        let mut replayed = RandomFill::from_seed(key, nonce);
+
+        let mut a = [0u8; 96];
+        let mut b = [0u8; 96];
+        original.fill_at(1 << 20, &mut a);
+        replayed.fill_at(1 << 20, &mut b);
+        assert_eq!(a, b);
     }
 
     #[test]
@@ -157,6 +213,31 @@ mod tests {
         let mut buf = [0u8; 6];
         RepeatingPattern(vec![0xAA, 0xBB, 0xCC]).fill(&mut buf);
         assert_eq!(buf, [0xAA, 0xBB, 0xCC, 0xAA, 0xBB, 0xCC]);
+    }
+
+    #[test]
+    fn repeating_pattern_is_phased_by_offset() {
+        // Starting one byte into a 3-byte sequence must continue the sequence,
+        // not restart it.
+        let mut buf = [0u8; 5];
+        RepeatingPattern(vec![0xAA, 0xBB, 0xCC]).fill_at(1, &mut buf);
+        assert_eq!(buf, [0xBB, 0xCC, 0xAA, 0xBB, 0xCC]);
+    }
+
+    #[test]
+    fn repeating_pattern_is_continuous_across_chunk_boundaries() {
+        // Filling in two chunks must produce the same bytes as one contiguous
+        // fill, even when the chunk size is not a multiple of the pattern.
+        let pattern = vec![0x92, 0x49, 0x24];
+        let mut whole = [0u8; 16];
+        RepeatingPattern(pattern.clone()).fill_at(0, &mut whole);
+
+        let mut split = [0u8; 16];
+        let (head, tail) = split.split_at_mut(7);
+        RepeatingPattern(pattern.clone()).fill_at(0, head);
+        RepeatingPattern(pattern).fill_at(7, tail);
+
+        assert_eq!(whole, split);
     }
 
     #[test]

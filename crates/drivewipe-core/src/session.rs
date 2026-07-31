@@ -12,7 +12,7 @@ use crate::io::{DEFAULT_BLOCK_SIZE, DeviceWrapper, RawDeviceIo, allocate_aligned
 use crate::progress::ProgressEvent;
 use crate::resume::WipeState;
 use crate::types::*;
-use crate::verify::{Verifier, pattern_verify::PatternVerifier, zero_verify::ZeroVerifier};
+use crate::verify::{Verifier, pattern_verify::PatternVerifier};
 use crate::wipe::WipeMethod;
 
 /// A cooperative cancellation token that can be shared across threads.
@@ -63,6 +63,8 @@ pub struct WipeSession {
     pub method: Box<dyn WipeMethod>,
     pub config: DriveWipeConfig,
     pub verify_after: bool,
+    /// Verify the full surface after every pass, not just the last one.
+    pub verify_each_pass: bool,
 }
 
 impl WipeSession {
@@ -71,14 +73,72 @@ impl WipeSession {
         method: Box<dyn WipeMethod>,
         config: DriveWipeConfig,
     ) -> Self {
-        let verify_after = config.auto_verify;
+        // A method whose specification mandates verification is always
+        // verified: running DoD 5220.22-M or NIST SP 800-88 without the
+        // read-back does not satisfy the standard it claims to implement, so
+        // `auto_verify` may add verification but must not remove it.
+        let verify_after = config.auto_verify || method.includes_verification();
+        let verify_each_pass = config.verify_each_pass;
         Self {
             session_id: Uuid::new_v4(),
             drive_info,
             method,
             config,
             verify_after,
+            verify_each_pass,
         }
+    }
+
+    /// Read the entire device back and compare it against the bytes `pattern`
+    /// says should be there.
+    ///
+    /// Returns whether the surface matched, along with the generator so the
+    /// caller can reuse it. A mismatch or read error is recorded in `warnings`
+    /// and reported as `false` rather than aborting, so that a failed
+    /// verification still produces a complete report.
+    ///
+    /// `pass_number` identifies the pass being verified for logging; `None`
+    /// means this is the final whole-session verification.
+    async fn verify_pattern(
+        pattern: Box<dyn crate::wipe::patterns::PatternGenerator + Send>,
+        device: &mut dyn RawDeviceIo,
+        session_id: Uuid,
+        progress_tx: &Sender<ProgressEvent>,
+        warnings: &mut Vec<String>,
+        pass_number: Option<u32>,
+    ) -> Result<(
+        bool,
+        Box<dyn crate::wipe::patterns::PatternGenerator + Send>,
+    )> {
+        let label = match pass_number {
+            Some(n) => format!("Pass {n} verification"),
+            None => "Verification".to_string(),
+        };
+
+        let verifier = PatternVerifier::new(pattern);
+        let outcome = verifier.verify(device, session_id, progress_tx).await;
+        let pattern = verifier.into_pattern();
+
+        let passed = match outcome {
+            Ok(result) => result,
+            Err(DriveWipeError::VerificationFailed {
+                offset,
+                expected,
+                actual,
+            }) => {
+                warnings.push(format!(
+                    "{label} mismatch at offset {offset:#x}: \
+                     expected {expected:#04x}, got {actual:#04x}"
+                ));
+                false
+            }
+            Err(e) => {
+                warnings.push(format!("{label} error: {e}"));
+                false
+            }
+        };
+
+        Ok((passed, pattern))
     }
 
     /// Execute the wipe operation.
@@ -252,6 +312,22 @@ impl WipeSession {
         let mut warnings: Vec<String> = Vec::new();
         let state_save_interval = self.config.state_save_interval_secs;
 
+        // The generator from the most recently completed pass. Final
+        // verification reuses it rather than asking the method for a fresh one,
+        // because a new RandomFill would carry a different seed and so compare
+        // the device against a keystream that was never written to it.
+        let mut last_pattern: Option<Box<dyn crate::wipe::patterns::PatternGenerator + Send>> =
+            None;
+
+        for note in self
+            .method
+            .before_passes(&self.drive_info, session_id, progress_tx)
+            .await
+        {
+            log::info!("[SESSION] pre-pass: {}", note);
+            warnings.push(note);
+        }
+
         log::debug!("[SESSION] Starting software method pass loop");
         log::debug!(
             "[SESSION] Start pass: {}, Total passes: {}",
@@ -381,8 +457,11 @@ impl WipeSession {
                 };
                 let write_buf = &mut buffer[..write_len];
 
-                // Fill buffer with the pattern
-                pattern.fill(write_buf);
+                // Fill the buffer with the pattern bytes belonging at this
+                // offset. Keying the pattern to the absolute offset is what
+                // lets the pass be verified afterwards, and what keeps a
+                // resumed pass byte-identical to an uninterrupted one.
+                pattern.fill_at(bytes_written_this_pass, write_buf);
 
                 // Write to device at the current offset
                 if write_count == 1 {
@@ -519,15 +598,39 @@ impl WipeSession {
                 throughput_mbps,
             });
 
+            // Per-pass verification: read the whole surface back and compare it
+            // against the bytes this pass should have written. The generator is
+            // reused rather than rebuilt, so random passes compare against the
+            // exact keystream that was written.
+            let mut pass_verified = None;
+            if self.verify_each_pass {
+                log::debug!("[SESSION] Verifying pass {}", pass_1idx);
+                let (passed, returned) = Self::verify_pattern(
+                    pattern,
+                    device,
+                    session_id,
+                    progress_tx,
+                    &mut warnings,
+                    Some(pass_1idx),
+                )
+                .await?;
+                pattern = returned;
+                pass_verified = Some(passed);
+            }
+
             pass_results.push(PassResult {
                 pass_number: pass_1idx,
                 pattern_name: pattern_name.clone(),
                 bytes_written: total_bytes,
                 duration_secs: pass_duration,
                 throughput_mbps,
-                verified: false,
-                verification_passed: None,
+                verified: pass_verified.is_some(),
+                verification_passed: pass_verified,
             });
+
+            // Hold on to this pass's generator: if it turns out to be the last
+            // pass, the final verification needs this exact instance.
+            last_pattern = Some(pattern);
 
             // Save state after each completed pass
             wipe_state.update_progress(pass_1idx, total_bytes, total_bytes_written);
@@ -536,154 +639,55 @@ impl WipeSession {
             }
         }
 
-        // Verification phase — delegate to Verifier trait implementations
+        for note in self
+            .method
+            .after_passes(&self.drive_info, session_id, progress_tx)
+            .await
+        {
+            log::info!("[SESSION] post-pass: {}", note);
+            warnings.push(note);
+        }
+
+        // ── Verification phase ─────────────────────────────────────────
+        // Every pattern is offset-addressable and reproducible, so a single
+        // full-surface byte comparison covers all of them — including random
+        // passes, which previously could only be sampled. The generator from
+        // the final pass is reused so its keystream matches what was written.
         let verification_passed = if self.verify_after {
-            // Determine which verifier to use based on the final pass pattern.
-            let pattern = self.method.pattern_for_pass(total_passes - 1);
-            let pattern_name = pattern.name();
-
-            let passed = if pattern_name.contains("Zero") {
-                // Deterministic zero pattern — use the optimised ZeroVerifier.
-                let verifier = ZeroVerifier;
-                match verifier.verify(device, session_id, progress_tx).await {
-                    Ok(result) => result,
-                    Err(DriveWipeError::VerificationFailed {
-                        offset,
-                        expected,
-                        actual,
-                    }) => {
-                        let msg = format!(
-                            "Verification mismatch at offset {offset:#x}: \
-                             expected {expected:#04x}, got {actual:#04x}"
-                        );
-                        warnings.push(msg);
-                        false
-                    }
-                    Err(e) => {
-                        let msg = format!("Verification error: {e}");
-                        warnings.push(msg);
-                        false
-                    }
-                }
-            } else if pattern_name.contains("Random") {
-                // Random pattern verification: sample multiple blocks at evenly
-                // distributed offsets to confirm data was actually written.
-                // Byte-level replay is not possible since the AES-CTR seed was
-                // not persisted between the write and this verification.
-                let verify_start = Instant::now();
-
-                let _ = progress_tx.send(ProgressEvent::VerificationStarted { session_id });
-
-                let num_samples =
-                    16usize.min((total_bytes / DEFAULT_BLOCK_SIZE as u64).max(1) as usize);
-                let mut all_passed = true;
-                let mut any_all_zero = false;
-                let block_sz = device.block_size() as u64;
-
-                for sample_idx in 0..num_samples {
-                    let raw_offset = if num_samples > 1 {
-                        (total_bytes / num_samples as u64) * sample_idx as u64
+            match last_pattern.take() {
+                Some(pattern) => {
+                    // Already verified as part of the pass loop; don't read the
+                    // whole device a second time for no new information.
+                    if self.verify_each_pass {
+                        pass_results.last().and_then(|p| p.verification_passed)
                     } else {
-                        0
-                    };
-                    // Align offset to block size for O_DIRECT compatibility.
-                    let aligned_offset = (raw_offset / block_sz) * block_sz;
-                    let sample_len =
-                        ((total_bytes - aligned_offset) as usize).min(DEFAULT_BLOCK_SIZE);
+                        let (passed, _) = Self::verify_pattern(
+                            pattern,
+                            device,
+                            session_id,
+                            progress_tx,
+                            &mut warnings,
+                            None,
+                        )
+                        .await?;
 
-                    let device_wrapper = DeviceWrapper::new(device);
-                    let offset = aligned_offset;
-
-                    let read_res = tokio::task::spawn_blocking(move || {
-                        let device_ref = unsafe { device_wrapper.get_mut() };
-                        let mut temp_buf = vec![0u8; sample_len];
-                        let res = device_ref.read_at(offset, &mut temp_buf);
-                        (res, temp_buf)
-                    })
-                    .await
-                    .map_err(|e| {
-                        DriveWipeError::IoGeneric(std::io::Error::other(format!(
-                            "Task join error: {e}"
-                        )))
-                    })?;
-
-                    match read_res.0 {
-                        Ok(n) if n > 0 => {
-                            if read_res.1[..n].iter().all(|&b| b == 0) {
-                                any_all_zero = true;
-                            }
+                        if let Some(last_pass) = pass_results.last_mut() {
+                            last_pass.verified = true;
+                            last_pass.verification_passed = Some(passed);
                         }
-                        Ok(_) => {}
-                        Err(e) => {
-                            let msg =
-                                format!("Verification read error at offset {aligned_offset}: {e}");
-                            warnings.push(msg);
-                            all_passed = false;
-                            break;
-                        }
+                        Some(passed)
                     }
                 }
-
-                let passed = if any_all_zero {
-                    let msg = "Random verification: one or more sampled blocks were all \
-                               zeros — expected non-zero random data"
-                        .to_string();
-                    warnings.push(msg);
-                    false
-                } else {
-                    all_passed
-                };
-
-                if passed {
-                    warnings.push(format!(
-                        "Random pattern verification: confirmed {} sampled blocks contain \
-                         non-zero data (byte-level verification not possible for random data)",
-                        num_samples
-                    ));
+                None => {
+                    // No pass ran (a fully resumed session that had already
+                    // finished every pass). Nothing was written, so there is
+                    // no generator to compare against.
+                    warnings.push(
+                        "Verification skipped: no pass was executed in this session".to_string(),
+                    );
+                    None
                 }
-
-                let verify_duration = verify_start.elapsed().as_secs_f64();
-                let _ = progress_tx.send(ProgressEvent::VerificationCompleted {
-                    session_id,
-                    passed,
-                    duration_secs: verify_duration,
-                });
-
-                passed
-            } else {
-                // Deterministic pattern (OneFill, ConstantFill, RepeatingPattern,
-                // etc.) — use PatternVerifier with a fresh copy of the pattern.
-                let fresh_pattern = self.method.pattern_for_pass(total_passes - 1);
-                let verifier = PatternVerifier::new(fresh_pattern);
-                match verifier.verify(device, session_id, progress_tx).await {
-                    Ok(result) => result,
-                    Err(DriveWipeError::VerificationFailed {
-                        offset,
-                        expected,
-                        actual,
-                    }) => {
-                        let msg = format!(
-                            "Verification mismatch at offset {offset:#x}: \
-                             expected {expected:#04x}, got {actual:#04x}"
-                        );
-                        warnings.push(msg);
-                        false
-                    }
-                    Err(e) => {
-                        let msg = format!("Verification error: {e}");
-                        warnings.push(msg);
-                        false
-                    }
-                }
-            };
-
-            // Mark the last pass as verified
-            if let Some(last_pass) = pass_results.last_mut() {
-                last_pass.verified = true;
-                last_pass.verification_passed = Some(passed);
             }
-
-            Some(passed)
         } else {
             None
         };

@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.0.0] - 2026-07-31
+
+Major release focused on making the DoD and mil-spec wipe methods genuinely
+complete and verifiable on Linux.
+
+### Added
+- **Six new sanitization standards** — NIST SP 800-88 Clear (`nist-800-88-clear`) and Purge (`nist-800-88-purge`), AFSSI-5020 (`afssi-5020`), AR 380-19 (`ar-380-19`), NAVSO P-5239-26 (`navso-p-5239-26`), and VSITR (`vsitr`). The CLI and README previously claimed NIST SP 800-88 compliance while no such method existed; selecting it returned "Unknown wipe method".
+- **Byte-for-byte verification of random passes** — random passes are now reproduced from their AES-256-CTR seed and compared against the full device surface. Previously a random pass could only be sampled: 16 blocks were read and checked for being non-zero, so a sector that silently failed to take the write passed unnoticed. Both DoD methods end on a random pass and were therefore the least-verified methods in the tool.
+- **Per-pass verification** — `--verify-each-pass` (config: `verify_each_pass`) reads the whole surface back after every pass instead of only the last, producing per-pass evidence at roughly double the wall-clock time.
+- **Pre-wipe HPA/DCO removal** — hidden areas are now cleared before the overwrite begins, and the recovered capacity is wiped. Previously HPA/DCO were only *detected*, and only in the TUI; a wipe of a drive with a Host Protected Area left the hidden sectors intact and still reported success. Controlled by `remove_hidden_areas` (default on); an area that cannot be removed is reported as a warning on the certificate.
+- **TRIM/discard support** — `BLKDISCARD` is issued across the whole device after the overwrite passes for the SSD, NVMe and USB secure methods.
+- **Offset-addressable patterns** — `PatternGenerator::fill_at` keys every pattern to its absolute device offset, making all passes reproducible and keeping a resumed pass byte-identical to an uninterrupted one.
+
+### Changed
+- **BREAKING: `PatternGenerator` trait** — implementors must now provide `fill_at(&mut self, offset: u64, buf: &mut [u8])`. `fill(buf)` remains as a provided method delegating to `fill_at(0, buf)`.
+- **BREAKING: `WipeMethod` trait** — gained `before_passes` and `after_passes` hooks (both defaulted) for hybrid methods that combine controller sanitize, overwrite, and TRIM.
+- **BREAKING: HPA/DCO relocated** — `hpa`, `dco`, `kernel_module` and `dma_io` moved from `drivewipe-live` to `drivewipe-core` under `drivewipe_core::hidden`, so the wipe engine itself can clear hidden areas. `drivewipe-live` re-exports them, so existing `drivewipe_live::hpa::*` paths still resolve.
+- **`includes_verification()` is now honoured** — it was previously dead code referenced only by tests, so disabling `auto_verify` silently skipped verification even for methods whose specification mandates it. Methods that require verification now always run it; `auto_verify` can add verification but no longer removes it.
+- **Gutmann pattern table corrected** — passes 10-25 are now the full sixteen constants `0x00`-`0xFF` (only seven were present, and `0x77` was missing entirely), and passes 29-31 (`0x6D B6 DB`, `0xB6 DB 6D`, `0xDB 6D B6`) have been added; they were absent.
+- **Repeating patterns are now continuous** — multi-byte sequences are phased to the device offset instead of restarting at every 4 MiB buffer boundary.
+- **DriveWipe Secure methods now do what they describe** — the SATA SSD and NVMe methods documented TRIM and firmware sanitize steps they never performed, and those strings appear on signed certificates. Controller sanitize now runs before the overwrite passes (so the passes leave the final verifiable pattern), with TRIM after.
+- **TUI live screens enabled by default** — the `live` feature is now a default feature, so HPA/DCO Manager, ATA Security, Kernel Module Status and the Live Dashboard are present in a stock build instead of being compiled out.
+- **TUI settings are table-driven** — settings rendering and key handling now share one definition rather than duplicating hardcoded indices in three places, and the screen exposes Auto Verify, Verify Every Pass, Remove Hidden Areas and Default Method.
+
+### Fixed
+- Verification no longer selects its strategy by substring-matching the pattern's display name.
+- Resumed random passes are now consistent with the bytes already written.
+- Remaining `collapsible_match` clippy lints in the TUI.
+
 ## [1.3.0] - 2026-03-13
 
 ### Added

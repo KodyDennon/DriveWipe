@@ -147,6 +147,10 @@ jobs:
     name: Build Live ISO
     needs: ci-gate
     runs-on: ubuntu-latest
+    outputs:
+      # Whether an ISO was actually produced, so the release notes only
+      # advertise it when it exists.
+      has_iso: ${{ steps.package-live.outputs.has_iso }}
     steps:
       - uses: actions/checkout@v6
 
@@ -193,6 +197,7 @@ jobs:
           SKIP_KERNEL_MODULE: "1"
 
       - name: Package Live artifacts
+        id: package-live
         run: |
           TAG="${{ steps.version.outputs.tag }}"
           mkdir -p live-dist
@@ -201,6 +206,14 @@ jobs:
           cp output/*.iso live-dist/drivewipe-live-${TAG}.iso 2>/dev/null || \
           cp target/pxe-server/*.iso live-dist/drivewipe-live-${TAG}.iso 2>/dev/null || \
           cp drivewipe-live*.iso live-dist/drivewipe-live-${TAG}.iso 2>/dev/null || true
+
+          if [ -f "live-dist/drivewipe-live-${TAG}.iso" ]; then
+            echo "has_iso=true" >> $GITHUB_OUTPUT
+            echo "::notice::Live ISO built: $(du -h live-dist/drivewipe-live-${TAG}.iso | cut -f1)"
+          else
+            echo "has_iso=false" >> $GITHUB_OUTPUT
+            echo "::warning::No Live ISO was produced; the release will omit it from the notes."
+          fi
 
           # Package PXE boot files (check multiple possible output paths)
           mkdir -p live-dist/pxe
@@ -239,7 +252,14 @@ jobs:
       - name: Generate checksums
         run: |
           cd artifacts
-          sha256sum drivewipe-* > SHA256SUMS.txt
+          # Every published artifact must be covered. A narrower glob silently
+          # left the desktop archives (DriveWipe-*) unchecksummed while the
+          # release notes still told users to verify against this file.
+          find . -maxdepth 1 -type f ! -name 'SHA256SUMS.txt' -printf '%P\n' \
+            | sort \
+            | xargs -r sha256sum > SHA256SUMS.txt
+          echo "Checksummed $(wc -l < SHA256SUMS.txt) artifact(s):"
+          cat SHA256SUMS.txt
 
       - name: Extract version from tag
         id: version
@@ -285,7 +305,7 @@ jobs:
 
             | Type | File | Description |
             |:---|:---|:---|
-            | **ISO Image** | `drivewipe-live-${{ steps.version.outputs.version }}.iso` | Write to USB with Rufus or `dd`. |
+            ${{ needs.build-live.outputs.has_iso == 'true' && format('| **ISO Image** | `drivewipe-live-{0}.iso` | Write to USB with Rufus or `dd`. |', steps.version.outputs.version) || '' }}
             | **PXE Network** | `drivewipe-live-${{ steps.version.outputs.version }}-pxe.tar.gz` | Dissected artifacts for network booting. |
 
             ---

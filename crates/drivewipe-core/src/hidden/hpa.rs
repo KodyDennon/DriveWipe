@@ -11,10 +11,10 @@
 //! 1. Kernel module: `DW_IOC_HPA_DETECT` / `DW_IOC_HPA_REMOVE`
 //! 2. SG_IO fallback: ATA_16 CDB with READ NATIVE MAX ADDRESS (0xF8 / 0x27)
 
-use drivewipe_core::error::{DriveWipeError, Result};
+use crate::error::{DriveWipeError, Result};
 use log;
 
-use crate::kernel_module::{DwHpaInfo, KernelModule, set_device_path};
+use super::kernel_module::{DwHpaInfo, KernelModule, set_device_path};
 
 /// HPA detection result.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]

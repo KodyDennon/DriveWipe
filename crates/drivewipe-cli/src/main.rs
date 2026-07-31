@@ -63,9 +63,14 @@ enum Commands {
         /// Required with --force
         #[arg(long)]
         yes_i_know_what_im_doing: bool,
-        /// Run verification after wipe
+        /// Run verification after wipe. Methods that mandate verification
+        /// (DoD, NIST 800-88, HMG IS5, AFSSI/AR/NAVSO) are always verified.
         #[arg(long)]
         verify: Option<bool>,
+        /// Verify the full surface after every pass, not just the last.
+        /// Roughly doubles wipe time; produces per-pass evidence.
+        #[arg(long)]
+        verify_each_pass: bool,
         /// Generate PDF report to this path
         #[arg(long)]
         report_pdf: Option<String>,
@@ -328,6 +333,7 @@ async fn run(cli: Cli) -> Result<()> {
             force,
             yes_i_know_what_im_doing,
             verify,
+            verify_each_pass,
             report_pdf,
             dry_run,
         } => {
@@ -339,6 +345,7 @@ async fn run(cli: Cli) -> Result<()> {
                 force,
                 yes_i_know_what_im_doing,
                 verify,
+                verify_each_pass,
                 report_pdf.as_deref(),
                 dry_run,
             )

@@ -13,7 +13,7 @@ use std::path::Path;
 use log;
 
 use crate::detect::{LiveDetection, detect_live_environment};
-use crate::kernel_module::{self, KernelModule};
+use drivewipe_core::hidden::kernel_module::{self, KernelModule};
 
 /// Comprehensive capabilities of the live environment.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]

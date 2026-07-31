@@ -18,6 +18,7 @@ use drivewipe_core::wipe::WipeMethodRegistry;
 
 use crate::event::{self, AppEvent, EventHandler};
 use crate::ui;
+use crate::ui::settings_screen::{SETTINGS, SettingKind};
 
 // ── Screen state ────────────────────────────────────────────────────────────
 
@@ -1073,10 +1074,8 @@ impl App {
                     self.confirm_countdown = Some(Instant::now());
                 }
             }
-            KeyCode::Enter => {
-                if self.confirm_input.trim() == "YES" {
-                    self.confirm_countdown = Some(Instant::now());
-                }
+            KeyCode::Enter if self.confirm_input.trim() == "YES" => {
+                self.confirm_countdown = Some(Instant::now());
             }
             _ => {}
         }
@@ -1767,62 +1766,32 @@ impl App {
                 }
             }
             KeyCode::Down | KeyCode::Char('j') => {
-                if self.settings_index < 7 {
+                if self.settings_index + 1 < SETTINGS.len() {
                     self.settings_index += 1;
                 }
             }
             KeyCode::Enter | KeyCode::Char(' ') => {
-                // Toggle boolean settings or show info for path settings
-                let toggled = match self.settings_index {
-                    0 => {
-                        self.config.auto_report_json = !self.config.auto_report_json;
-                        true
-                    }
-                    1 => {
-                        self.config.notifications_enabled = !self.config.notifications_enabled;
-                        true
-                    }
-                    2 => {
-                        self.config.sleep_prevention_enabled =
-                            !self.config.sleep_prevention_enabled;
-                        true
-                    }
-                    3 => {
-                        self.config.auto_health_pre_wipe = !self.config.auto_health_pre_wipe;
-                        true
-                    }
-                    4 => {
-                        self.log_push(format!(
-                            "Profiles dir: {} (edit in config.toml)",
-                            self.config.profiles_dir.display()
-                        ));
-                        false
-                    }
-                    5 => {
-                        self.log_push(format!(
-                            "Audit dir: {} (edit in config.toml)",
-                            self.config.audit_dir.display()
-                        ));
-                        false
-                    }
-                    6 => {
-                        self.log_push(format!(
-                            "Performance dir: {} (edit in config.toml)",
-                            self.config.performance_history_dir.display()
-                        ));
-                        false
-                    }
-                    7 => {
-                        self.log_push(format!(
-                            "Keyboard lock sequence: '{}' (edit in config.toml)",
-                            self.config.keyboard_lock_sequence
-                        ));
-                        false
-                    }
-                    _ => false,
+                let toggled = match SETTINGS.get(self.settings_index) {
+                    Some(item) => match &item.kind {
+                        SettingKind::Toggle { toggle, get } => {
+                            toggle(&mut self.config);
+                            let state = if get(&self.config) { "ON" } else { "OFF" };
+                            self.log_push(format!("{} set to {}", item.label, state));
+                            true
+                        }
+                        SettingKind::ReadOnly { display } => {
+                            self.log_push(format!(
+                                "{}: {} (edit in config.toml)",
+                                item.label,
+                                display(&self.config)
+                            ));
+                            false
+                        }
+                    },
+                    None => false,
                 };
 
-                // Persist settings to disk after toggling a boolean.
+                // Persist settings to disk after toggling.
                 if toggled {
                     if let Err(e) = self.config.save() {
                         self.log_push(format!("Failed to save settings: {}", e));
@@ -2231,6 +2200,26 @@ impl App {
                 };
 
                 write_debug("Boxed method created");
+
+                // Clear HPA/DCO before the device is opened, so the wipe covers
+                // the hidden sectors and the session sees the real capacity.
+                let mut drive_info = drive_info;
+                let hidden_outcome = if boxed_method.is_firmware() {
+                    Default::default()
+                } else {
+                    drivewipe_core::hidden::prepare_for_wipe(
+                        &mut drive_info,
+                        config.remove_hidden_areas,
+                    )
+                };
+                for note in &hidden_outcome.notes {
+                    write_debug(&format!("hidden area: {note}"));
+                    let _ = progress_tx.send(ProgressEvent::Warning {
+                        session_id: Uuid::nil(),
+                        message: note.clone(),
+                    });
+                }
+
                 let session = WipeSession::new(drive_info.clone(), boxed_method, config);
                 write_debug(&format!("Session created, ID: {}", session.session_id));
 

@@ -150,6 +150,49 @@ impl RawDeviceIo for LinuxDeviceIo {
     }
 }
 
+/// `BLKDISCARD` — `_IO(0x12, 119)`.
+const BLKDISCARD: libc::c_ulong = 0x1277;
+
+/// Issue a TRIM/discard over `[offset, offset + len)` of a block device.
+///
+/// Tells the controller the range holds no live data, letting it erase the
+/// underlying flash blocks including those held in overprovisioned space that
+/// host writes cannot address.
+pub fn discard_range(path: &Path, offset: u64, len: u64) -> Result<()> {
+    use std::os::unix::fs::FileTypeExt;
+
+    let metadata = std::fs::metadata(path).map_err(|e| DriveWipeError::Io {
+        path: path.to_path_buf(),
+        source: e,
+    })?;
+    if !metadata.file_type().is_block_device() {
+        return Err(DriveWipeError::DeviceError(format!(
+            "{} is not a block device",
+            path.display()
+        )));
+    }
+
+    let file = OpenOptions::new()
+        .write(true)
+        .custom_flags(libc::O_NOFOLLOW)
+        .open(path)
+        .map_err(|e| DriveWipeError::Io {
+            path: path.to_path_buf(),
+            source: e,
+        })?;
+
+    let range: [u64; 2] = [offset, len];
+    let ret = unsafe { libc::ioctl(file.as_raw_fd(), BLKDISCARD as _, &range) };
+    if ret == -1 {
+        return Err(DriveWipeError::DeviceError(format!(
+            "BLKDISCARD failed on {}: {}",
+            path.display(),
+            std::io::Error::last_os_error()
+        )));
+    }
+    Ok(())
+}
+
 /// Unmount all mounted partitions of a block device before opening for raw I/O.
 ///
 /// Reads `/proc/mounts` to find partitions belonging to the device (e.g.

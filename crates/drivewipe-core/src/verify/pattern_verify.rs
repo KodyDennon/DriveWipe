@@ -11,11 +11,16 @@ use crate::progress::ProgressEvent;
 use crate::wipe::patterns::PatternGenerator;
 
 /// Verifies that device contents match the expected pattern by reading back
-/// every block and comparing against a freshly generated pattern stream.
+/// every block and comparing against a regenerated pattern stream.
 ///
-/// The caller must supply a pattern generator that produces the same byte
-/// stream that was written to the device (i.e., a freshly constructed copy of
-/// the same pattern type used in the final pass).
+/// The caller must supply a generator that produces the same bytes that were
+/// written. Because [`PatternGenerator::fill_at`] is keyed to the absolute
+/// device offset, this holds for every pattern type — including random passes,
+/// provided the generator is the same instance that performed the write (or one
+/// rebuilt from its recorded seed). Passing a newly constructed [`RandomFill`]
+/// would compare against an unrelated keystream and always fail.
+///
+/// [`RandomFill`]: crate::wipe::patterns::RandomFill
 pub struct PatternVerifier {
     /// The pattern generator is wrapped in a `Mutex` so that the `verify`
     /// method (which takes `&self` per the `Verifier` trait) can call
@@ -28,6 +33,15 @@ impl PatternVerifier {
         Self {
             pattern: Mutex::new(pattern),
         }
+    }
+
+    /// Reclaim the pattern generator once verification is done.
+    ///
+    /// A wipe session needs its generator back after verifying a pass so the
+    /// same instance — and therefore, for random passes, the same keystream —
+    /// can be reused for the final verification.
+    pub fn into_pattern(self) -> Box<dyn PatternGenerator + Send> {
+        self.pattern.into_inner().unwrap_or_else(|p| p.into_inner())
     }
 }
 
@@ -65,7 +79,7 @@ impl Verifier for PatternVerifier {
                         poisoned.into_inner()
                     }
                 };
-                pattern.fill(expected_slice);
+                pattern.fill_at(bytes_verified, expected_slice);
             }
 
             let pass_offset = bytes_verified;

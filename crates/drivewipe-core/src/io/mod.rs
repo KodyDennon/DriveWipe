@@ -62,6 +62,25 @@ pub trait RawDeviceIo: Send {
     fn sync(&mut self) -> Result<()>;
 }
 
+/// Issue a TRIM/discard across the whole device.
+///
+/// Only meaningful on flash media, and only supported on Linux; elsewhere, and
+/// on drives whose controller rejects the command, this returns an error the
+/// caller is expected to treat as advisory rather than fatal.
+pub fn discard_all(path: &std::path::Path, capacity: u64) -> Result<()> {
+    #[cfg(target_os = "linux")]
+    {
+        linux::discard_range(path, 0, capacity)
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = (path, capacity);
+        Err(crate::error::DriveWipeError::DeviceError(
+            "TRIM/discard is only supported on Linux".to_string(),
+        ))
+    }
+}
+
 // ── AlignedBuffer ───────────────────────────────────────────────────────────
 
 /// A page-aligned buffer for use with `O_DIRECT` and similar APIs.
