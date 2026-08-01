@@ -29,6 +29,10 @@ pub enum AppScreen {
     MainMenu,
     DriveSelection,
     MethodSelect,
+    /// Basic-mode erase selection: three levels instead of 27 methods.
+    EraseLevel,
+    /// First-run choice between the guided and full interfaces.
+    ExperienceChooser,
     Confirm,
     Wiping,
     Done,
@@ -185,6 +189,12 @@ pub struct App {
     pub confirm_input: String,
     /// Countdown timer after typing YES (3 seconds).
     pub confirm_countdown: Option<Instant>,
+    /// Cursor in the Basic-mode erase level list.
+    pub erase_level_index: usize,
+    /// Cursor in the first-run experience chooser.
+    pub experience_index: usize,
+    /// Throughput observed on this machine, used to sharpen time estimates.
+    pub observed_mbps: Option<f64>,
     /// Which drive index is currently being assigned a method (in MethodSelect).
     pub method_assign_index: usize,
     /// Log scroll offset (0 = bottom / most recent).
@@ -259,7 +269,13 @@ impl App {
         }
 
         let mut app = Self {
-            screen: AppScreen::MainMenu,
+            // Ask the interface question once, on the first run, rather than
+            // dropping someone into a list of standards documents unprepared.
+            screen: if DriveWipeConfig::config_path().exists() {
+                AppScreen::MainMenu
+            } else {
+                AppScreen::ExperienceChooser
+            },
             config,
             drives: Vec::new(),
             selected_drives: Vec::new(),
@@ -277,6 +293,9 @@ impl App {
             show_info_popup: false,
             confirm_input: String::new(),
             confirm_countdown: None,
+            erase_level_index: 0,
+            experience_index: 0,
+            observed_mbps: None,
             method_assign_index: 0,
             log_scroll: 0,
             quit_confirm: false,
@@ -536,6 +555,8 @@ impl App {
             AppScreen::MainMenu => self.handle_main_menu_key(key).await,
             AppScreen::DriveSelection => self.handle_drive_selection_key(key).await,
             AppScreen::MethodSelect => self.handle_method_select_key(key).await,
+            AppScreen::EraseLevel => self.handle_erase_level_key(key).await,
+            AppScreen::ExperienceChooser => self.handle_experience_chooser_key(key).await,
             AppScreen::Confirm => self.handle_confirm_key(key).await,
             AppScreen::Wiping => self.handle_wiping_key(key).await,
             AppScreen::Done => self.handle_done_key(key).await,
@@ -945,7 +966,16 @@ impl App {
                         self.method_list_state.select(Some(0));
                     }
 
-                    self.screen = AppScreen::MethodSelect;
+                    // Basic mode asks how thorough; expert mode asks which
+                    // standard. Both land on the same confirm screen.
+                    self.screen = if self.config.experience
+                        == drivewipe_core::experience::Experience::Basic
+                    {
+                        self.erase_level_index = 0;
+                        AppScreen::EraseLevel
+                    } else {
+                        AppScreen::MethodSelect
+                    };
                 } else {
                     self.log_push("No drives selected. Press Space to select.".into());
                 }
@@ -1753,6 +1783,90 @@ impl App {
         }
     }
 
+    // ── Basic-mode erase level ─────────────────────────────────────────
+
+    async fn handle_erase_level_key(&mut self, key: KeyEvent) {
+        use drivewipe_core::experience::EraseLevel;
+
+        match key.code {
+            KeyCode::Char('q') | KeyCode::Esc => {
+                self.screen = AppScreen::DriveSelection;
+            }
+            KeyCode::Char('e') => {
+                // Escape hatch to the full method list without changing the
+                // saved preference; someone may want it just this once.
+                self.screen = AppScreen::MethodSelect;
+            }
+            KeyCode::Up | KeyCode::Char('k') => {
+                self.erase_level_index = self.erase_level_index.saturating_sub(1);
+            }
+            KeyCode::Down | KeyCode::Char('j') => {
+                if self.erase_level_index + 1 < EraseLevel::ALL.len() {
+                    self.erase_level_index += 1;
+                }
+            }
+            KeyCode::Enter => {
+                let level = EraseLevel::ALL[self.erase_level_index.min(EraseLevel::ALL.len() - 1)];
+                let indices = self.selected_drive_indices();
+
+                // The method is chosen per drive, because the right answer
+                // differs by medium: overwriting flash cannot reach its
+                // overprovisioned cells.
+                self.drive_methods.clear();
+                for &di in &indices {
+                    let Some(drive) = self.drives.get(di) else {
+                        continue;
+                    };
+                    let id = level.method_id(drive).to_string();
+                    self.log_push(format!(
+                        "{}: {} -> {}",
+                        drive.path.display(),
+                        level.title(),
+                        level.standard_name(drive),
+                    ));
+                    self.drive_methods.push((di, id));
+                }
+
+                if self.drive_methods.is_empty() {
+                    self.log_push("No drive selected.".into());
+                    self.screen = AppScreen::DriveSelection;
+                } else {
+                    self.confirm_input.clear();
+                    self.confirm_countdown = None;
+                    self.screen = AppScreen::Confirm;
+                }
+            }
+            _ => {}
+        }
+    }
+
+    // ── First-run experience chooser ───────────────────────────────────
+
+    async fn handle_experience_chooser_key(&mut self, key: KeyEvent) {
+        match key.code {
+            KeyCode::Up | KeyCode::Char('k') => {
+                self.experience_index = self.experience_index.saturating_sub(1);
+            }
+            KeyCode::Down | KeyCode::Char('j') => {
+                if self.experience_index + 1 < crate::ui::experience_chooser::choice_count() {
+                    self.experience_index += 1;
+                }
+            }
+            KeyCode::Enter => {
+                let choice = crate::ui::experience_chooser::choice_at(self.experience_index);
+                self.config.experience = choice;
+                if let Err(e) = self.config.save() {
+                    // Not fatal: the session still runs in the chosen mode, it
+                    // just asks again next time.
+                    self.log_push(format!("Could not save preference: {e}"));
+                }
+                self.log_push(format!("{} mode selected.", choice.label()));
+                self.screen = AppScreen::MainMenu;
+            }
+            _ => {}
+        }
+    }
+
     // ── Settings keys ──────────────────────────────────────────────────
 
     async fn handle_settings_key(&mut self, key: KeyEvent) {
@@ -1777,6 +1891,12 @@ impl App {
                             toggle(&mut self.config);
                             let state = if get(&self.config) { "ON" } else { "OFF" };
                             self.log_push(format!("{} set to {}", item.label, state));
+                            true
+                        }
+                        SettingKind::Choice { cycle, display } => {
+                            cycle(&mut self.config);
+                            let now = display(&self.config);
+                            self.log_push(format!("{} set to {}", item.label, now));
                             true
                         }
                         SettingKind::ReadOnly { display } => {

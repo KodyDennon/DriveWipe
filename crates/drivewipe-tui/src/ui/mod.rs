@@ -2,6 +2,8 @@ pub mod clone_progress;
 pub mod clone_setup;
 pub mod confirm_dialog;
 pub mod drive_list;
+pub mod erase_level;
+pub mod experience_chooser;
 pub mod forensic_screen;
 pub mod health_screen;
 pub mod help;
@@ -27,6 +29,64 @@ use ratatui::widgets::{Block, Borders, Clear, Paragraph, Wrap};
 
 use crate::app::{App, AppScreen};
 
+/// Constrain content to a readable column and centre it.
+///
+/// Full-width prose on a 200-column terminal is unreadable, and card borders
+/// stretched across the whole screen look unfinished. Roughly 80 columns is the
+/// long-standing comfortable measure for text.
+pub fn centered_column(area: Rect, max_width: u16) -> Rect {
+    if area.width <= max_width {
+        return area;
+    }
+    let pad = (area.width - max_width) / 2;
+    Rect {
+        x: area.x + pad,
+        y: area.y,
+        width: max_width,
+        height: area.height,
+    }
+}
+
+/// Inset an area by one column on each side, so text never touches a border.
+pub fn pad_h(area: Rect) -> Rect {
+    if area.width <= 2 {
+        return area;
+    }
+    Rect {
+        x: area.x + 1,
+        y: area.y,
+        width: area.width - 2,
+        height: area.height,
+    }
+}
+
+/// Wrap `text` to `width`, indenting every line by `indent` spaces.
+///
+/// `Paragraph`'s own wrapping puts continuation lines at column zero, which
+/// breaks the alignment of an indented block and reads as a layout bug.
+pub fn wrap_indented(text: &str, width: usize, indent: usize) -> Vec<String> {
+    let avail = width.saturating_sub(indent).max(8);
+    let pad = " ".repeat(indent);
+    let mut out = Vec::new();
+    let mut line = String::new();
+
+    for word in text.split_whitespace() {
+        if line.is_empty() {
+            line.push_str(word);
+        } else if line.chars().count() + 1 + word.chars().count() <= avail {
+            line.push(' ');
+            line.push_str(word);
+        } else {
+            out.push(format!("{pad}{line}"));
+            line = word.to_string();
+        }
+    }
+    if !line.is_empty() {
+        out.push(format!("{pad}{line}"));
+    }
+    out
+}
+
 /// Top-level draw dispatch: renders the active screen and any overlays.
 pub fn draw(frame: &mut Frame, app: &mut App) {
     // Draw keyboard lock overlay if active.
@@ -45,6 +105,8 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
             }
         }
         AppScreen::MethodSelect => method_select::draw(frame, app),
+        AppScreen::EraseLevel => erase_level::draw(frame, app),
+        AppScreen::ExperienceChooser => experience_chooser::draw(frame, app),
         AppScreen::Confirm => confirm_dialog::draw(frame, app),
         AppScreen::Wiping => wipe_dashboard::draw(frame, app),
         AppScreen::Done => wipe_dashboard::draw_completed(frame, app),

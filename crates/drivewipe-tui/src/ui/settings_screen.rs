@@ -12,6 +12,13 @@ pub enum SettingKind {
         get: fn(&DriveWipeConfig) -> bool,
         toggle: fn(&mut DriveWipeConfig),
     },
+    /// Cycles between named values. Rendering a two-state setting as ON/OFF
+    /// only works when one state is plainly "off"; "Interface Mode [ON]" says
+    /// nothing, so named choices get their own kind.
+    Choice {
+        display: fn(&DriveWipeConfig) -> String,
+        cycle: fn(&mut DriveWipeConfig),
+    },
     ReadOnly {
         display: fn(&DriveWipeConfig) -> String,
     },
@@ -26,6 +33,15 @@ pub struct SettingItem {
 /// Single source of truth for the settings list: rendering and key handling
 /// both read from here, so adding a row cannot desynchronise them.
 pub const SETTINGS: &[SettingItem] = &[
+    SettingItem {
+        label: "Interface Mode",
+        description: "Basic guides you through three levels of thoroughness and picks \
+                      the standard to match the drive. Expert lists all 27 methods by name",
+        kind: SettingKind::Choice {
+            display: |c| c.experience.label().to_string(),
+            cycle: |c| c.experience = c.experience.toggled(),
+        },
+    },
     SettingItem {
         label: "Auto Verify",
         description: "Verify after wipe. Methods whose standard mandates verification \
@@ -172,6 +188,7 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
                         ("[OFF]".to_string(), Color::Red)
                     }
                 }
+                SettingKind::Choice { display, .. } => (display(&app.config), Color::Yellow),
                 SettingKind::ReadOnly { display } => (display(&app.config), Color::Cyan),
             };
 
@@ -211,6 +228,7 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
             Line::from(Span::styled(
                 match setting.kind {
                     SettingKind::Toggle { .. } => "  Press Enter or Space to toggle",
+                    SettingKind::Choice { .. } => "  Press Enter or Space to switch",
                     SettingKind::ReadOnly { .. } => "  Edit in configuration file",
                 },
                 Style::default().fg(Color::DarkGray),
