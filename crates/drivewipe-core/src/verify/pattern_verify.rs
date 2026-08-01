@@ -62,8 +62,10 @@ impl Verifier for PatternVerifier {
         let mut expected_buf = allocate_aligned_buffer(DEFAULT_BLOCK_SIZE, 4096);
         let mut bytes_verified: u64 = 0;
 
-        // Pre-allocate a reusable read buffer to avoid per-iteration allocation.
-        let mut reusable_buf: Vec<u8> = vec![0u8; DEFAULT_BLOCK_SIZE];
+        // The read buffer must be page-aligned: O_DIRECT rejects reads into a
+        // buffer that is not aligned to the device's logical block size, and a
+        // plain Vec<u8> carries no such guarantee.
+        let mut reusable_buf = allocate_aligned_buffer(DEFAULT_BLOCK_SIZE, 4096);
 
         while bytes_verified < total_bytes {
             let remaining = total_bytes - bytes_verified;
@@ -87,15 +89,15 @@ impl Verifier for PatternVerifier {
             let expected_data: Vec<u8> = expected_slice.to_vec();
 
             let device_wrapper = DeviceWrapper::new(device);
-            let send_buf = std::mem::take(&mut reusable_buf);
+            let send_buf = reusable_buf;
 
-            // Perform the read in a blocking task, reusing the buffer.
+            // Perform the read in a blocking task, moving the aligned buffer in
+            // and back out so its alignment survives.
             let (read_res, read_data) = tokio::task::spawn_blocking(move || {
                 // SAFETY: device outlives this task; exclusive access is
                 // maintained because we .await immediately after spawn.
                 let device_ref = unsafe { device_wrapper.get_mut() };
                 let mut buf = send_buf;
-                buf.resize(chunk_len, 0);
                 let res = device_ref.read_at(pass_offset, &mut buf[..chunk_len]);
                 (res, buf)
             })

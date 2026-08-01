@@ -335,14 +335,14 @@ impl WipeSession {
             total_passes
         );
 
-        // Allocate a page-aligned write buffer once for all passes (O_DIRECT / F_NOCACHE compatibility).
+        // Page-aligned write buffer, allocated once for all passes. O_DIRECT
+        // rejects any write whose user buffer is not aligned to the device's
+        // logical block size, so this buffer must reach `write_at` intact —
+        // copying it into a `Vec<u8>` on the way would lose the alignment and
+        // every write would fail with EINVAL.
         log::debug!("[SESSION] Allocating aligned buffer");
         let mut buffer = allocate_aligned_buffer(DEFAULT_BLOCK_SIZE, 4096);
         log::debug!("[SESSION] Buffer allocated");
-
-        // Pre-allocate a reusable owned buffer for spawn_blocking to avoid
-        // a 4 MiB heap allocation on every write iteration.
-        let mut owned_buf: Vec<u8> = Vec::with_capacity(DEFAULT_BLOCK_SIZE);
 
         // Cache the device's logical block size for O_DIRECT alignment.
         let device_block_size = device.block_size() as usize;
@@ -473,19 +473,18 @@ impl WipeSession {
                 }
 
                 // Use DeviceWrapper to safely pass &mut dyn RawDeviceIo across
-                // spawn_blocking boundaries. Reuse owned_buf to avoid per-iteration
-                // heap allocation (reclaimed from the closure return value).
+                // spawn_blocking boundaries. The aligned buffer is moved into
+                // the task and handed back, rather than copied, so the write
+                // sees the alignment O_DIRECT requires.
                 let device_wrapper = DeviceWrapper::new(device);
-                owned_buf.clear();
-                owned_buf.extend_from_slice(&buffer[..write_len]);
-                let send_buf = std::mem::take(&mut owned_buf);
+                let send_buf = buffer;
                 let pass_offset = bytes_written_this_pass;
 
                 let write_res = tokio::task::spawn_blocking(move || {
                     // SAFETY: device outlives this task; exclusive access is
                     // maintained because we .await immediately after spawn.
                     let device_ref = unsafe { device_wrapper.get_mut() };
-                    let res = device_ref.write_at(pass_offset, &send_buf);
+                    let res = device_ref.write_at(pass_offset, &send_buf[..write_len]);
                     (res, send_buf) // Return buffer for reuse
                 })
                 .await
@@ -497,7 +496,7 @@ impl WipeSession {
 
                 match write_res {
                     (Ok(n), returned_buf) => {
-                        owned_buf = returned_buf; // Reclaim buffer
+                        buffer = returned_buf; // Reclaim the aligned buffer
                         if write_count == 1 {
                             log::debug!("[SESSION] First write SUCCESS: wrote {} bytes", n);
                         }

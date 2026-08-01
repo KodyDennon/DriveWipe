@@ -82,8 +82,7 @@ for method in "${METHODS[@]}"; do
     fi
 
     # Verification is mandatory for these standards, so the run must say so.
-    if grep -qE "Verification: *PASSED|verification_passed.*true" "$WORK/$method.log" 2>/dev/null \
-       || grep -q "PASSED" "$WORK/$method.log"; then
+    if grep -qE "Verification:[[:space:]]*PASSED" "$WORK/$method.log"; then
         pass "$method reported verification PASSED"
     else
         case "$method" in
@@ -124,8 +123,13 @@ printf '\xff' | dd of="$LOOP" bs=1 seek=$((7 * 1024 * 1024)) conv=notrunc status
 
 if "$BINARY" verify --device "$LOOP" --pattern zero >"$WORK/verify.log" 2>&1; then
     fail "verify passed a device with a modified byte"
+elif grep -q "Verification failed at offset" "$WORK/verify.log"; then
+    pass "verify identified the modified byte"
 else
-    pass "verify rejected the modified device"
+    # Exiting non-zero is not proof of detection. Before the O_DIRECT
+    # alignment fix, verify failed with EINVAL and this looked like a pass.
+    fail "verify failed, but not by detecting the modification:"
+    sed 's/^/        /' "$WORK/verify.log" | head -6
 fi
 
 echo

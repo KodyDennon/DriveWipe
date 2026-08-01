@@ -4,7 +4,7 @@ use uuid::Uuid;
 
 use super::Verifier;
 use crate::error::{DriveWipeError, Result};
-use crate::io::{DEFAULT_BLOCK_SIZE, DeviceWrapper, RawDeviceIo};
+use crate::io::{DEFAULT_BLOCK_SIZE, DeviceWrapper, RawDeviceIo, allocate_aligned_buffer};
 use crate::progress::ProgressEvent;
 
 /// Optimized verifier that checks whether the entire device is filled with zeros.
@@ -70,8 +70,10 @@ impl Verifier for ZeroVerifier {
 
         let mut bytes_verified: u64 = 0;
 
-        // Pre-allocate a reusable buffer to avoid per-iteration allocation.
-        let mut reusable_buf: Vec<u8> = vec![0u8; DEFAULT_BLOCK_SIZE];
+        // The read buffer must be page-aligned: O_DIRECT rejects reads into a
+        // buffer that is not aligned to the device's logical block size, and a
+        // plain Vec<u8> carries no such guarantee.
+        let mut reusable_buf = allocate_aligned_buffer(DEFAULT_BLOCK_SIZE, 4096);
 
         while bytes_verified < total_bytes {
             let remaining = total_bytes - bytes_verified;
@@ -80,16 +82,15 @@ impl Verifier for ZeroVerifier {
             let pass_offset = bytes_verified;
             let device_wrapper = DeviceWrapper::new(device);
 
-            // Take ownership of the buffer, send it to the blocking task,
-            // and reclaim it afterwards to avoid re-allocating each iteration.
-            let send_buf = std::mem::take(&mut reusable_buf);
+            // Move the aligned buffer into the blocking task and reclaim it
+            // afterwards, so its alignment survives the round trip.
+            let send_buf = reusable_buf;
 
             let (read_res, read_data) = tokio::task::spawn_blocking(move || {
                 // SAFETY: device outlives this task; exclusive access is
                 // maintained because we .await immediately after spawn.
                 let device_ref = unsafe { device_wrapper.get_mut() };
                 let mut buf = send_buf;
-                buf.resize(chunk_len, 0);
                 let res = device_ref.read_at(pass_offset, &mut buf[..chunk_len]);
                 (res, buf)
             })
