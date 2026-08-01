@@ -25,7 +25,7 @@ LIVE_DIR="$ROOT_DIR/live"
 KERNEL_DIR="$ROOT_DIR/kernel/drivewipe"
 BUILD_DIR="$ROOT_DIR/target/live-build"
 PXE_DIR="$ROOT_DIR/target/pxe-server"
-OUTPUT="$ROOT_DIR/drivewipe-live.img"
+OUTPUT="$ROOT_DIR/drivewipe-live.iso"
 
 ALPINE_VERSION="3.21"
 IMAGE_SIZE_MB=256
@@ -223,14 +223,28 @@ docker run --rm drivewipe-live-builder > "$BUILD_DIR/rootfs.tar"
 echo "  [OK] Rootfs extracted ($(du -sh "$BUILD_DIR/rootfs.tar" | cut -f1))"
 echo ""
 
-# ── Stage 4: Create bootable image ──────────────────────────────────────────
+# ── Stage 4: Create bootable ISO ────────────────────────────────────────────
+#
+# This stage previously ran `dd if=/dev/zero` and announced the resulting file
+# as a bootable image. It contained nothing; writing it to a USB stick produced
+# a blank, unbootable drive while the release notes advertised it as the Live
+# environment.
 
-echo "Stage 4: Creating bootable image ($IMAGE_SIZE_MB MB)..."
+echo "Stage 4: Building bootable ISO..."
 
-# Create empty disk image
-dd if=/dev/zero of="$OUTPUT" bs=1M count=$IMAGE_SIZE_MB status=none
+"$ROOT_DIR/scripts/build-iso.sh" \
+    "$BUILD_DIR/rootfs.tar" \
+    "$OUTPUT" \
+    "${DRIVEWIPE_LIVE_VERSION:-dev}"
 
-echo "  [OK] Image created: $OUTPUT (${IMAGE_SIZE_MB} MB)"
+# Boot it. An unbootable ISO must fail the build rather than ship.
+if command -v qemu-system-x86_64 >/dev/null; then
+    echo ""
+    echo "Stage 4b: Verifying the ISO boots..."
+    "$ROOT_DIR/scripts/test-iso.sh" "$OUTPUT"
+else
+    echo "  [WARN] qemu-system-x86_64 not installed — ISO built but NOT boot-tested" >&2
+fi
 echo ""
 
 # ── Stage 5: Generate PXE artifacts ─────────────────────────────────────────
