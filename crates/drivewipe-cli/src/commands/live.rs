@@ -26,10 +26,7 @@ pub async fn list() -> Result<()> {
         return Ok(());
     }
 
-    println!(
-        "{:<16} {:<30} {:>10}  {}",
-        "DEVICE", "MODEL", "SIZE", "STATUS"
-    );
+    println!("{:<16} {:<30} {:>10}  STATUS", "DEVICE", "MODEL", "SIZE");
     println!("{}", "-".repeat(78));
 
     for t in &targets {

@@ -77,6 +77,14 @@ pub struct DriveWipeConfig {
     #[serde(default)]
     pub auto_health_pre_wipe: bool,
 
+    /// How much of the tool to present: guided ("basic") or full ("expert").
+    ///
+    /// Basic mode offers three levels of thoroughness in plain language and
+    /// picks the standard to match the drive; expert mode exposes every method
+    /// by name. Both run the same engine.
+    #[serde(default)]
+    pub experience: crate::experience::Experience,
+
     /// Remove any HPA/DCO before wiping so the hidden sectors are covered.
     ///
     /// A Host Protected Area or Device Configuration Overlay hides sectors from
@@ -190,6 +198,7 @@ impl Default for DriveWipeConfig {
             sleep_prevention_enabled: true,
             keyboard_lock_sequence: default_keyboard_lock_sequence(),
             auto_health_pre_wipe: false,
+            experience: crate::experience::Experience::default(),
             remove_hidden_areas: true,
             audit_dir: default_audit_dir(),
             performance_history_dir: default_performance_history_dir(),

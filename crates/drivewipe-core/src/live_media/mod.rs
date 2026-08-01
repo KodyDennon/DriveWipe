@@ -253,12 +253,27 @@ mod tests {
     use super::*;
 
     fn drive(removable: bool, boot: bool) -> DriveInfo {
-        let mut d = DriveInfo::default();
-        d.path = PathBuf::from("/dev/sdz");
-        d.is_removable = removable;
-        d.is_boot_drive = boot;
-        d.capacity = 8 * 1024 * 1024 * 1024;
-        d
+        use crate::types::{AtaSecurityState, DriveType, HiddenAreaInfo, Transport};
+        DriveInfo {
+            path: PathBuf::from("/dev/sdz"),
+            model: "Generic USB Stick".to_string(),
+            serial: "USB-0001".to_string(),
+            firmware_rev: "1.0".to_string(),
+            capacity: 8 * 1024 * 1024 * 1024,
+            block_size: 512,
+            physical_block_size: None,
+            drive_type: DriveType::Ssd,
+            transport: Transport::Usb,
+            is_boot_drive: boot,
+            is_removable: removable,
+            ata_security: AtaSecurityState::NotSupported,
+            hidden_areas: HiddenAreaInfo::default(),
+            supports_trim: false,
+            is_sed: false,
+            smart_healthy: Some(true),
+            partition_table: None,
+            partition_count: 0,
+        }
     }
 
     #[test]

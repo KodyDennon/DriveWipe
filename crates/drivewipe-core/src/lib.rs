@@ -35,6 +35,7 @@ pub mod config;
 pub mod crypto;
 pub mod drive;
 pub mod error;
+pub mod experience;
 pub mod forensic;
 pub mod health;
 pub mod hidden;
