@@ -49,6 +49,12 @@ enum Commands {
         #[arg(long, default_value = "table")]
         format: String,
     },
+    /// List available wipe methods
+    Methods {
+        /// Output format (table, json, ids)
+        #[arg(long, default_value = "table")]
+        format: String,
+    },
     /// Wipe a drive
     Wipe {
         /// Device path (e.g., /dev/sda)
@@ -430,7 +436,8 @@ async fn run(cli: Cli) -> Result<()> {
         DriveWipeConfig::load().context("Failed to load configuration")?
     };
 
-    // Privilege check -- warn for read-only commands, hard-fail for destructive ones.
+    // Privilege check -- hard-fail for destructive commands, warn for ones that
+    // read devices, and stay silent for those that touch no device at all.
     let needs_privilege = matches!(
         &cli.command,
         Commands::Wipe { .. }
@@ -439,12 +446,18 @@ async fn run(cli: Cli) -> Result<()> {
             | Commands::Clone { .. }
             | Commands::Partition { .. }
     );
+    let touches_no_device = matches!(
+        &cli.command,
+        Commands::Methods { .. } | Commands::Report { .. }
+    );
     if let Err(e) = privilege::check_privileges() {
         if needs_privilege {
             anyhow::bail!("Elevated privileges are required for this operation. {}", e);
         }
-        log::warn!("{}", e);
-        eprintln!("{} {}", console::style("warning:").yellow().bold(), e,);
+        if !touches_no_device {
+            log::warn!("{}", e);
+            eprintln!("{} {}", console::style("warning:").yellow().bold(), e,);
+        }
     }
 
     // Global cancellation token shared with the Ctrl-C handler.
@@ -463,6 +476,7 @@ async fn run(cli: Cli) -> Result<()> {
 
     match cli.command {
         Commands::List { format } => commands::list::run(&config, &format).await,
+        Commands::Methods { format } => commands::methods::run(&config, &format).await,
         Commands::Wipe {
             device,
             method,

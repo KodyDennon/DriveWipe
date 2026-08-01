@@ -99,7 +99,7 @@ jobs:
       - name: Build release binary
         run: cargo build --release --package drivewipe-cli
       - name: Wipe and verify a loop device
-        run: sudo ./scripts/test-device.sh
+        run: sudo ./scripts/test-device.sh --all
 
   # The installer is the documented way to get DriveWipe, so its download path
   # is exercised against a local server rather than trusted to review.

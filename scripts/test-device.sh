@@ -17,12 +17,14 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BINARY="${DRIVEWIPE_BIN:-$ROOT_DIR/target/release/drivewipe}"
 SIZE_MB=128
-METHODS=(zero nist-800-88-clear dod-short afssi-5020 navso-p-5239-26)
+METHODS=()
+ALL=0
 
 while [ $# -gt 0 ]; do
     case "$1" in
         --size)   SIZE_MB="$2"; shift 2 ;;
         --method) METHODS=("$2"); shift 2 ;;
+        --all)    ALL=1; SIZE_MB=32; shift ;;
         --bin)    BINARY="$2"; shift 2 ;;
         -h|--help) sed -n '2,16p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
         *) echo "unknown option: $1" >&2; exit 1 ;;
@@ -37,6 +39,19 @@ info() { printf '  ----  %s\n' "$1"; }
 [ "$(id -u)" = "0" ] || { echo "must run as root (losetup needs it): sudo $0" >&2; exit 1; }
 [ -x "$BINARY" ] || { echo "no binary at $BINARY — cargo build --release" >&2; exit 1; }
 command -v losetup >/dev/null || { echo "losetup not found" >&2; exit 1; }
+
+# Default to a representative subset; --all sweeps every software method the
+# binary registers, so a newly added method is covered without editing this.
+if [ "$ALL" = "1" ]; then
+    mapfile -t METHODS < <("$BINARY" methods --format json | python3 -c "
+import json,sys
+for m in json.load(sys.stdin):
+    if not m['firmware']:
+        print(m['id'])
+")
+elif [ "${#METHODS[@]}" -eq 0 ]; then
+    METHODS=(zero nist-800-88-clear dod-short afssi-5020 navso-p-5239-26)
+fi
 
 WORK="$(mktemp -d)"
 LOOP=""
@@ -111,6 +126,33 @@ for method in "${METHODS[@]}"; do
     dd if=/dev/urandom of="$LOOP" bs=1M count="$SIZE_MB" status=none conv=fsync 2>/dev/null || true
     before="$(dd if="$LOOP" bs=4096 count=1 status=none | sha256sum | cut -d' ' -f1)"
 done
+
+# ── Firmware methods on unsupported media ───────────────────────────────────
+# A loop device cannot perform an ATA or NVMe erase. These must refuse cleanly
+# with an explanatory error rather than panicking or reporting a false success.
+
+if [ "$ALL" = "1" ]; then
+    echo
+    info "firmware methods refuse unsupported media cleanly"
+    while read -r fw; do
+        [ -z "$fw" ] && continue
+        out="$("$BINARY" wipe --device "$LOOP" --method "$fw" \
+            --force --yes-i-know-what-im-doing 2>&1 || true)"
+        if printf '%s' "$out" | grep -qiE "panic|RUST_BACKTRACE"; then
+            fail "$fw panicked"
+            printf '%s\n' "$out" | sed 's/^/        /' | head -6
+        elif printf '%s' "$out" | grep -qE "Outcome: *Success"; then
+            fail "$fw claimed success on a loop device"
+        else
+            pass "$fw refused cleanly"
+        fi
+    done < <("$BINARY" methods --format json | python3 -c "
+import json,sys
+for m in json.load(sys.stdin):
+    if m['firmware']:
+        print(m['id'])
+")
+fi
 
 # ── Corruption detection ────────────────────────────────────────────────────
 # Wipe, then flip a byte and confirm `verify` notices. This is the property the

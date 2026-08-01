@@ -3,6 +3,7 @@ pub mod forensic;
 pub mod health;
 pub mod info;
 pub mod list;
+pub mod methods;
 pub mod partition;
 pub mod profile;
 pub mod queue;

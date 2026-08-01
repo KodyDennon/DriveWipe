@@ -151,6 +151,9 @@ cargo install --path crates/drivewipe-cli
 ### Usage
 
 ```bash
+# List available wipe methods (no privileges needed)
+drivewipe methods
+
 # List detected drives
 sudo drivewipe list
 

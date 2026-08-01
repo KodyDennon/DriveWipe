@@ -1,6 +1,6 @@
 [package]
 name = "drivewipe-live"
-version = "2.0.4"
+version = "2.0.5"
 edition.workspace = true
 rust-version.workspace = true
 authors.workspace = true

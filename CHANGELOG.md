@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.0.5] - 2026-08-01
+
+### Added
+- **`drivewipe methods`** lists every registered method with its pass count, type and whether its standard mandates verification, in table, JSON or plain-id form. There was previously no way to discover the available method IDs from the tool itself. It needs no privileges.
+
+### Changed
+- All 27 methods are now exercised against a real block device in CI, not just the five that were checked by hand: the 19 software methods each wipe and verify a loop device, and the 8 firmware methods must refuse unsupported media cleanly rather than panicking or reporting a false success. `scripts/test-device.sh --all` enumerates them from the binary, so a newly added method is covered without editing the script.
+- `drivewipe methods` and `drivewipe report` no longer print a privilege warning; neither touches a device.
+
 ## [2.0.4] - 2026-07-31
 
 ### Fixed

@@ -1,5 +1,13 @@
 # Wipe Methods
 
+List them from the command line at any time:
+
+```bash
+drivewipe methods              # table
+drivewipe methods --format json
+```
+
+
 DriveWipe supports 27 wipe methods across three categories: software overwrite, firmware commands, and hybrid (DriveWipe Secure).
 
 ## Software Methods
