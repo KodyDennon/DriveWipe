@@ -40,6 +40,7 @@ pub mod health;
 pub mod hidden;
 pub mod io;
 pub mod keyboard_lock;
+pub mod live_media;
 pub mod notify;
 pub mod partition;
 pub mod platform;

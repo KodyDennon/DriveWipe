@@ -49,6 +49,11 @@ enum Commands {
         #[arg(long, default_value = "table")]
         format: String,
     },
+    /// Create DriveWipe Live boot media
+    Live {
+        #[command(subcommand)]
+        action: LiveAction,
+    },
     /// List available wipe methods
     Methods {
         /// Output format (table, json, ids)
@@ -173,6 +178,33 @@ enum Commands {
     Forensic {
         #[command(subcommand)]
         action: ForensicAction,
+    },
+}
+
+#[derive(Subcommand)]
+enum LiveAction {
+    /// Show devices that can receive the live image
+    List,
+    /// Write the live image to a device
+    Burn {
+        /// Target device (e.g. /dev/sdb)
+        #[arg(short, long)]
+        device: String,
+        /// Path to the DriveWipe Live ISO
+        #[arg(short, long)]
+        iso: String,
+        /// Expected SHA-256 of the image, checked before writing
+        #[arg(long)]
+        checksum: Option<String>,
+        /// Permit writing to a fixed (non-removable) disk
+        #[arg(long)]
+        allow_fixed_disk: bool,
+        /// Skip the interactive confirmation
+        #[arg(long)]
+        force: bool,
+        /// Required with --force
+        #[arg(long)]
+        yes_i_know_what_im_doing: bool,
     },
 }
 
@@ -441,6 +473,7 @@ async fn run(cli: Cli) -> Result<()> {
     let needs_privilege = matches!(
         &cli.command,
         Commands::Wipe { .. }
+            | Commands::Live { .. }
             | Commands::Queue { .. }
             | Commands::Resume { .. }
             | Commands::Clone { .. }
@@ -477,6 +510,27 @@ async fn run(cli: Cli) -> Result<()> {
     match cli.command {
         Commands::List { format } => commands::list::run(&config, &format).await,
         Commands::Methods { format } => commands::methods::run(&config, &format).await,
+        Commands::Live { action } => match action {
+            LiveAction::List => commands::live::list().await,
+            LiveAction::Burn {
+                device,
+                iso,
+                checksum,
+                allow_fixed_disk,
+                force,
+                yes_i_know_what_im_doing,
+            } => {
+                commands::live::burn_cmd(
+                    &device,
+                    &iso,
+                    checksum.as_deref(),
+                    allow_fixed_disk,
+                    force,
+                    yes_i_know_what_im_doing,
+                )
+                .await
+            }
+        },
         Commands::Wipe {
             device,
             method,
