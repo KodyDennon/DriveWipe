@@ -86,6 +86,21 @@ jobs:
       - name: Audit dependencies
         run: cargo audit
 
+  # The unit suite runs against an in-memory mock that never touches O_DIRECT,
+  # which let a bug ship where every wipe of a real device failed with EINVAL.
+  # A loop device exercises the actual block layer.
+  block-device:
+    name: Block Device
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@1.94
+      - uses: Swatinem/rust-cache@v2
+      - name: Build release binary
+        run: cargo build --release --package drivewipe-cli
+      - name: Wipe and verify a loop device
+        run: sudo ./scripts/test-device.sh
+
   # The installer is the documented way to get DriveWipe, so its download path
   # is exercised against a local server rather than trusted to review.
   installer:

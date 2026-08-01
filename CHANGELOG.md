@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.0.4] - 2026-07-31
+
+### Fixed
+- **Wiping a real block device failed with `EINVAL`; the engine had never worked outside the test mock.** A page-aligned write buffer was allocated and then copied into a plain `Vec<u8>` before being handed to the write, and both verifiers read into unaligned `Vec<u8>` the same way. `Vec<u8>` carries no alignment guarantee, and `O_DIRECT` rejects any I/O whose user buffer is not aligned to the device's logical block size, so the alignment was discarded one line before it mattered. The aligned buffers now move into the blocking task and back rather than being copied, which also removes a 4 MiB memcpy per iteration. Every release before this one — v1.x included — could not wipe a physical drive.
+- The unit suite could not catch this: its mock implements `RawDeviceIo` over a `Vec` and never touches `O_DIRECT`. `scripts/test-device.sh` now wipes and verifies a real loop device, and runs in CI.
+
 ## [2.0.3] - 2026-07-31
 
 ### Fixed
