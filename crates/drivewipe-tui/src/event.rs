@@ -30,44 +30,42 @@ impl EventHandler {
     ) -> Self {
         let (tx, rx) = mpsc::channel::<AppEvent>(256);
 
-        // Task for terminal input and ticks
+        // Terminal reads are blocking, so keep them on a dedicated blocking
+        // task.  This must be separate from the tick timer: `else` in
+        // `tokio::select!` only runs when every branch is disabled, not while
+        // an enabled timer is pending, so using it for input polling makes the
+        // keyboard branch permanently unreachable.
         let input_tx = tx.clone();
+        tokio::task::spawn_blocking(move || {
+            while !input_tx.is_closed() {
+                let app_event = if event::poll(Duration::from_millis(50)).unwrap_or(false) {
+                    match event::read() {
+                        Ok(Event::Key(key)) if key.kind == KeyEventKind::Press => {
+                            Some(AppEvent::Key(key))
+                        }
+                        Ok(Event::Resize(w, h)) => Some(AppEvent::Resize(w, h)),
+                        _ => None,
+                    }
+                } else {
+                    None
+                };
+
+                if let Some(app_event) = app_event
+                    && input_tx.blocking_send(app_event).is_err()
+                {
+                    break;
+                }
+            }
+        });
+
+        // Periodic redraws run independently from keyboard input.
+        let tick_tx = tx.clone();
         tokio::spawn(async move {
             let mut interval = tokio::time::interval(tick_rate);
             loop {
-                tokio::select! {
-                    _ = interval.tick() => {
-                        if input_tx.send(AppEvent::Tick).await.is_err() {
-                            break;
-                        }
-                    }
-                    else => {
-                        // Poll crossterm for input events using spawn_blocking
-                        let input_tx_inner = input_tx.clone();
-                        let evt = tokio::task::spawn_blocking(move || {
-                            if event::poll(Duration::from_millis(50)).unwrap_or(false) {
-                                event::read().ok()
-                            } else {
-                                None
-                            }
-                        }).await;
-
-                        let app_event = match evt {
-                            Ok(Some(Event::Key(key))) if key.kind == KeyEventKind::Press => {
-                                Some(AppEvent::Key(key))
-                            }
-                            Ok(Some(Event::Resize(w, h))) => Some(AppEvent::Resize(w, h)),
-                            _ => None,
-                        };
-
-                        // A send error means the receiver is gone and the app is
-                        // shutting down.
-                        if let Some(app_event) = app_event
-                            && input_tx_inner.send(app_event).await.is_err()
-                        {
-                            break;
-                        }
-                    }
+                interval.tick().await;
+                if tick_tx.send(AppEvent::Tick).await.is_err() {
+                    break;
                 }
             }
         });

@@ -156,9 +156,12 @@ impl DriveInfo {
     /// Suggest the best wipe method for this drive.
     pub fn suggested_method(&self) -> &'static str {
         match (self.drive_type, self.transport) {
+            // The bridge is the limiting factor regardless of whether the
+            // medium behind it is flash or rotational. Firmware erase commands
+            // generally cannot be trusted to pass through USB correctly.
+            (_, Transport::Usb) => "drivewipe-secure-usb",
             (DriveType::Nvme, _) | (_, Transport::Nvme) => "nvme-format-crypto",
             (DriveType::Ssd, Transport::Sata) => "ata-erase-enhanced",
-            (DriveType::Ssd, Transport::Usb) => "dod-short",
             (DriveType::Hdd, _) => "dod-short",
             _ => "random",
         }

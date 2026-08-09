@@ -94,7 +94,15 @@ fn drive_info_suggested_method_ssd_sata() {
 #[test]
 fn drive_info_suggested_method_ssd_usb() {
     let drive = make_drive(DriveType::Ssd, Transport::Usb);
-    assert_eq!(drive.suggested_method(), "dod-short");
+    assert_eq!(drive.suggested_method(), "drivewipe-secure-usb");
+}
+
+#[test]
+fn drive_info_suggested_method_usb_overrides_unreliable_medium_type() {
+    for drive_type in [DriveType::Unknown, DriveType::Hdd, DriveType::Ssd] {
+        let drive = make_drive(drive_type, Transport::Usb);
+        assert_eq!(drive.suggested_method(), "drivewipe-secure-usb");
+    }
 }
 
 #[test]

@@ -139,8 +139,8 @@ impl EraseLevel {
         match self {
             EraseLevel::Quick => "zero",
             EraseLevel::Standard => match (drive.drive_type, drive.transport) {
+                (_, Transport::Usb) => "drivewipe-secure-usb",
                 (DriveType::Nvme, _) => "drivewipe-secure-nvme",
-                (DriveType::Ssd, Transport::Usb) => "drivewipe-secure-usb",
                 (DriveType::Ssd, _) => "drivewipe-secure-sata-ssd",
                 _ => "nist-800-88-clear",
             },
@@ -153,8 +153,9 @@ impl EraseLevel {
     pub fn standard_name(&self, drive: &DriveInfo) -> &'static str {
         match self {
             EraseLevel::Quick => "Single-pass zero overwrite",
-            EraseLevel::Standard => match drive.drive_type {
-                DriveType::Nvme | DriveType::Ssd => {
+            EraseLevel::Standard => match (drive.drive_type, drive.transport) {
+                (_, Transport::Usb) => "DriveWipe Secure USB (overwrite + verification)",
+                (DriveType::Nvme | DriveType::Ssd, _) => {
                     "NIST SP 800-88 Purge (controller sanitize + overwrite)"
                 }
                 _ => "NIST SP 800-88 Clear",
@@ -278,6 +279,13 @@ mod tests {
     fn spinning_disks_use_the_plain_standard() {
         let d = drive(DriveType::Hdd, Transport::Sata, 2000);
         assert_eq!(EraseLevel::Standard.method_id(&d), "nist-800-88-clear");
+    }
+
+    #[test]
+    fn usb_transport_overrides_an_unreliable_hdd_classification() {
+        let d = drive(DriveType::Hdd, Transport::Usb, 32);
+        assert_eq!(EraseLevel::Standard.method_id(&d), "drivewipe-secure-usb");
+        assert!(EraseLevel::Standard.standard_name(&d).contains("USB"));
     }
 
     #[test]

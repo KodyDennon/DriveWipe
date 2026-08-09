@@ -123,24 +123,23 @@ async fn build_drive_info(name: &str, dev_path: &Path) -> Result<DriveInfo> {
         .await
         .map(|v| v as u32);
 
-    // rotational: 0 = SSD/NVMe, 1 = HDD.
-    let rotational = read_sysfs_u64(&sys_block.join("queue/rotational")).await;
-    let is_nvme = name.starts_with("nvme");
-
-    let drive_type = match (is_nvme, rotational) {
-        (true, _) => DriveType::Nvme,
-        (_, Some(0)) => DriveType::Ssd,
-        (_, Some(1)) => DriveType::Hdd,
-        _ => DriveType::Unknown,
-    };
-
-    // Detect transport from device path or sysfs symlinks.
+    // Detect transport before interpreting medium hints. USB mass-storage
+    // bridges expose SCSI disks and some report a synthetic rotational value,
+    // so the hardware ancestry has to take precedence over those leaf-level
+    // attributes.
     let transport = detect_transport(name, &sys_block).await;
 
     // Removable flag.
     let is_removable = read_sysfs_u64(&sys_block.join("removable"))
         .await
         .is_some_and(|v| v == 1);
+
+    // rotational: 0 = SSD/NVMe, 1 = HDD. A removable USB bridge may report 1
+    // for flash media (the SanDisk USB mass-storage stack does this on Linux),
+    // so do not turn that ambiguous combination into a false HDD claim. The
+    // USB transport still selects the bridge-safe wipe method below.
+    let rotational = read_sysfs_u64(&sys_block.join("queue/rotational")).await;
+    let drive_type = classify_drive_type(name, rotational, transport, is_removable);
 
     // Boot drive detection.
     let is_boot_drive = detect_boot_drive(dev_path);
@@ -183,27 +182,97 @@ async fn detect_transport(name: &str, sys_block: &Path) -> Transport {
         return Transport::Nvme;
     }
 
-    // Check the device subsystem symlink.
-    let subsystem = sys_block.join("device/subsystem");
-    if let Ok(target) = tokio::fs::read_link(&subsystem).await {
-        let target_str = target.to_string_lossy();
-        if target_str.contains("usb") {
-            return Transport::Usb;
-        }
-        if target_str.contains("scsi") || target_str.contains("ata") {
-            // Try to distinguish SATA from SAS/SCSI.
-            let transport_file = sys_block.join("device/transport");
-            let transport_str = read_sysfs_string(&transport_file).await;
-            return match transport_str.as_str() {
-                "sata" => Transport::Sata,
-                "sas" => Transport::Sas,
-                "iscsi" | "fc" => Transport::Scsi,
-                _ => Transport::Sata, // Default SCSI subsystem to SATA.
-            };
-        }
+    // USB, SATA, SAS and other transports commonly present a SCSI leaf node.
+    // The direct subsystem therefore says only "scsi"; the real bus is higher
+    // in the canonical /sys/devices ancestry (for example .../usb2/2-7/...).
+    if let Ok(device_path) = tokio::fs::canonicalize(sys_block.join("device")).await
+        && let Some(transport) = transport_from_device_ancestry(&device_path)
+    {
+        return transport;
     }
 
-    Transport::Unknown
+    // Some kernels or virtual filesystems expose an explicit transport value.
+    let transport_str = read_sysfs_string(&sys_block.join("device/transport"))
+        .await
+        .to_ascii_lowercase();
+    match transport_str.as_str() {
+        "usb" => return Transport::Usb,
+        "sata" | "ata" => return Transport::Sata,
+        "sas" => return Transport::Sas,
+        "iscsi" | "fc" | "fcoe" => return Transport::Scsi,
+        _ => {}
+    }
+
+    // Finally use the direct subsystem. Unknown SCSI devices stay SCSI rather
+    // than being guessed as SATA; a wrong firmware-capable classification is
+    // more dangerous than a conservative generic one.
+    let subsystem = sys_block.join("device/subsystem");
+    let subsystem_target = tokio::fs::canonicalize(&subsystem)
+        .await
+        .ok()
+        .or_else(|| std::fs::read_link(&subsystem).ok());
+    let subsystem_name = subsystem_target
+        .as_deref()
+        .and_then(Path::file_name)
+        .and_then(|name| name.to_str())
+        .unwrap_or("");
+    match subsystem_name {
+        "usb" => Transport::Usb,
+        "ata" => Transport::Sata,
+        "sas" => Transport::Sas,
+        "scsi" => Transport::Scsi,
+        _ => Transport::Unknown,
+    }
+}
+
+/// Infer the physical bus from a canonical `/sys/devices/...` path.
+fn transport_from_device_ancestry(path: &Path) -> Option<Transport> {
+    let components: Vec<_> = path
+        .components()
+        .filter_map(|component| component.as_os_str().to_str())
+        .collect();
+
+    // A bridge can contain generic SCSI/ATA-looking descendants, so the USB
+    // bus marker gets first priority across the entire ancestry.
+    if components
+        .iter()
+        .any(|component| has_numeric_suffix(component, "usb"))
+    {
+        return Some(Transport::Usb);
+    }
+    if components
+        .iter()
+        .any(|component| has_numeric_suffix(component, "ata"))
+    {
+        return Some(Transport::Sata);
+    }
+    None
+}
+
+fn has_numeric_suffix(component: &str, prefix: &str) -> bool {
+    component
+        .strip_prefix(prefix)
+        .is_some_and(|suffix| !suffix.is_empty() && suffix.chars().all(|c| c.is_ascii_digit()))
+}
+
+fn classify_drive_type(
+    name: &str,
+    rotational: Option<u64>,
+    transport: Transport,
+    is_removable: bool,
+) -> DriveType {
+    if name.starts_with("nvme") || transport == Transport::Nvme {
+        return DriveType::Nvme;
+    }
+
+    match rotational {
+        Some(0) => DriveType::Ssd,
+        // USB removable media frequently has a fabricated rotational=1 flag.
+        // Preserve uncertainty instead of confidently calling flash an HDD.
+        Some(1) if transport == Transport::Usb && is_removable => DriveType::Unknown,
+        Some(1) => DriveType::Hdd,
+        _ => DriveType::Unknown,
+    }
 }
 
 /// Read a sysfs file and return its trimmed contents, or an empty string on
@@ -242,4 +311,53 @@ async fn count_partitions(name: &str) -> u32 {
         }
     }
     count
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn usb_mass_storage_is_detected_from_scsi_device_ancestry() {
+        let path = Path::new(
+            "/sys/devices/pci0000:00/0000:00:14.0/usb2/2-7/2-7:1.0/host0/target0:0:0/0:0:0:0",
+        );
+        assert_eq!(transport_from_device_ancestry(path), Some(Transport::Usb));
+    }
+
+    #[test]
+    fn native_sata_is_detected_from_ata_ancestry() {
+        let path = Path::new("/sys/devices/pci0000:00/0000:00:17.0/ata3/host2/target2:0:0/2:0:0:0");
+        assert_eq!(transport_from_device_ancestry(path), Some(Transport::Sata));
+    }
+
+    #[test]
+    fn unrelated_component_names_do_not_look_like_bus_markers() {
+        let path = Path::new("/sys/devices/platform/usb-storage-cache/atlas/host0/target0:0:0");
+        assert_eq!(transport_from_device_ancestry(path), None);
+    }
+
+    #[test]
+    fn ambiguous_removable_usb_does_not_claim_to_be_an_hdd() {
+        assert_eq!(
+            classify_drive_type("sda", Some(1), Transport::Usb, true),
+            DriveType::Unknown
+        );
+    }
+
+    #[test]
+    fn non_rotational_usb_media_is_an_ssd() {
+        assert_eq!(
+            classify_drive_type("sda", Some(0), Transport::Usb, true),
+            DriveType::Ssd
+        );
+    }
+
+    #[test]
+    fn fixed_rotational_usb_disk_remains_an_hdd() {
+        assert_eq!(
+            classify_drive_type("sda", Some(1), Transport::Usb, false),
+            DriveType::Hdd
+        );
+    }
 }
